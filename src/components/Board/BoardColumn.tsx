@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo, type ReactNode } from 'react';
 import { useDroppable, useDraggable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { ThumbsUp, Pencil, Trash2, Check, X, Palette, Unlink, Layers } from 'lucide-react';
+import { ThumbsUp, Trash2, Palette, Unlink, Layers } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { COLUMN_COLORS } from '@/utils/constants';
 import { RetroCard } from './RetroCard';
@@ -294,38 +294,26 @@ export function BoardColumn({
           />
 
           {isEditingTitle ? (
-            <div className="flex flex-1 items-center gap-1">
-              <input
-                ref={titleInputRef}
-                value={editTitle}
-                onChange={(e) => setEditTitle(e.target.value)}
-                onKeyDown={handleTitleKeyDown}
-                onBlur={handleSaveTitle}
-                maxLength={40}
-                className="flex-1 rounded-[var(--radius-sm)] border border-[var(--color-gray-2)] px-2 py-1.5 text-base font-semibold text-[var(--color-gray-8)] focus:border-[var(--color-navy)] focus:outline-none focus:ring-1 focus:ring-[var(--color-navy)]"
-              />
-              <button
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={handleSaveTitle}
-                className="rounded-[var(--radius-sm)] p-2 text-[var(--color-success)] hover:bg-[var(--color-success)]/10"
-                aria-label="Save title"
-              >
-                <Check size={16} />
-              </button>
-              <button
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  setEditTitle(column.title);
-                  setIsEditingTitle(false);
-                }}
-                className="rounded-[var(--radius-sm)] p-2 text-[var(--color-gray-5)] hover:bg-[var(--color-gray-1)]"
-                aria-label="Cancel"
-              >
-                <X size={16} />
-              </button>
-            </div>
+            <input
+              ref={titleInputRef}
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              onKeyDown={handleTitleKeyDown}
+              onBlur={handleSaveTitle}
+              maxLength={40}
+              className="flex-1 rounded-[var(--radius-sm)] border border-[var(--color-gray-2)] bg-transparent px-1.5 py-0.5 text-base font-semibold text-[var(--color-gray-8)] focus:border-[var(--color-navy)] focus:outline-none focus:ring-1 focus:ring-[var(--color-navy)]"
+            />
           ) : (
-            <h3 className="flex-1 text-base font-semibold text-[var(--color-gray-8)]">
+            <h3
+              className={cn(
+                'flex-1 text-base font-semibold text-[var(--color-gray-8)]',
+                isAdmin && !isCompleted && 'cursor-text rounded-[var(--radius-sm)] px-1.5 py-0.5 hover:bg-[var(--color-gray-1)] transition-colors'
+              )}
+              onClick={isAdmin && !isCompleted ? () => {
+                setEditTitle(column.title);
+                setIsEditingTitle(true);
+              } : undefined}
+            >
               {column.title}
             </h3>
           )}
@@ -344,17 +332,6 @@ export function BoardColumn({
         {/* Admin action bar */}
         {isAdmin && !isCompleted && !isEditingTitle && (
           <div className="relative flex items-center gap-1 border-t border-[var(--color-gray-1)] px-3 py-1.5">
-            <button
-              onClick={() => {
-                setEditTitle(column.title);
-                setIsEditingTitle(true);
-              }}
-              className="flex items-center gap-1.5 rounded-[var(--radius-md)] px-2.5 py-1.5 text-xs text-[var(--color-gray-5)] hover:bg-[var(--color-gray-1)] hover:text-[var(--color-gray-7)] transition-colors"
-              aria-label="Rename column"
-            >
-              <Pencil size={14} />
-              <span>Rename</span>
-            </button>
             <button
               onClick={() => setShowColorPicker(!showColorPicker)}
               className="flex items-center gap-1.5 rounded-[var(--radius-md)] px-2.5 py-1.5 text-xs text-[var(--color-gray-5)] hover:bg-[var(--color-gray-1)] hover:text-[var(--color-gray-7)] transition-colors"

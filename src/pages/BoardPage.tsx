@@ -21,8 +21,10 @@ import { Button, Input, Modal } from '@/components/common';
 import { BoardColumn, FacilitatorToolbar, VoteStatus, ViewToggle, SwimlaneView, ListView, TimelineView, ParticipantPopover, ConnectionStatusBanner, AddColumnButton } from '@/components/Board';
 import type { BoardView } from '@/types';
 import { useBoardStore } from '@/stores/boardStore';
+import { useFeatureFlagStore } from '@/stores/featureFlagStore';
 import { useTimer } from '@/hooks/useTimer';
 import { usePresence } from '@/hooks/usePresence';
+import { usePolling } from '@/hooks/usePolling';
 import { TimerDisplay } from '@/components/Timer';
 import { ActionItemsPanel } from '@/components/ActionItems';
 import { exportMarkdown, exportCsv } from '@/utils/export';
@@ -95,11 +97,15 @@ export function BoardPage() {
     setSearchParams(view === 'grid' ? {} : { view });
   }, [setSearchParams]);
 
+  const liveEventsEnabled = useFeatureFlagStore((s) => s.isEnabled('live_events'));
+
   const { timer, start: timerStart, pause: timerPause, resume: timerResume, reset: timerReset } = useTimer({
     boardId: boardId || '',
+    liveSync: liveEventsEnabled,
   });
 
-  usePresence(boardId, currentParticipantId);
+  usePresence(boardId, currentParticipantId, liveEventsEnabled);
+  usePolling(boardId, 10_000, !liveEventsEnabled && !!currentParticipantId);
 
   useEffect(() => {
     if (boardId) {
@@ -117,13 +123,16 @@ export function BoardPage() {
     }
   }, [boardId, loading, board]);
 
-  // Subscribe to realtime changes
+  // Subscribe to realtime changes (only when live events enabled)
   useEffect(() => {
-    if (boardId && currentParticipantId) {
+    if (boardId && currentParticipantId && liveEventsEnabled) {
       const unsubscribe = subscribeToBoard(boardId);
       return unsubscribe;
+    } else if (boardId && currentParticipantId && !liveEventsEnabled) {
+      // Set polling status
+      useBoardStore.setState({ connectionStatus: 'polling' });
     }
-  }, [boardId, currentParticipantId, subscribeToBoard]);
+  }, [boardId, currentParticipantId, liveEventsEnabled, subscribeToBoard]);
 
   const handleJoin = async () => {
     if (!participantName.trim() || !boardId) return;

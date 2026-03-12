@@ -1,6 +1,7 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { HomePage, BoardPage, NotFoundPage } from '@/pages';
+import { useFeatureFlagStore } from '@/stores/featureFlagStore';
 
 // Lazy-load admin pages to avoid bloating the main bundle
 const AdminLoginPage = lazy(() =>
@@ -31,6 +32,12 @@ function AdminFallback() {
 }
 
 export default function App() {
+  const fetchFlags = useFeatureFlagStore((s) => s.fetchFlags);
+
+  useEffect(() => {
+    fetchFlags();
+  }, [fetchFlags]);
+
   return (
     <BrowserRouter>
       <Routes>

@@ -18,7 +18,7 @@ export type BoardTemplate =
   | 'custom';
 
 export type BoardView = 'grid' | 'swimlane' | 'list' | 'timeline';
-export type ConnectionStatus = 'connected' | 'disconnected' | 'reconnected';
+export type ConnectionStatus = 'connected' | 'disconnected' | 'reconnected' | 'polling';
 
 export interface BoardSettings {
   card_visibility: 'hidden' | 'visible';
@@ -114,4 +114,32 @@ export interface BoardHistoryEntry {
   createdAt: string;
   lastVisited: string;
   isCompleted: boolean;
+}
+
+// Admin types
+export interface FeatureFlag {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  is_enabled: boolean;
+  updated_at: string;
+  created_at: string;
+}
+
+export interface AppSettings {
+  id: string;
+  default_template: BoardTemplate;
+  default_board_settings: Partial<BoardSettings>;
+  app_name: string;
+  app_logo_url: string | null;
+  board_retention_days: number | null;
+  updated_at: string;
+}
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  role: 'owner' | 'admin';
+  created_at: string;
 }

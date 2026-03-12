@@ -7,9 +7,10 @@ const IDLE_TIMER: TimerState = { duration: 0, remaining: 0, status: 'idle', star
 
 interface UseTimerOptions {
   boardId: string;
+  liveSync?: boolean;
 }
 
-export function useTimer({ boardId }: UseTimerOptions) {
+export function useTimer({ boardId, liveSync = true }: UseTimerOptions) {
   const [timer, setTimer] = useState<TimerState>(IDLE_TIMER);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -47,12 +48,13 @@ export function useTimer({ boardId }: UseTimerOptions) {
 
   // Broadcast actions
   const broadcastEvent = useCallback((event: string, payload: Partial<TimerState>) => {
+    if (!liveSync) return;
     channelRef.current?.send({
       type: 'broadcast',
       event,
       payload,
     });
-  }, []);
+  }, [liveSync]);
 
   const start = useCallback((duration: number) => {
     resumeAudioContext();
@@ -91,6 +93,8 @@ export function useTimer({ boardId }: UseTimerOptions) {
 
   // Subscribe to broadcast channel -- stable deps only (no timer state)
   useEffect(() => {
+    if (!liveSync) return;
+
     const channel = supabase.channel(`timer:${boardId}`);
     channelRef.current = channel;
 
@@ -176,7 +180,7 @@ export function useTimer({ boardId }: UseTimerOptions) {
       if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
       supabase.removeChannel(channel);
     };
-  }, [boardId, broadcastEvent]);
+  }, [boardId, liveSync, broadcastEvent]);
 
   return { timer, start, pause, resume, reset };
 }

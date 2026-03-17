@@ -701,13 +701,14 @@ export function AdminLoginPage() {
     if (!email.trim() || !password.trim()) return;
 
     setSubmitting(true);
-    try {
-      await signIn(email.trim(), password.trim());
+    await signIn(email.trim(), password.trim());
+    setSubmitting(false);
+
+    // signIn doesn't throw on failure — it sets error in the store.
+    // Only navigate if we successfully authenticated as an admin.
+    const { adminUser } = useAuthStore.getState();
+    if (adminUser) {
       navigate(from, { replace: true });
-    } catch {
-      // Error is set in the store
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -858,6 +859,7 @@ export default function App() {
 Create `src/components/Admin/AdminLayout.tsx`:
 
 ```typescript
+import { Suspense } from 'react';
 import { Outlet } from 'react-router-dom';
 import { ProtectedRoute } from './ProtectedRoute';
 import { AdminShell } from './AdminShell';
@@ -866,7 +868,15 @@ export function AdminLayout() {
   return (
     <ProtectedRoute>
       <AdminShell>
-        <Outlet />
+        <Suspense
+          fallback={
+            <div className="flex items-center justify-center py-12">
+              <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-[var(--color-gray-2)] border-t-[var(--color-navy)]" />
+            </div>
+          }
+        >
+          <Outlet />
+        </Suspense>
       </AdminShell>
     </ProtectedRoute>
   );
@@ -1275,9 +1285,18 @@ export function AdminBoardsPage() {
   }, [filter, search]);
 
   const handleArchive = async (boardId: string) => {
+    // Fetch current settings first to avoid overwriting the entire JSONB column
+    const { data: board } = await supabase
+      .from('boards')
+      .select('settings')
+      .eq('id', boardId)
+      .single();
+
+    const mergedSettings = { ...(board?.settings ?? {}), board_locked: true };
+
     await supabase
       .from('boards')
-      .update({ archived_at: new Date().toISOString(), settings: { board_locked: true } })
+      .update({ archived_at: new Date().toISOString(), settings: mergedSettings })
       .eq('id', boardId);
     fetchBoards();
   };

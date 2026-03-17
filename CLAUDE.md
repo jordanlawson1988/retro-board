@@ -1,6 +1,6 @@
 # RetroBoard
 
-Real-time retrospective board for team collaboration. Built with React 19, TypeScript, Zustand, Supabase, and Tailwind CSS 4.
+Real-time retrospective board for team collaboration. Built with React 19, TypeScript, Zustand, Supabase, and Tailwind CSS 4. 
 
 ## Quick Start
 

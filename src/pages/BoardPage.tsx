@@ -25,7 +25,7 @@ import { useFeatureFlagStore } from '@/stores/featureFlagStore';
 import { useTimer } from '@/hooks/useTimer';
 import { usePresence } from '@/hooks/usePresence';
 import { usePolling } from '@/hooks/usePolling';
-import { TimerDisplay } from '@/components/Timer';
+import { TimerFloating } from '@/components/Timer';
 import { ActionItemsPanel } from '@/components/ActionItems';
 import { exportMarkdown, exportCsv } from '@/utils/export';
 
@@ -335,13 +335,7 @@ export function BoardPage() {
         isAdmin && !isCompleted ? (
           <FacilitatorToolbar
             settings={board.settings}
-
-            timer={timer}
             onUpdateSettings={updateSettings}
-            onTimerStart={timerStart}
-            onTimerPause={timerPause}
-            onTimerResume={timerResume}
-            onTimerReset={timerReset}
             actionItemCount={actionItems.length}
             onToggleActionItems={() => setShowActionItems((v) => !v)}
             isCompleted={isCompleted}
@@ -385,9 +379,6 @@ export function BoardPage() {
                 {linkCopied ? <Check size={14} /> : <Link2 size={14} />}
                 {linkCopied ? 'Copied!' : 'Share'}
               </button>
-              {isJoined && timer.status !== 'idle' && (
-                <TimerDisplay timer={timer} />
-              )}
               {isJoined && board.settings.voting_enabled && (
                 <VoteStatus
                   votesUsed={votes.filter((v) => v.voter_id === currentParticipantId).length}
@@ -602,6 +593,18 @@ export function BoardPage() {
         <div
           className="fixed inset-0 z-30 bg-black/20"
           onClick={() => setShowActionItems(false)}
+        />
+      )}
+
+      {/* Floating Timer */}
+      {isJoined && !isCompleted && (
+        <TimerFloating
+          timer={timer}
+          isAdmin={isAdmin}
+          onStart={timerStart}
+          onPause={timerPause}
+          onResume={timerResume}
+          onReset={timerReset}
         />
       )}
 

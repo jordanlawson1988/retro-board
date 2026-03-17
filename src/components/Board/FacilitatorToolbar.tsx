@@ -1,17 +1,10 @@
 import { Eye, EyeOff, Lock, Unlock, Vote, ClipboardList, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/utils/cn';
-import { TimerControls } from '@/components/Timer';
-import type { BoardSettings, TimerState } from '@/types';
+import type { BoardSettings } from '@/types';
 
 interface FacilitatorToolbarProps {
   settings: BoardSettings;
-
-  timer: TimerState;
   onUpdateSettings: (settings: Partial<BoardSettings>) => void;
-  onTimerStart: (duration: number) => void;
-  onTimerPause: () => void;
-  onTimerResume: () => void;
-  onTimerReset: () => void;
   actionItemCount: number;
   onToggleActionItems: () => void;
   isCompleted: boolean;
@@ -20,13 +13,7 @@ interface FacilitatorToolbarProps {
 
 export function FacilitatorToolbar({
   settings,
-
-  timer,
   onUpdateSettings,
-  onTimerStart,
-  onTimerPause,
-  onTimerResume,
-  onTimerReset,
   actionItemCount,
   onToggleActionItems,
   isCompleted,
@@ -77,15 +64,6 @@ export function FacilitatorToolbar({
               onClick={() => onUpdateSettings({ secret_voting: !settings.secret_voting })}
             />
           )}
-
-          {/* Timer controls */}
-          <TimerControls
-            timer={timer}
-            onStart={onTimerStart}
-            onPause={onTimerPause}
-            onResume={onTimerResume}
-            onReset={onTimerReset}
-          />
 
           {/* Action Items */}
           <ToolbarButton

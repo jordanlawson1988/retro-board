@@ -735,7 +735,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     const res = await fetch(`/api/boards/${board.id}/votes`, {
       method: 'POST',
       headers: JSON_HEADERS,
-      body: JSON.stringify({ cardId, voterId: currentParticipantId }),
+      body: JSON.stringify({ cardId, voterId: currentParticipantId, voteId: optimisticVoteId }),
     });
 
     const data = await res.json().catch(() => null);
@@ -750,14 +750,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       throw new Error(data?.error || 'Failed to toggle vote');
     }
 
-    // If we added a vote, update with the server-generated ID
-    if (!existingVote && data?.vote?.id && data.vote.id !== optimisticVoteId) {
-      set((state) => ({
-        votes: state.votes.map((v) =>
-          v.id === optimisticVoteId ? { ...v, id: data.vote.id } : v
-        ),
-      }));
-    }
+    // Client and server now use the same vote ID — no replacement needed
   },
 
   // --- Action Items ---

@@ -7,7 +7,7 @@ export async function POST(
   { params }: { params: Promise<{ boardId: string }> }
 ) {
   const { boardId } = await params;
-  const { cardId, voterId } = await request.json();
+  const { cardId, voterId, voteId } = await request.json();
 
   // Check if vote already exists
   const [existingVote] = await sql`
@@ -40,10 +40,10 @@ export async function POST(
     }
   }
 
-  // Insert new vote
+  // Insert new vote (use client-provided ID so Ably dedup works)
   const [vote] = await sql`
-    INSERT INTO votes (card_id, board_id, voter_id)
-    VALUES (${cardId}, ${boardId}, ${voterId})
+    INSERT INTO votes (id, card_id, board_id, voter_id)
+    VALUES (${voteId || crypto.randomUUID()}, ${cardId}, ${boardId}, ${voterId})
     RETURNING *
   `;
 

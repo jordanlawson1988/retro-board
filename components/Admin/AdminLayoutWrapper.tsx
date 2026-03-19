@@ -1,11 +1,10 @@
 'use client';
 
 import { Suspense } from 'react';
-import { Outlet } from 'react-router-dom';
 import { ProtectedRoute } from './ProtectedRoute';
 import { AdminShell } from './AdminShell';
 
-export function AdminLayout() {
+export function AdminLayoutWrapper({ children }: { children: React.ReactNode }) {
   return (
     <ProtectedRoute>
       <AdminShell>
@@ -16,7 +15,7 @@ export function AdminLayout() {
             </div>
           }
         >
-          <Outlet />
+          {children}
         </Suspense>
       </AdminShell>
     </ProtectedRoute>

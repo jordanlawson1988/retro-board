@@ -1,7 +1,6 @@
 'use client';
 
 import { create } from 'zustand';
-import { supabase } from '@/lib/supabase';
 import type { AppSettings } from '@/types';
 
 interface AppSettingsState {
@@ -21,17 +20,17 @@ export const useAppSettingsStore = create<AppSettingsState>((set, get) => ({
   fetchSettings: async () => {
     set({ loading: true, error: null });
 
-    const { data, error } = await supabase
-      .from('app_settings')
-      .select('*')
-      .single();
-
-    if (error) {
-      set({ loading: false, error: error.message });
-      return;
+    try {
+      const res = await fetch('/api/admin/app-settings');
+      if (!res.ok) {
+        set({ loading: false, error: 'Failed to fetch settings' });
+        return;
+      }
+      const { settings } = await res.json();
+      set({ settings: settings as AppSettings, loading: false });
+    } catch (err) {
+      set({ loading: false, error: err instanceof Error ? err.message : 'Failed to fetch settings' });
     }
-
-    set({ settings: data as AppSettings, loading: false });
   },
 
   updateSettings: async (updates) => {
@@ -42,14 +41,23 @@ export const useAppSettingsStore = create<AppSettingsState>((set, get) => ({
     const updated = { ...prev, ...updates, updated_at: new Date().toISOString() };
     set({ settings: updated });
 
-    const { error } = await supabase
-      .from('app_settings')
-      .update(updates)
-      .eq('id', prev.id);
+    try {
+      const res = await fetch('/api/admin/app-settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
 
-    if (error) {
+      if (!res.ok) {
+        set({ settings: prev });
+        throw new Error('Failed to update settings');
+      }
+
+      const { settings } = await res.json();
+      set({ settings: settings as AppSettings });
+    } catch (err) {
       set({ settings: prev });
-      throw error;
+      throw err;
     }
   },
 }));

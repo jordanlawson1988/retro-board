@@ -1,12 +1,13 @@
 'use client';
 
-import { NavLink } from 'react-router-dom';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { LayoutDashboard, Flag, Kanban, Settings, ArrowLeft, LogOut } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { cn } from '@/utils/cn';
 
 const navItems = [
-  { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, exact: true },
   { href: '/admin/features', label: 'Feature Flags', icon: Flag },
   { href: '/admin/boards', label: 'Boards', icon: Kanban },
   { href: '/admin/settings', label: 'Settings', icon: Settings },
@@ -14,6 +15,12 @@ const navItems = [
 
 export function AdminSidebar() {
   const { adminUser, signOut } = useAuthStore();
+  const pathname = usePathname();
+
+  const isActive = (href: string, exact?: boolean) => {
+    if (exact) return pathname === href;
+    return pathname.startsWith(href);
+  };
 
   return (
     <aside className="flex h-screen w-60 flex-col bg-[var(--color-gray-8)] text-[var(--color-gray-3)]">
@@ -23,22 +30,19 @@ export function AdminSidebar() {
 
       <nav className="flex-1 py-2">
         {navItems.map((item) => (
-          <NavLink
+          <Link
             key={item.href}
-            to={item.href}
-            end={item.end}
-            className={({ isActive }) =>
-              cn(
-                'flex items-center gap-3 px-4 py-2.5 text-sm transition-colors',
-                isActive
-                  ? 'border-l-3 border-[var(--color-primary)] bg-white/5 text-white'
-                  : 'border-l-3 border-transparent hover:bg-white/5 hover:text-white'
-              )
-            }
+            href={item.href}
+            className={cn(
+              'flex items-center gap-3 px-4 py-2.5 text-sm transition-colors',
+              isActive(item.href, item.exact)
+                ? 'border-l-3 border-[var(--color-primary)] bg-white/5 text-white'
+                : 'border-l-3 border-transparent hover:bg-white/5 hover:text-white'
+            )}
           >
             <item.icon size={18} />
             {item.label}
-          </NavLink>
+          </Link>
         ))}
       </nav>
 
@@ -47,13 +51,13 @@ export function AdminSidebar() {
           {adminUser?.email}
         </div>
         <div className="flex flex-col gap-1">
-          <NavLink
-            to="/"
+          <Link
+            href="/"
             className="flex items-center gap-2 rounded-[var(--radius-md)] px-2 py-1.5 text-xs text-[var(--color-gray-4)] hover:bg-white/5 hover:text-white transition-colors"
           >
             <ArrowLeft size={14} />
             Back to App
-          </NavLink>
+          </Link>
           <button
             onClick={signOut}
             className="flex items-center gap-2 rounded-[var(--radius-md)] px-2 py-1.5 text-xs text-[var(--color-gray-4)] hover:bg-white/5 hover:text-white transition-colors text-left"

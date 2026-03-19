@@ -1,7 +1,6 @@
 'use client';
 
 import { create } from 'zustand';
-import { supabase } from '@/lib/supabase';
 import type { FeatureFlag } from '@/types';
 
 interface FeatureFlagState {
@@ -21,17 +20,18 @@ export const useFeatureFlagStore = create<FeatureFlagState>((set, get) => ({
 
   fetchFlags: async () => {
     set({ loading: true, error: null });
-    const { data, error } = await supabase
-      .from('feature_flags')
-      .select('*')
-      .order('created_at');
 
-    if (error) {
-      set({ loading: false, error: error.message });
-      return;
+    try {
+      const res = await fetch('/api/feature-flags');
+      if (!res.ok) {
+        set({ loading: false, error: 'Failed to fetch feature flags' });
+        return;
+      }
+      const { flags } = await res.json();
+      set({ flags: flags as FeatureFlag[], loading: false });
+    } catch (err) {
+      set({ loading: false, error: err instanceof Error ? err.message : 'Failed to fetch feature flags' });
     }
-
-    set({ flags: data as FeatureFlag[], loading: false });
   },
 
   updateFlag: async (id, is_enabled) => {
@@ -42,19 +42,30 @@ export const useFeatureFlagStore = create<FeatureFlagState>((set, get) => ({
       ),
     }));
 
-    const { error } = await supabase
-      .from('feature_flags')
-      .update({ is_enabled })
-      .eq('id', id);
+    try {
+      const res = await fetch('/api/admin/feature-flags', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, is_enabled }),
+      });
 
-    if (error) {
+      if (!res.ok) {
+        // Revert on failure
+        set((state) => ({
+          flags: state.flags.map((f) =>
+            f.id === id ? { ...f, is_enabled: !is_enabled } : f
+          ),
+        }));
+        throw new Error('Failed to update feature flag');
+      }
+    } catch (err) {
       // Revert on failure
       set((state) => ({
         flags: state.flags.map((f) =>
           f.id === id ? { ...f, is_enabled: !is_enabled } : f
         ),
       }));
-      throw error;
+      throw err;
     }
   },
 

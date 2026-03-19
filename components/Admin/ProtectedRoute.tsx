@@ -1,16 +1,23 @@
 'use client';
 
 import { useEffect } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/stores/authStore';
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, adminUser, loading, initialize } = useAuthStore();
-  const location = useLocation();
+  const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     initialize();
   }, [initialize]);
+
+  useEffect(() => {
+    if (!loading && (!user || !adminUser)) {
+      router.replace(`/login?from=${encodeURIComponent(pathname)}`);
+    }
+  }, [loading, user, adminUser, router, pathname]);
 
   if (loading) {
     return (
@@ -24,7 +31,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (!user || !adminUser) {
-    return <Navigate to="/admin/login" state={{ from: location }} replace />;
+    return null;
   }
 
   return <>{children}</>;

@@ -1,12 +1,11 @@
 'use client';
 
 import { create } from 'zustand';
-import { supabase } from '@/lib/supabase';
+import { authClient } from '@/lib/auth-client';
 import type { AdminUser } from '@/types';
-import type { User } from '@supabase/supabase-js';
 
 interface AuthState {
-  user: User | null;
+  user: { id: string; email: string; name: string } | null;
   adminUser: AdminUser | null;
   loading: boolean;
   error: string | null;
@@ -24,73 +23,51 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   initialize: async () => {
     set({ loading: true, error: null });
-
-    const { data: { session } } = await supabase.auth.getSession();
-
-    if (!session?.user) {
+    const session = await authClient.getSession();
+    if (!session.data?.user) {
       set({ user: null, adminUser: null, loading: false });
       return;
     }
 
-    // Verify user is in admin_users table
-    const { data: adminUser, error } = await supabase
-      .from('admin_users')
-      .select('*')
-      .eq('id', session.user.id)
-      .single();
-
-    if (error || !adminUser) {
-      set({ user: null, adminUser: null, loading: false });
-      return;
-    }
+    // Check admin access
+    const res = await fetch(`/api/admin/verify?userId=${session.data.user.id}`);
+    const adminUser = res.ok ? await res.json() : null;
 
     set({
-      user: session.user,
-      adminUser: adminUser as AdminUser,
+      user: session.data.user,
+      adminUser,
       loading: false,
     });
   },
 
   signIn: async (email, password) => {
     set({ loading: true, error: null });
-
-    const { data, error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (authError) {
-      set({ loading: false, error: authError.message });
+    const result = await authClient.signIn.email({ email, password });
+    if (result.error) {
+      set({ loading: false, error: result.error.message });
       return;
     }
 
-    if (!data.user) {
+    const session = await authClient.getSession();
+    if (!session.data?.user) {
       set({ loading: false, error: 'Sign in failed' });
       return;
     }
 
     // Verify admin access
-    const { data: adminUser, error: adminError } = await supabase
-      .from('admin_users')
-      .select('*')
-      .eq('id', data.user.id)
-      .single();
-
-    if (adminError || !adminUser) {
-      await supabase.auth.signOut();
+    const res = await fetch(`/api/admin/verify?userId=${session.data.user.id}`);
+    if (!res.ok) {
+      await authClient.signOut();
       set({ loading: false, error: 'You do not have admin access' });
       return;
     }
 
-    set({
-      user: data.user,
-      adminUser: adminUser as AdminUser,
-      loading: false,
-    });
+    const adminUser = await res.json();
+    set({ user: session.data.user, adminUser, loading: false });
   },
 
   signOut: async () => {
-    await supabase.auth.signOut();
+    await authClient.signOut();
     set({ user: null, adminUser: null, loading: false, error: null });
   },
 }));

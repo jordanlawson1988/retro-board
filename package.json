@@ -17,6 +17,7 @@
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.97.0",
     "@tailwindcss/postcss": "^4.2.2",
+    "better-auth": "^1.5.5",
     "clsx": "^2.1.1",
     "lucide-react": "^0.575.0",
     "nanoid": "^5.1.6",

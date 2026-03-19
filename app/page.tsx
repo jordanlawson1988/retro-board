@@ -1,3 +1,5 @@
+import { HomePage } from '@/components/pages/HomePage';
+
 export default function Home() {
-  return <div>RetroBoard — migration in progress</div>;
+  return <HomePage />;
 }

@@ -27,7 +27,7 @@ export function usePresence(
       skip: !boardId || !participantId || !liveSync || !participant,
     },
     {
-      participantId,
+      participantId: participantId!,
       displayName: participant?.display_name ?? '',
       isAdmin: participant?.is_admin ?? false,
     } satisfies PresenceData

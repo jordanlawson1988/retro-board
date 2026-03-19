@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import { Clock, Trash2 } from 'lucide-react';
 import { getBoardHistory, clearBoardHistory } from '@/utils/boardHistory';
 import type { BoardHistoryEntry } from '@/types';
@@ -26,7 +26,7 @@ export function BoardHistorySidebar() {
   const [entries, setEntries] = useState<BoardHistoryEntry[]>(() => getBoardHistory());
   const [open, setOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
-  const navigate = useNavigate();
+  const router = useRouter();
 
   // Close on outside click
   useEffect(() => {
@@ -57,7 +57,7 @@ export function BoardHistorySidebar() {
 
   const handleNavigate = (boardId: string) => {
     setOpen(false);
-    navigate(`/board/${boardId}`);
+    router.push(`/board/${boardId}`);
   };
 
   return (

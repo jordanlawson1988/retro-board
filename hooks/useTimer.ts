@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useCallback, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useChannel } from 'ably/react';
 import { playTimerDing, resumeAudioContext } from '@/lib/audio';
 import type { TimerState } from '@/types';
 
@@ -15,15 +15,12 @@ interface UseTimerOptions {
 export function useTimer({ boardId, liveSync = true }: UseTimerOptions) {
   const [timer, setTimer] = useState<TimerState>(IDLE_TIMER);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const timerRef = useRef<TimerState>(IDLE_TIMER);
 
-  // Keep ref in sync with state
   useEffect(() => {
     timerRef.current = timer;
   }, [timer]);
 
-  // Cleanup interval
   const clearTick = useCallback(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
@@ -31,13 +28,11 @@ export function useTimer({ boardId, liveSync = true }: UseTimerOptions) {
     }
   }, []);
 
-  // Start local countdown
   const startCountdown = useCallback((startedAt: string, duration: number) => {
     clearTick();
     intervalRef.current = setInterval(() => {
       const elapsed = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000);
       const remaining = Math.max(0, duration - elapsed);
-
       if (remaining <= 0) {
         clearTick();
         setTimer({ duration, remaining: 0, status: 'expired', started_at: startedAt });
@@ -48,15 +43,39 @@ export function useTimer({ boardId, liveSync = true }: UseTimerOptions) {
     }, 250);
   }, [clearTick]);
 
-  // Broadcast actions
-  const broadcastEvent = useCallback((event: string, payload: Partial<TimerState>) => {
-    if (!liveSync) return;
-    channelRef.current?.send({
-      type: 'broadcast',
-      event,
-      payload,
-    });
-  }, [liveSync]);
+  // Ably channel for timer events
+  const { channel } = useChannel(
+    {
+      channelName: `retro-board:${boardId}:timer`,
+      skip: !liveSync,
+    },
+    (message) => {
+      const { name, data } = message;
+
+      if (name === 'timer:start' || name === 'timer:resume' || name === 'timer:sync-response') {
+        const state = data as TimerState;
+        resumeAudioContext();
+        setTimer(state);
+        if (state.started_at && state.status === 'running') {
+          startCountdown(state.started_at, state.duration);
+        }
+      } else if (name === 'timer:pause') {
+        clearTick();
+        setTimer(data as TimerState);
+      } else if (name === 'timer:reset') {
+        clearTick();
+        setTimer(IDLE_TIMER);
+      } else if (name === 'timer:sync-request') {
+        channel?.publish('timer:sync-response', timerRef.current);
+      }
+    }
+  );
+
+  // Request sync on mount
+  useEffect(() => {
+    if (!liveSync || !channel) return;
+    channel.publish('timer:sync-request', {});
+  }, [liveSync, channel]);
 
   const start = useCallback((duration: number) => {
     resumeAudioContext();
@@ -64,125 +83,38 @@ export function useTimer({ boardId, liveSync = true }: UseTimerOptions) {
     const state: TimerState = { duration, remaining: duration, status: 'running', started_at: startedAt };
     setTimer(state);
     startCountdown(startedAt, duration);
-    broadcastEvent('timer:start', state);
-  }, [startCountdown, broadcastEvent]);
+    channel?.publish('timer:start', state);
+  }, [startCountdown, channel]);
 
   const pause = useCallback(() => {
     clearTick();
-    setTimer((prev) => {
-      const paused: TimerState = { ...prev, status: 'paused' };
-      broadcastEvent('timer:pause', paused);
-      return paused;
-    });
-  }, [clearTick, broadcastEvent]);
+    const paused: TimerState = { ...timerRef.current, status: 'paused' };
+    setTimer(paused);
+    channel?.publish('timer:pause', paused);
+  }, [clearTick, channel]);
 
   const resume = useCallback(() => {
     resumeAudioContext();
-    setTimer((prev) => {
-      const startedAt = new Date(Date.now() - (prev.duration - prev.remaining) * 1000).toISOString();
-      const resumed: TimerState = { ...prev, status: 'running', started_at: startedAt };
-      startCountdown(startedAt, prev.duration);
-      broadcastEvent('timer:resume', resumed);
-      return resumed;
-    });
-  }, [startCountdown, broadcastEvent]);
+    const prev = timerRef.current;
+    const startedAt = new Date(Date.now() - (prev.duration - prev.remaining) * 1000).toISOString();
+    const resumed: TimerState = { ...prev, status: 'running', started_at: startedAt };
+    setTimer(resumed);
+    startCountdown(startedAt, prev.duration);
+    channel?.publish('timer:resume', resumed);
+  }, [startCountdown, channel]);
 
   const reset = useCallback(() => {
     clearTick();
     setTimer(IDLE_TIMER);
-    broadcastEvent('timer:reset', IDLE_TIMER);
-  }, [clearTick, broadcastEvent]);
+    channel?.publish('timer:reset', IDLE_TIMER);
+  }, [clearTick, channel]);
 
-  // Subscribe to broadcast channel -- stable deps only (no timer state)
+  // Cleanup
   useEffect(() => {
-    if (!liveSync) return;
-
-    const channel = supabase.channel(`timer:${boardId}`);
-    channelRef.current = channel;
-
-    channel
-      .on('broadcast', { event: 'timer:start' }, ({ payload }) => {
-        resumeAudioContext();
-        const state = payload as TimerState;
-        setTimer(state);
-        if (state.started_at) {
-          // Clear any existing interval before starting new one
-          if (intervalRef.current) clearInterval(intervalRef.current);
-          intervalRef.current = setInterval(() => {
-            const elapsed = Math.floor((Date.now() - new Date(state.started_at!).getTime()) / 1000);
-            const remaining = Math.max(0, state.duration - elapsed);
-            if (remaining <= 0) {
-              if (intervalRef.current) clearInterval(intervalRef.current);
-              intervalRef.current = null;
-              setTimer({ duration: state.duration, remaining: 0, status: 'expired', started_at: state.started_at });
-              playTimerDing();
-            } else {
-              setTimer({ duration: state.duration, remaining, status: 'running', started_at: state.started_at });
-            }
-          }, 250);
-        }
-      })
-      .on('broadcast', { event: 'timer:pause' }, ({ payload }) => {
-        if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
-        setTimer(payload as TimerState);
-      })
-      .on('broadcast', { event: 'timer:resume' }, ({ payload }) => {
-        const state = payload as TimerState;
-        resumeAudioContext();
-        setTimer(state);
-        if (state.started_at) {
-          if (intervalRef.current) clearInterval(intervalRef.current);
-          intervalRef.current = setInterval(() => {
-            const elapsed = Math.floor((Date.now() - new Date(state.started_at!).getTime()) / 1000);
-            const remaining = Math.max(0, state.duration - elapsed);
-            if (remaining <= 0) {
-              if (intervalRef.current) clearInterval(intervalRef.current);
-              intervalRef.current = null;
-              setTimer({ duration: state.duration, remaining: 0, status: 'expired', started_at: state.started_at });
-              playTimerDing();
-            } else {
-              setTimer({ duration: state.duration, remaining, status: 'running', started_at: state.started_at });
-            }
-          }, 250);
-        }
-      })
-      .on('broadcast', { event: 'timer:reset' }, () => {
-        if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
-        setTimer(IDLE_TIMER);
-      })
-      .on('broadcast', { event: 'timer:sync-request' }, () => {
-        // Respond with current timer state from ref (avoids stale closure)
-        broadcastEvent('timer:sync-response', timerRef.current);
-      })
-      .on('broadcast', { event: 'timer:sync-response' }, ({ payload }) => {
-        const state = payload as TimerState;
-        setTimer(state);
-        if (state.status === 'running' && state.started_at) {
-          if (intervalRef.current) clearInterval(intervalRef.current);
-          intervalRef.current = setInterval(() => {
-            const elapsed = Math.floor((Date.now() - new Date(state.started_at!).getTime()) / 1000);
-            const remaining = Math.max(0, state.duration - elapsed);
-            if (remaining <= 0) {
-              if (intervalRef.current) clearInterval(intervalRef.current);
-              intervalRef.current = null;
-              setTimer({ duration: state.duration, remaining: 0, status: 'expired', started_at: state.started_at });
-              playTimerDing();
-            } else {
-              setTimer({ duration: state.duration, remaining, status: 'running', started_at: state.started_at });
-            }
-          }, 250);
-        }
-      })
-      .subscribe(() => {
-        // Request sync on join
-        channel.send({ type: 'broadcast', event: 'timer:sync-request', payload: {} });
-      });
-
     return () => {
-      if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
-      supabase.removeChannel(channel);
+      if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [boardId, liveSync, broadcastEvent]);
+  }, []);
 
   return { timer, start, pause, resume, reset };
 }

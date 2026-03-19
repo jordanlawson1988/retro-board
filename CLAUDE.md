@@ -1,3 +1,5 @@
+## MIGRATION IN PROGRESS: Moving from Supabase to Neon + Better Auth + Ably. See Architecture section below starting on line 135
+
 # RetroBoard
 
 Real-time retrospective board for team collaboration. Built with React 19, TypeScript, Zustand, Supabase, and Tailwind CSS 4. 
@@ -127,3 +129,42 @@ Path alias: `@/` → `./src/` (configured in both Vite and tsconfig).
 - Build chunk size may exceed 500KB — consider dynamic imports
 - Supabase realtime may need manual toggle per-table in Dashboard
 - `boardStore.ts` at ~780 lines — candidate for splitting into modules
+
+
+
+## MIGRATION AS OF MARCH 19 2026 VERY IMPORTANT!
+## Architecture (migrated March 2026)
+
+- **Database**: Neon (serverless Postgres, free tier)
+- **Auth**: Better Auth (open source, sessions in Neon)
+- **Realtime**: Ably (pub/sub + presence, free tier)
+- **Hosting**: Vercel (Next.js App Router)
+- **Previous stack**: Supabase (fully removed)
+
+### Realtime pattern
+
+All realtime events flow through Ably channels.
+- Channel naming: `retro-board:{boardId}` for card/vote/state events
+- Timer channel: `retro-board:{boardId}:timer` for high-frequency ticks
+- Presence: Ably's built-in presence on the board channel
+
+Every mutation follows this pattern:
+1. Client calls API route (optimistic update on client)
+2. API route writes to Neon
+3. API route publishes event to Ably channel
+4. All subscribed clients receive the event via useChannel hook
+
+### Auth pattern
+
+Better Auth handles sessions. All API routes verify session via:
+```typescript
+const session = await auth.api.getSession({ headers: request.headers });
+```
+
+### Key files
+
+- `lib/auth.ts` - Better Auth server config
+- `lib/auth-client.ts` - Better Auth client
+- `app/api/auth/[...all]/route.ts` - Auth API routes
+- `app/api/ably-token/route.ts` - Ably token auth
+- `components/providers/AblyProvider.tsx` - Ably React provider

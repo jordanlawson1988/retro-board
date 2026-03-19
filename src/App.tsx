@@ -1,23 +1,23 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { HomePage, BoardPage, NotFoundPage } from '@/pages';
+import { HomePage, BoardPage, NotFoundPage } from '@/views';
 import { useFeatureFlagStore } from '@/stores/featureFlagStore';
 
 // Lazy-load admin pages to avoid bloating the main bundle
 const AdminLoginPage = lazy(() =>
-  import('@/pages/admin/AdminLoginPage').then((m) => ({ default: m.AdminLoginPage }))
+  import('@/views/admin/AdminLoginPage').then((m) => ({ default: m.AdminLoginPage }))
 );
 const AdminDashboardPage = lazy(() =>
-  import('@/pages/admin/AdminDashboardPage').then((m) => ({ default: m.AdminDashboardPage }))
+  import('@/views/admin/AdminDashboardPage').then((m) => ({ default: m.AdminDashboardPage }))
 );
 const AdminFeaturesPage = lazy(() =>
-  import('@/pages/admin/AdminFeaturesPage').then((m) => ({ default: m.AdminFeaturesPage }))
+  import('@/views/admin/AdminFeaturesPage').then((m) => ({ default: m.AdminFeaturesPage }))
 );
 const AdminBoardsPage = lazy(() =>
-  import('@/pages/admin/AdminBoardsPage').then((m) => ({ default: m.AdminBoardsPage }))
+  import('@/views/admin/AdminBoardsPage').then((m) => ({ default: m.AdminBoardsPage }))
 );
 const AdminSettingsPage = lazy(() =>
-  import('@/pages/admin/AdminSettingsPage').then((m) => ({ default: m.AdminSettingsPage }))
+  import('@/views/admin/AdminSettingsPage').then((m) => ({ default: m.AdminSettingsPage }))
 );
 const AdminLayout = lazy(() =>
   import('@/components/Admin/AdminLayout').then((m) => ({ default: m.AdminLayout }))

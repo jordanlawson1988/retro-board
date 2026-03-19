@@ -46,7 +46,7 @@ function setThemeValue(theme: Theme) {
 }
 
 export function useTheme() {
-  const theme = useSyncExternalStore(subscribe, getSnapshot);
+  const theme = useSyncExternalStore(subscribe, getSnapshot, () => 'system' as Theme);
 
   const setTheme = useCallback((t: Theme) => {
     setThemeValue(t);

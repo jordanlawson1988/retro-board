@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   if (participant) {
     await sql`
       INSERT INTO participants (id, board_id, display_name, is_admin)
-      VALUES (${participant.id}, ${id}, ${participant.displayName}, ${participant.isAdmin})
+      VALUES (${participant.id}, ${id}, ${participant.displayName}, ${participant.isAdmin ?? true})
     `;
   }
 

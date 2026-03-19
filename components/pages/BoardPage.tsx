@@ -19,7 +19,7 @@ import { Link2, Check } from 'lucide-react';
 import { getCardTextColor, CARD_TEXT_CLASSES } from '@/utils/cardColors';
 import { cn } from '@/utils/cn';
 import { AppShell } from '@/components/Layout';
-import { Button, Input, Modal } from '@/components/common';
+import { Button, Modal } from '@/components/common';
 import { BoardColumn, FacilitatorToolbar, VoteStatus, ViewToggle, SwimlaneView, ListView, TimelineView, ParticipantPopover, ConnectionStatusBanner, AddColumnButton } from '@/components/Board';
 import type { BoardView } from '@/types';
 import { useBoardStore } from '@/stores/boardStore';
@@ -39,10 +39,6 @@ export function BoardPage({ boardId }: { boardId: string }) {
     votes,
     participants,
     currentParticipantId,
-    loading,
-    error,
-    fetchBoard,
-    joinBoard,
     addCard,
     updateCard,
     deleteCard,
@@ -64,8 +60,6 @@ export function BoardPage({ boardId }: { boardId: string }) {
     uncombineCard,
   } = useBoardStore();
 
-  const [participantName, setParticipantName] = useState('');
-  const [showJoinModal, setShowJoinModal] = useState(false);
   const [showActionItems, setShowActionItems] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
@@ -106,36 +100,12 @@ export function BoardPage({ boardId }: { boardId: string }) {
 
   const { timer, start: timerStart, pause: timerPause, resume: timerResume, reset: timerReset } = useTimer({
     boardId: boardId || '',
-    liveSync: liveEventsEnabled,
+    liveSync: liveEventsEnabled && !!currentParticipantId,
   });
 
   usePolling(boardId, 10_000, !liveEventsEnabled && !!currentParticipantId);
 
-  useEffect(() => {
-    if (boardId) {
-      fetchBoard(boardId);
-    }
-  }, [boardId, fetchBoard]);
-
-  // Show join modal if not already joined
-  useEffect(() => {
-    if (boardId && !loading && board) {
-      const stored = localStorage.getItem(`retro-pid-${boardId}`);
-      if (!stored) {
-        setShowJoinModal(true);
-      }
-    }
-  }, [boardId, loading, board]);
-
-  const handleJoin = async () => {
-    if (!participantName.trim() || !boardId) return;
-    try {
-      await joinBoard(boardId, participantName.trim());
-      setShowJoinModal(false);
-    } catch (err) {
-      console.error('Failed to join board:', err);
-    }
-  };
+  // Board data is fetched by BoardPageWrapper before this component mounts
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     setActiveDragId(event.active.id as string);
@@ -285,36 +255,9 @@ export function BoardPage({ boardId }: { boardId: string }) {
     );
   }, [activeDragId, cards]);
 
-  if (loading) {
-    return (
-      <AppShell>
-        <div className="flex min-h-[60vh] items-center justify-center">
-          <div className="text-center">
-            <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-[var(--color-gray-2)] border-t-[var(--color-navy)]" />
-            <p className="mt-4 text-[var(--color-gray-5)]">Loading board...</p>
-          </div>
-        </div>
-      </AppShell>
-    );
-  }
-
-  if (error || !board) {
-    return (
-      <AppShell>
-        <div className="flex min-h-[60vh] items-center justify-center">
-          <div className="text-center">
-            <h2 className="text-[var(--color-gray-8)]">Board not found</h2>
-            <p className="mt-2 text-[var(--color-gray-5)]">
-              {error || 'This board may have been archived or the link is invalid.'}
-            </p>
-            <Button className="mt-6" onClick={() => router.push('/')}>
-              Go Home
-            </Button>
-          </div>
-        </div>
-      </AppShell>
-    );
-  }
+  // Loading/error/join states are handled by BoardPageWrapper
+  // This component only renders when board is loaded and user has joined
+  if (!board) return null;
 
   const isJoined = !!currentParticipantId;
   const isObscured = board.settings.card_visibility === 'hidden';
@@ -528,37 +471,6 @@ export function BoardPage({ boardId }: { boardId: string }) {
           </div>
         </div>
       )}
-
-      {/* Join Modal */}
-      <Modal
-        open={showJoinModal}
-        onClose={() => router.push('/')}
-        title="Join Retrospective"
-      >
-        <div className="flex flex-col gap-4">
-          <p className="text-[var(--color-gray-5)]">
-            Enter your display name to join{' '}
-            <strong className="text-[var(--color-gray-8)]">{board.title}</strong>
-          </p>
-          <Input
-            id="display-name"
-            label="Display Name"
-            placeholder="e.g., Jordan"
-            value={participantName}
-            onChange={(e) => setParticipantName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
-            autoFocus
-          />
-          <div className="flex justify-end gap-3">
-            <Button variant="ghost" onClick={() => router.push('/')}>
-              Cancel
-            </Button>
-            <Button onClick={handleJoin} disabled={!participantName.trim()}>
-              Join Board
-            </Button>
-          </div>
-        </div>
-      </Modal>
 
       {/* Complete Retro Modal */}
       <Modal

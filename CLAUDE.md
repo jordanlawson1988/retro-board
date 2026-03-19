@@ -1,20 +1,20 @@
-## MIGRATION IN PROGRESS: Moving from Supabase to Neon + Better Auth + Ably. See Architecture section below starting on line 135
+## MIGRATION COMPLETE (2026-03-19): Moved from Supabase to Neon + Better Auth + Ably.
 
 # RetroBoard
 
-Real-time retrospective board for team collaboration. Built with React 19, TypeScript, Zustand, Supabase, and Tailwind CSS 4. 
+Real-time retrospective board for team collaboration. Built with Next.js 16 (App Router), React 19, TypeScript, Zustand, Neon, Better Auth, Ably, and Tailwind CSS 4.
 
 ## Quick Start
 
 ```bash
 npm install          # Install dependencies
-npm run dev          # Start Vite dev server (HMR)
-npm run build        # TypeScript type-check + Vite production build
+npm run dev          # Start Next.js dev server (Turbopack)
+npm run build        # Next.js production build
+npm run start        # Start production server
 npm run lint         # Run ESLint
-npm run preview      # Preview built output
 ```
 
-**Environment:** Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`. Never put `SUPABASE_SECRET_API_KEY` in frontend env files.
+**Environment:** Copy `.env.example` to `.env.local` and set `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `NEXT_PUBLIC_APP_URL`, and `ABLY_API_KEY`.
 
 ## Architecture
 

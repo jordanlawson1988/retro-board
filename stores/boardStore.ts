@@ -2,12 +2,13 @@
 
 import { create } from 'zustand';
 import { nanoid } from 'nanoid';
-import { supabase } from '@/lib/supabase';
 import { DEFAULT_BOARD_SETTINGS } from '@/utils/constants';
 import { BOARD_TEMPLATES } from '@/utils/templates';
 import { saveBoardToHistory } from '@/utils/boardHistory';
 import { useAppSettingsStore } from '@/stores/appSettingsStore';
 import type { Board, Column, Card, Vote, ActionItem, Participant, BoardTemplate, BoardSettings, ConnectionStatus } from '@/types';
+
+const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
 interface BoardState {
   board: Board | null;
@@ -57,9 +58,6 @@ interface BoardState {
   // Presence
   onlineParticipantIds: string[];
   setOnlineParticipantIds: (ids: string[]) => void;
-
-  // Realtime
-  subscribeToBoard: (boardId: string) => () => void;
 }
 
 const initialState = {
@@ -85,44 +83,45 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
     const participantId = crypto.randomUUID();
 
-    const { error: boardError } = await supabase.from('boards').insert({
-      id: boardId,
-      title,
-      description,
-      template,
-      created_by: participantId,
-      settings: {
-        ...DEFAULT_BOARD_SETTINGS,
-        ...(useAppSettingsStore?.getState?.()?.settings?.default_board_settings ?? {}),
-      },
+    const columns = templateDef && templateDef.columns.length > 0
+      ? templateDef.columns.map((col, i) => ({
+          id: nanoid(10),
+          title: col.title,
+          description: col.description || null,
+          color: col.color,
+          position: i,
+        }))
+      : [];
+
+    const participant = displayName
+      ? { id: participantId, displayName, isAdmin: true }
+      : undefined;
+
+    const res = await fetch('/api/boards', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({
+        id: boardId,
+        title,
+        description,
+        template,
+        createdBy: participantId,
+        settings: {
+          ...DEFAULT_BOARD_SETTINGS,
+          ...(useAppSettingsStore?.getState?.()?.settings?.default_board_settings ?? {}),
+        },
+        columns,
+        participant,
+      }),
     });
 
-    if (boardError) throw boardError;
-
-    if (templateDef && templateDef.columns.length > 0) {
-      const columnsToInsert = templateDef.columns.map((col, i) => ({
-        id: nanoid(10),
-        board_id: boardId,
-        title: col.title,
-        description: col.description || null,
-        color: col.color,
-        position: i,
-      }));
-
-      const { error: colError } = await supabase.from('columns').insert(columnsToInsert);
-      if (colError) throw colError;
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to create board');
     }
 
-    // Auto-join creator as admin
+    // Update local state for auto-joined creator
     if (displayName) {
-      const { error: joinError } = await supabase.from('participants').insert({
-        id: participantId,
-        board_id: boardId,
-        display_name: displayName,
-        is_admin: true,
-      });
-      if (joinError) throw joinError;
-
       localStorage.setItem(`retro-pid-${boardId}`, participantId);
       set((state) => ({
         currentParticipantId: participantId,
@@ -158,24 +157,15 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       set({ loading: true, error: null });
     }
 
-    const { data: board, error: boardError } = await supabase
-      .from('boards')
-      .select('*')
-      .eq('id', boardId)
-      .single();
+    const res = await fetch(`/api/boards/${boardId}`);
 
-    if (boardError) {
-      set({ loading: false, error: boardError.message });
+    if (!res.ok) {
+      const err = await res.json();
+      set({ loading: false, error: err.error || 'Board not found' });
       return;
     }
 
-    const [columnsRes, cardsRes, votesRes, actionItemsRes, participantsRes] = await Promise.all([
-      supabase.from('columns').select('*').eq('board_id', boardId).order('position'),
-      supabase.from('cards').select('*').eq('board_id', boardId).order('position'),
-      supabase.from('votes').select('*').eq('board_id', boardId),
-      supabase.from('action_items').select('*').eq('board_id', boardId).order('created_at'),
-      supabase.from('participants').select('*').eq('board_id', boardId),
-    ]);
+    const { board, columns, cards, votes, actionItems, participants } = await res.json();
 
     const stored = localStorage.getItem(`retro-pid-${boardId}`);
 
@@ -189,11 +179,11 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
     set({
       board,
-      columns: columnsRes.data || [],
-      cards: cardsRes.data || [],
-      votes: votesRes.data || [],
-      actionItems: actionItemsRes.data || [],
-      participants: participantsRes.data || [],
+      columns: columns || [],
+      cards: cards || [],
+      votes: votes || [],
+      actionItems: actionItems || [],
+      participants: participants || [],
       currentParticipantId: stored || null,
       loading: false,
     });
@@ -205,12 +195,16 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
     const newSettings = { ...board.settings, ...settingsUpdate };
 
-    const { error } = await supabase
-      .from('boards')
-      .update({ settings: newSettings })
-      .eq('id', board.id);
+    const res = await fetch(`/api/boards/${board.id}`, {
+      method: 'PATCH',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ settings: newSettings }),
+    });
 
-    if (error) throw error;
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to update settings');
+    }
 
     set({ board: { ...board, settings: newSettings } });
   },
@@ -219,17 +213,18 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     const { board } = get();
     if (!board) return;
 
+    const res = await fetch(`/api/boards/${board.id}`, {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ action: 'complete' }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to complete board');
+    }
+
     const archivedAt = new Date().toISOString();
-    const { error } = await supabase
-      .from('boards')
-      .update({
-        archived_at: archivedAt,
-        settings: { ...board.settings, card_visibility: 'visible', board_locked: true },
-      })
-      .eq('id', board.id);
-
-    if (error) throw error;
-
     set({
       board: {
         ...board,
@@ -266,18 +261,15 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     const hasAdmin = currentParticipants.some((p) => p.is_admin);
     const isAdmin = !hasAdmin;
 
-    const { error } = await supabase.from('participants').insert({
-      id: participantId,
-      board_id: boardId,
-      display_name: displayName,
-      is_admin: isAdmin,
+    const res = await fetch(`/api/boards/${boardId}/join`, {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ participantId, displayName, isAdmin }),
     });
 
-    if (error) throw error;
-
-    // If this is the first joiner, also set them as board creator
-    if (isAdmin) {
-      await supabase.from('boards').update({ created_by: participantId }).eq('id', boardId);
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to join board');
     }
 
     localStorage.setItem(`retro-pid-${boardId}`, participantId);
@@ -299,11 +291,20 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   },
 
   updateParticipant: async (participantId, updates) => {
-    const { error } = await supabase
-      .from('participants')
-      .update(updates)
-      .eq('id', participantId);
-    if (error) throw error;
+    const { board } = get();
+    if (!board) return;
+
+    const res = await fetch(`/api/boards/${board.id}/participants`, {
+      method: 'PATCH',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ participantId, updates }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to update participant');
+    }
+
     set((state) => ({
       participants: state.participants.map((p) =>
         p.id === participantId ? { ...p, ...updates } : p
@@ -312,11 +313,20 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   },
 
   removeParticipant: async (participantId) => {
-    const { error } = await supabase
-      .from('participants')
-      .delete()
-      .eq('id', participantId);
-    if (error) throw error;
+    const { board } = get();
+    if (!board) return;
+
+    const res = await fetch(`/api/boards/${board.id}/participants`, {
+      method: 'DELETE',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ participantId }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to remove participant');
+    }
+
     set((state) => ({
       participants: state.participants.filter((p) => p.id !== participantId),
     }));
@@ -330,24 +340,42 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
     const newCol = {
       id: nanoid(10),
-      board_id: board.id,
       title,
       description: description || null,
       color,
       position: columns.length,
     };
 
-    const { error } = await supabase.from('columns').insert(newCol);
-    if (error) throw error;
+    const res = await fetch(`/api/boards/${board.id}/columns`, {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify(newCol),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to add column');
+    }
 
     set((state) => ({
-      columns: [...state.columns, { ...newCol, created_at: new Date().toISOString() }],
+      columns: [...state.columns, { ...newCol, board_id: board.id, created_at: new Date().toISOString() }],
     }));
   },
 
   updateColumn: async (columnId, updates) => {
-    const { error } = await supabase.from('columns').update(updates).eq('id', columnId);
-    if (error) throw error;
+    const { board } = get();
+    if (!board) return;
+
+    const res = await fetch(`/api/boards/${board.id}/columns`, {
+      method: 'PATCH',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ columnId, updates }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to update column');
+    }
 
     set((state) => ({
       columns: state.columns.map((c) => (c.id === columnId ? { ...c, ...updates } : c)),
@@ -355,8 +383,19 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   },
 
   deleteColumn: async (columnId) => {
-    const { error } = await supabase.from('columns').delete().eq('id', columnId);
-    if (error) throw error;
+    const { board } = get();
+    if (!board) return;
+
+    const res = await fetch(`/api/boards/${board.id}/columns`, {
+      method: 'DELETE',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ columnId }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to delete column');
+    }
 
     set((state) => ({
       columns: state.columns.filter((c) => c.id !== columnId),
@@ -375,26 +414,54 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
     const newCard = {
       id: nanoid(10),
+      columnId,
+      text,
+      authorName: participant?.display_name || 'Anonymous',
+      authorId: currentParticipantId,
+      position: cardsInColumn.length,
+    };
+
+    const res = await fetch(`/api/boards/${board.id}/cards`, {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify(newCard),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to add card');
+    }
+
+    const fullCard: Card = {
+      id: newCard.id,
       column_id: columnId,
       board_id: board.id,
       text,
-      author_name: participant?.display_name || 'Anonymous',
+      author_name: newCard.authorName,
       author_id: currentParticipantId,
       color: null,
-      position: cardsInColumn.length,
+      position: newCard.position,
       merged_with: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     };
-
-    const { error } = await supabase.from('cards').insert(newCard);
-    if (error) throw error;
-
-    const fullCard = { ...newCard, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
     set((state) => ({ cards: [...state.cards, fullCard] }));
   },
 
   updateCard: async (cardId, updates) => {
-    const { error } = await supabase.from('cards').update(updates).eq('id', cardId);
-    if (error) throw error;
+    const { board } = get();
+    if (!board) return;
+
+    const res = await fetch(`/api/boards/${board.id}/cards`, {
+      method: 'PATCH',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ cardId, updates }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to update card');
+    }
 
     const updatedAt = new Date().toISOString();
     set((state) => ({
@@ -405,8 +472,19 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   },
 
   deleteCard: async (cardId) => {
-    const { error } = await supabase.from('cards').delete().eq('id', cardId);
-    if (error) throw error;
+    const { board } = get();
+    if (!board) return;
+
+    const res = await fetch(`/api/boards/${board.id}/cards`, {
+      method: 'DELETE',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ cardId }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to delete card');
+    }
 
     // DB ON DELETE SET NULL auto-clears merged_with on children;
     // mirror that optimistically so children don't become invisible ghost cards
@@ -419,7 +497,9 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   },
 
   moveCard: async (cardId, targetColumnId, newPosition) => {
-    const { cards } = get();
+    const { board, cards } = get();
+    if (!board) return;
+
     const card = cards.find((c) => c.id === cardId);
     if (!card) return;
 
@@ -452,12 +532,17 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       };
     });
 
-    const { error } = await supabase
-      .from('cards')
-      .update({ column_id: targetColumnId, position: newPosition })
-      .eq('id', cardId);
+    // Persist the parent card move
+    const res = await fetch(`/api/boards/${board.id}/cards`, {
+      method: 'PATCH',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({
+        cardId,
+        updates: { column_id: targetColumnId, position: newPosition },
+      }),
+    });
 
-    if (error) {
+    if (!res.ok) {
       // Revert on failure
       set((state) => ({
         cards: state.cards.map((c) => {
@@ -466,20 +551,29 @@ export const useBoardStore = create<BoardState>((set, get) => ({
           return c;
         }),
       }));
-      throw error;
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to move card');
     }
 
     // Move children in DB too
     if (childIds.length > 0) {
-      await supabase
-        .from('cards')
-        .update({ column_id: targetColumnId })
-        .in('id', childIds);
+      for (const childId of childIds) {
+        await fetch(`/api/boards/${board.id}/cards`, {
+          method: 'PATCH',
+          headers: JSON_HEADERS,
+          body: JSON.stringify({
+            cardId: childId,
+            updates: { column_id: targetColumnId },
+          }),
+        });
+      }
     }
   },
 
   combineCards: async (parentCardId, childCardId) => {
-    const { cards } = get();
+    const { board, cards } = get();
+    if (!board) return;
+
     const child = cards.find((c) => c.id === childCardId);
     const parent = cards.find((c) => c.id === parentCardId);
     if (!child || !parent) return;
@@ -497,33 +591,43 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     }));
 
     // Persist child
-    const { error } = await supabase
-      .from('cards')
-      .update({ merged_with: parentCardId, column_id: parent.column_id })
-      .eq('id', childCardId);
+    const res = await fetch(`/api/boards/${board.id}/cards`, {
+      method: 'PATCH',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({
+        cardId: childCardId,
+        updates: { merged_with: parentCardId, column_id: parent.column_id },
+      }),
+    });
 
-    if (error) {
+    if (!res.ok) {
       // Revert
       set((state) => ({
         cards: state.cards.map((c) =>
           c.id === childCardId ? { ...c, merged_with: child.merged_with, column_id: child.column_id } : c
         ),
       }));
-      throw error;
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to combine cards');
     }
 
     // Re-parent grandchildren
-    if (grandchildren.length > 0) {
-      const gcIds = grandchildren.map((c) => c.id);
-      await supabase
-        .from('cards')
-        .update({ merged_with: parentCardId, column_id: parent.column_id })
-        .in('id', gcIds);
+    for (const gc of grandchildren) {
+      await fetch(`/api/boards/${board.id}/cards`, {
+        method: 'PATCH',
+        headers: JSON_HEADERS,
+        body: JSON.stringify({
+          cardId: gc.id,
+          updates: { merged_with: parentCardId, column_id: parent.column_id },
+        }),
+      });
     }
   },
 
   uncombineCard: async (childCardId) => {
-    const { cards } = get();
+    const { board, cards } = get();
+    if (!board) return;
+
     const child = cards.find((c) => c.id === childCardId);
     if (!child || !child.merged_with) return;
 
@@ -536,18 +640,23 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       ),
     }));
 
-    const { error } = await supabase
-      .from('cards')
-      .update({ merged_with: null })
-      .eq('id', childCardId);
+    const res = await fetch(`/api/boards/${board.id}/cards`, {
+      method: 'PATCH',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({
+        cardId: childCardId,
+        updates: { merged_with: null },
+      }),
+    });
 
-    if (error) {
+    if (!res.ok) {
       set((state) => ({
         cards: state.cards.map((c) =>
           c.id === childCardId ? { ...c, merged_with: prevMergedWith } : c
         ),
       }));
-      throw error;
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to uncombine card');
     }
   },
 
@@ -561,28 +670,52 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       (v) => v.card_id === cardId && v.voter_id === currentParticipantId
     );
 
-    if (existingVote) {
-      const { error } = await supabase.from('votes').delete().eq('id', existingVote.id);
-      if (error) throw error;
-      set((state) => ({ votes: state.votes.filter((v) => v.id !== existingVote.id) }));
-    } else {
-      // Check global vote limit
+    if (!existingVote) {
+      // Check global vote limit before optimistic update
       const myVoteCount = votes.filter((v) => v.voter_id === currentParticipantId).length;
       if (myVoteCount >= board.settings.max_votes_per_participant) return;
+    }
 
-      // Add vote (DB UNIQUE constraint enforces one-per-card)
-      const newVote = {
-        id: crypto.randomUUID(),
-        card_id: cardId,
-        board_id: board.id,
-        voter_id: currentParticipantId,
-      };
-
-      const { error } = await supabase.from('votes').insert(newVote);
-      if (error) throw error;
-
+    // Optimistic update
+    const optimisticVoteId = existingVote?.id || crypto.randomUUID();
+    if (existingVote) {
+      set((state) => ({ votes: state.votes.filter((v) => v.id !== existingVote.id) }));
+    } else {
       set((state) => ({
-        votes: [...state.votes, { ...newVote, created_at: new Date().toISOString() }],
+        votes: [...state.votes, {
+          id: optimisticVoteId,
+          card_id: cardId,
+          board_id: board.id,
+          voter_id: currentParticipantId,
+          created_at: new Date().toISOString(),
+        }],
+      }));
+    }
+
+    const res = await fetch(`/api/boards/${board.id}/votes`, {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ cardId, voterId: currentParticipantId }),
+    });
+
+    const data = await res.json().catch(() => null);
+
+    if (!res.ok) {
+      // Revert optimistic update on failure
+      if (existingVote) {
+        set((state) => ({ votes: [...state.votes, existingVote] }));
+      } else {
+        set((state) => ({ votes: state.votes.filter((v) => v.id !== optimisticVoteId) }));
+      }
+      throw new Error(data?.error || 'Failed to toggle vote');
+    }
+
+    // If we added a vote, update with the server-generated ID
+    if (!existingVote && data?.vote?.id && data.vote.id !== optimisticVoteId) {
+      set((state) => ({
+        votes: state.votes.map((v) =>
+          v.id === optimisticVoteId ? { ...v, id: data.vote.id } : v
+        ),
       }));
     }
   },
@@ -593,25 +726,41 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     const { board } = get();
     if (!board) return;
 
-    const newItem = {
-      board_id: board.id,
-      description,
-      assignee: assignee || null,
-      due_date: dueDate || null,
-      status: 'open' as const,
-    };
+    const res = await fetch(`/api/boards/${board.id}/action-items`, {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({
+        description,
+        assignee: assignee || null,
+        dueDate: dueDate || null,
+      }),
+    });
 
-    const { data, error } = await supabase.from('action_items').insert(newItem).select().single();
-    if (error) throw error;
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to add action item');
+    }
 
     set((state) => ({
-      actionItems: [...state.actionItems, data as ActionItem],
+      actionItems: [...state.actionItems, data.item as ActionItem],
     }));
   },
 
   updateActionItem: async (itemId, updates) => {
-    const { error } = await supabase.from('action_items').update(updates).eq('id', itemId);
-    if (error) throw error;
+    const { board } = get();
+    if (!board) return;
+
+    const res = await fetch(`/api/boards/${board.id}/action-items`, {
+      method: 'PATCH',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ itemId, updates }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to update action item');
+    }
 
     set((state) => ({
       actionItems: state.actionItems.map((item) =>
@@ -621,8 +770,19 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   },
 
   deleteActionItem: async (itemId) => {
-    const { error } = await supabase.from('action_items').delete().eq('id', itemId);
-    if (error) throw error;
+    const { board } = get();
+    if (!board) return;
+
+    const res = await fetch(`/api/boards/${board.id}/action-items`, {
+      method: 'DELETE',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ itemId }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to delete action item');
+    }
 
     set((state) => ({
       actionItems: state.actionItems.filter((item) => item.id !== itemId),
@@ -632,195 +792,6 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   // --- Presence ---
 
   setOnlineParticipantIds: (ids) => set({ onlineParticipantIds: ids }),
-
-  // --- Realtime ---
-
-  subscribeToBoard: (boardId) => {
-    let hasSubscribed = false;
-    let wasDisconnected = false;
-
-    const channel = supabase
-      .channel(`board:${boardId}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'cards', filter: `board_id=eq.${boardId}` },
-        (payload) => {
-          set((state) => {
-            if (state.cards.some((c) => c.id === payload.new.id)) return state;
-            return { cards: [...state.cards, payload.new as Card] };
-          });
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'cards', filter: `board_id=eq.${boardId}` },
-        (payload) => {
-          set((state) => ({
-            cards: state.cards.map((c) => (c.id === payload.new.id ? (payload.new as Card) : c)),
-          }));
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'cards', filter: `board_id=eq.${boardId}` },
-        (payload) => {
-          set((state) => ({
-            cards: state.cards.filter((c) => c.id !== payload.old.id),
-            votes: state.votes.filter((v) => v.card_id !== payload.old.id),
-          }));
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'columns', filter: `board_id=eq.${boardId}` },
-        (payload) => {
-          set((state) => {
-            if (state.columns.some((c) => c.id === payload.new.id)) return state;
-            return { columns: [...state.columns, payload.new as Column] };
-          });
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'columns', filter: `board_id=eq.${boardId}` },
-        (payload) => {
-          set((state) => ({
-            columns: state.columns.map((c) => (c.id === payload.new.id ? (payload.new as Column) : c)),
-          }));
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'columns', filter: `board_id=eq.${boardId}` },
-        (payload) => {
-          set((state) => {
-            const deletedColumnId = payload.old.id;
-            const deletedCardIds = new Set(
-              state.cards.filter((c) => c.column_id === deletedColumnId).map((c) => c.id)
-            );
-            return {
-              columns: state.columns.filter((c) => c.id !== deletedColumnId),
-              cards: state.cards.filter((c) => c.column_id !== deletedColumnId),
-              votes: state.votes.filter((v) => !deletedCardIds.has(v.card_id)),
-            };
-          });
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'votes', filter: `board_id=eq.${boardId}` },
-        (payload) => {
-          set((state) => {
-            if (state.votes.some((v) => v.id === payload.new.id)) return state;
-            return { votes: [...state.votes, payload.new as Vote] };
-          });
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'votes', filter: `board_id=eq.${boardId}` },
-        (payload) => {
-          set((state) => ({
-            votes: state.votes.filter((v) => v.id !== payload.old.id),
-          }));
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'participants', filter: `board_id=eq.${boardId}` },
-        (payload) => {
-          set((state) => {
-            if (state.participants.some((p) => p.id === payload.new.id)) return state;
-            return { participants: [...state.participants, payload.new as Participant] };
-          });
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'participants', filter: `board_id=eq.${boardId}` },
-        (payload) => {
-          set((state) => ({
-            participants: state.participants.map((p) =>
-              p.id === payload.new.id ? { ...payload.new as Participant } : p
-            ),
-          }));
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'participants', filter: `board_id=eq.${boardId}` },
-        (payload) => {
-          set((state) => ({
-            participants: state.participants.filter((p) => p.id !== payload.old.id),
-          }));
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'boards', filter: `id=eq.${boardId}` },
-        (payload) => {
-          set({ board: payload.new as Board });
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'action_items', filter: `board_id=eq.${boardId}` },
-        (payload) => {
-          set((state) => {
-            if (state.actionItems.some((a) => a.id === payload.new.id)) return state;
-            return { actionItems: [...state.actionItems, payload.new as ActionItem] };
-          });
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'action_items', filter: `board_id=eq.${boardId}` },
-        (payload) => {
-          set((state) => ({
-            actionItems: state.actionItems.map((a) => (a.id === payload.new.id ? (payload.new as ActionItem) : a)),
-          }));
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'action_items', filter: `board_id=eq.${boardId}` },
-        (payload) => {
-          set((state) => ({
-            actionItems: state.actionItems.filter((a) => a.id !== payload.old.id),
-          }));
-        }
-      )
-      .subscribe((status, err) => {
-        if (status === 'SUBSCRIBED') {
-          if (hasSubscribed && wasDisconnected) {
-            console.log(`[Realtime] Board ${boardId}: reconnected — re-fetching data`);
-            set({ connectionStatus: 'reconnected' });
-            get().fetchBoard(boardId).then(() => {
-              setTimeout(() => set({ connectionStatus: 'connected' }), 3000);
-            });
-          } else {
-            set({ connectionStatus: 'connected' });
-          }
-          hasSubscribed = true;
-          wasDisconnected = false;
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error(`[Realtime] Board ${boardId}: channel error`, err);
-          wasDisconnected = true;
-          set({ connectionStatus: 'disconnected' });
-        } else if (status === 'TIMED_OUT') {
-          console.error(`[Realtime] Board ${boardId}: subscription timed out`);
-          wasDisconnected = true;
-          set({ connectionStatus: 'disconnected' });
-        } else if (status === 'CLOSED') {
-          wasDisconnected = true;
-          set({ connectionStatus: 'disconnected' });
-        }
-      });
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  },
 
   reset: () => set({ ...initialState, connectionStatus: 'connected', onlineParticipantIds: [] }),
 }));

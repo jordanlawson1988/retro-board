@@ -25,6 +25,11 @@ function applyTheme(theme: Theme) {
 let currentTheme: Theme = getStoredTheme();
 const listeners = new Set<() => void>();
 
+// Apply stored theme on first client-side load
+if (typeof document !== 'undefined') {
+  applyTheme(currentTheme);
+}
+
 function subscribe(listener: () => void) {
   listeners.add(listener);
   return () => listeners.delete(listener);

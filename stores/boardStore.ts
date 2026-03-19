@@ -193,7 +193,11 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     const { board } = get();
     if (!board) return;
 
+    const prevSettings = board.settings;
     const newSettings = { ...board.settings, ...settingsUpdate };
+
+    // Optimistic update
+    set({ board: { ...board, settings: newSettings } });
 
     const res = await fetch(`/api/boards/${board.id}`, {
       method: 'PATCH',
@@ -202,36 +206,21 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     });
 
     if (!res.ok) {
+      set({ board: { ...board, settings: prevSettings } });
       const err = await res.json();
       throw new Error(err.error || 'Failed to update settings');
     }
-
-    set({ board: { ...board, settings: newSettings } });
   },
 
   completeBoard: async () => {
     const { board } = get();
     if (!board) return;
 
-    const res = await fetch(`/api/boards/${board.id}`, {
-      method: 'POST',
-      headers: JSON_HEADERS,
-      body: JSON.stringify({ action: 'complete' }),
-    });
-
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to complete board');
-    }
-
     const archivedAt = new Date().toISOString();
-    set({
-      board: {
-        ...board,
-        archived_at: archivedAt,
-        settings: { ...board.settings, card_visibility: 'visible' as const, board_locked: true },
-      },
-    });
+    const completedSettings = { ...board.settings, card_visibility: 'visible' as const, board_locked: true };
+
+    // Optimistic update
+    set({ board: { ...board, archived_at: archivedAt, settings: completedSettings } });
 
     saveBoardToHistory({
       boardId: board.id,
@@ -240,6 +229,19 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       lastVisited: new Date().toISOString(),
       isCompleted: true,
     });
+
+    const res = await fetch(`/api/boards/${board.id}`, {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ action: 'complete' }),
+    });
+
+    if (!res.ok) {
+      // Revert
+      set({ board });
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to complete board');
+    }
   },
 
   joinBoard: async (boardId, displayName) => {
@@ -291,8 +293,17 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   },
 
   updateParticipant: async (participantId, updates) => {
-    const { board } = get();
+    const { board, participants } = get();
     if (!board) return;
+
+    const prev = participants.find((p) => p.id === participantId);
+
+    // Optimistic update
+    set((state) => ({
+      participants: state.participants.map((p) =>
+        p.id === participantId ? { ...p, ...updates } : p
+      ),
+    }));
 
     const res = await fetch(`/api/boards/${board.id}/participants`, {
       method: 'PATCH',
@@ -301,20 +312,22 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     });
 
     if (!res.ok) {
+      if (prev) set((state) => ({ participants: state.participants.map((p) => (p.id === participantId ? prev : p)) }));
       const err = await res.json();
       throw new Error(err.error || 'Failed to update participant');
     }
-
-    set((state) => ({
-      participants: state.participants.map((p) =>
-        p.id === participantId ? { ...p, ...updates } : p
-      ),
-    }));
   },
 
   removeParticipant: async (participantId) => {
-    const { board } = get();
+    const { board, participants } = get();
     if (!board) return;
+
+    const prev = participants.find((p) => p.id === participantId);
+
+    // Optimistic delete
+    set((state) => ({
+      participants: state.participants.filter((p) => p.id !== participantId),
+    }));
 
     const res = await fetch(`/api/boards/${board.id}/participants`, {
       method: 'DELETE',
@@ -323,13 +336,10 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     });
 
     if (!res.ok) {
+      if (prev) set((state) => ({ participants: [...state.participants, prev] }));
       const err = await res.json();
       throw new Error(err.error || 'Failed to remove participant');
     }
-
-    set((state) => ({
-      participants: state.participants.filter((p) => p.id !== participantId),
-    }));
   },
 
   // --- Column CRUD ---
@@ -346,6 +356,10 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       position: columns.length,
     };
 
+    // Optimistic update BEFORE fetch — Ably echo dedup will catch the duplicate
+    const optimisticCol: Column = { ...newCol, board_id: board.id, created_at: new Date().toISOString() };
+    set((state) => ({ columns: [...state.columns, optimisticCol] }));
+
     const res = await fetch(`/api/boards/${board.id}/columns`, {
       method: 'POST',
       headers: JSON_HEADERS,
@@ -353,18 +367,22 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     });
 
     if (!res.ok) {
+      // Revert on failure
+      set((state) => ({ columns: state.columns.filter((c) => c.id !== newCol.id) }));
       const err = await res.json();
       throw new Error(err.error || 'Failed to add column');
     }
-
-    set((state) => ({
-      columns: [...state.columns, { ...newCol, board_id: board.id, created_at: new Date().toISOString() }],
-    }));
   },
 
   updateColumn: async (columnId, updates) => {
-    const { board } = get();
+    const { board, columns } = get();
     if (!board) return;
+
+    const prev = columns.find((c) => c.id === columnId);
+    // Optimistic update
+    set((state) => ({
+      columns: state.columns.map((c) => (c.id === columnId ? { ...c, ...updates } : c)),
+    }));
 
     const res = await fetch(`/api/boards/${board.id}/columns`, {
       method: 'PATCH',
@@ -373,18 +391,25 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     });
 
     if (!res.ok) {
+      // Revert
+      if (prev) set((state) => ({ columns: state.columns.map((c) => (c.id === columnId ? prev : c)) }));
       const err = await res.json();
       throw new Error(err.error || 'Failed to update column');
     }
-
-    set((state) => ({
-      columns: state.columns.map((c) => (c.id === columnId ? { ...c, ...updates } : c)),
-    }));
   },
 
   deleteColumn: async (columnId) => {
-    const { board } = get();
+    const { board, columns, cards } = get();
     if (!board) return;
+
+    const prevCol = columns.find((c) => c.id === columnId);
+    const prevCards = cards.filter((c) => c.column_id === columnId);
+
+    // Optimistic delete
+    set((state) => ({
+      columns: state.columns.filter((c) => c.id !== columnId),
+      cards: state.cards.filter((c) => c.column_id !== columnId),
+    }));
 
     const res = await fetch(`/api/boards/${board.id}/columns`, {
       method: 'DELETE',
@@ -393,14 +418,14 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     });
 
     if (!res.ok) {
+      // Revert
+      set((state) => ({
+        columns: prevCol ? [...state.columns, prevCol] : state.columns,
+        cards: [...state.cards, ...prevCards],
+      }));
       const err = await res.json();
       throw new Error(err.error || 'Failed to delete column');
     }
-
-    set((state) => ({
-      columns: state.columns.filter((c) => c.id !== columnId),
-      cards: state.cards.filter((c) => c.column_id !== columnId),
-    }));
   },
 
   // --- Card CRUD ---
@@ -421,17 +446,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       position: cardsInColumn.length,
     };
 
-    const res = await fetch(`/api/boards/${board.id}/cards`, {
-      method: 'POST',
-      headers: JSON_HEADERS,
-      body: JSON.stringify(newCard),
-    });
-
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to add card');
-    }
-
+    // Optimistic update BEFORE fetch — Ably echo dedup will catch the duplicate
     const fullCard: Card = {
       id: newCard.id,
       column_id: columnId,
@@ -446,11 +461,34 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       updated_at: new Date().toISOString(),
     };
     set((state) => ({ cards: [...state.cards, fullCard] }));
+
+    const res = await fetch(`/api/boards/${board.id}/cards`, {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify(newCard),
+    });
+
+    if (!res.ok) {
+      // Revert on failure
+      set((state) => ({ cards: state.cards.filter((c) => c.id !== newCard.id) }));
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to add card');
+    }
   },
 
   updateCard: async (cardId, updates) => {
-    const { board } = get();
+    const { board, cards } = get();
     if (!board) return;
+
+    const prev = cards.find((c) => c.id === cardId);
+    const updatedAt = new Date().toISOString();
+
+    // Optimistic update
+    set((state) => ({
+      cards: state.cards.map((c) =>
+        c.id === cardId ? { ...c, ...updates, updated_at: updatedAt } : c
+      ),
+    }));
 
     const res = await fetch(`/api/boards/${board.id}/cards`, {
       method: 'PATCH',
@@ -459,21 +497,27 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     });
 
     if (!res.ok) {
+      // Revert
+      if (prev) set((state) => ({ cards: state.cards.map((c) => (c.id === cardId ? prev : c)) }));
       const err = await res.json();
       throw new Error(err.error || 'Failed to update card');
     }
-
-    const updatedAt = new Date().toISOString();
-    set((state) => ({
-      cards: state.cards.map((c) =>
-        c.id === cardId ? { ...c, ...updates, updated_at: updatedAt } : c
-      ),
-    }));
   },
 
   deleteCard: async (cardId) => {
-    const { board } = get();
+    const { board, cards, votes } = get();
     if (!board) return;
+
+    const prevCard = cards.find((c) => c.id === cardId);
+    const prevVotes = votes.filter((v) => v.card_id === cardId);
+
+    // Optimistic delete
+    set((state) => ({
+      cards: state.cards
+        .filter((c) => c.id !== cardId)
+        .map((c) => c.merged_with === cardId ? { ...c, merged_with: null } : c),
+      votes: state.votes.filter((v) => v.card_id !== cardId),
+    }));
 
     const res = await fetch(`/api/boards/${board.id}/cards`, {
       method: 'DELETE',
@@ -482,18 +526,14 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     });
 
     if (!res.ok) {
+      // Revert
+      set((state) => ({
+        cards: prevCard ? [...state.cards, prevCard] : state.cards,
+        votes: [...state.votes, ...prevVotes],
+      }));
       const err = await res.json();
       throw new Error(err.error || 'Failed to delete card');
     }
-
-    // DB ON DELETE SET NULL auto-clears merged_with on children;
-    // mirror that optimistically so children don't become invisible ghost cards
-    set((state) => ({
-      cards: state.cards
-        .filter((c) => c.id !== cardId)
-        .map((c) => c.merged_with === cardId ? { ...c, merged_with: null } : c),
-      votes: state.votes.filter((v) => v.card_id !== cardId),
-    }));
   },
 
   moveCard: async (cardId, targetColumnId, newPosition) => {
@@ -726,6 +766,9 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     const { board } = get();
     if (!board) return;
 
+    // For action items, the server generates the UUID, so we can't do a true
+    // optimistic add with dedup. Instead, don't add locally — let the Ably
+    // event handle it. This avoids duplication.
     const res = await fetch(`/api/boards/${board.id}/action-items`, {
       method: 'POST',
       headers: JSON_HEADERS,
@@ -736,20 +779,25 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       }),
     });
 
-    const data = await res.json();
-
     if (!res.ok) {
+      const data = await res.json();
       throw new Error(data.error || 'Failed to add action item');
     }
-
-    set((state) => ({
-      actionItems: [...state.actionItems, data.item as ActionItem],
-    }));
+    // Don't add to state — Ably 'action-item-created' event will do it
   },
 
   updateActionItem: async (itemId, updates) => {
-    const { board } = get();
+    const { board, actionItems } = get();
     if (!board) return;
+
+    const prev = actionItems.find((a) => a.id === itemId);
+
+    // Optimistic update
+    set((state) => ({
+      actionItems: state.actionItems.map((item) =>
+        item.id === itemId ? { ...item, ...updates } : item
+      ),
+    }));
 
     const res = await fetch(`/api/boards/${board.id}/action-items`, {
       method: 'PATCH',
@@ -758,20 +806,22 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     });
 
     if (!res.ok) {
+      if (prev) set((state) => ({ actionItems: state.actionItems.map((a) => (a.id === itemId ? prev : a)) }));
       const err = await res.json();
       throw new Error(err.error || 'Failed to update action item');
     }
-
-    set((state) => ({
-      actionItems: state.actionItems.map((item) =>
-        item.id === itemId ? { ...item, ...updates } : item
-      ),
-    }));
   },
 
   deleteActionItem: async (itemId) => {
-    const { board } = get();
+    const { board, actionItems } = get();
     if (!board) return;
+
+    const prev = actionItems.find((a) => a.id === itemId);
+
+    // Optimistic delete
+    set((state) => ({
+      actionItems: state.actionItems.filter((item) => item.id !== itemId),
+    }));
 
     const res = await fetch(`/api/boards/${board.id}/action-items`, {
       method: 'DELETE',
@@ -780,13 +830,10 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     });
 
     if (!res.ok) {
+      if (prev) set((state) => ({ actionItems: [...state.actionItems, prev] }));
       const err = await res.json();
       throw new Error(err.error || 'Failed to delete action item');
     }
-
-    set((state) => ({
-      actionItems: state.actionItems.filter((item) => item.id !== itemId),
-    }));
   },
 
   // --- Presence ---

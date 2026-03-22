@@ -1,4 +1,10 @@
-## MIGRATION COMPLETE (2026-03-19): Moved from Supabase to Neon + Better Auth + Ably.
+@AGENTS.md
+@.claude/context/test-health.md
+@.claude/context/feature-status.md
+@.claude/context/architecture-notes.md
+@.claude/context/business-context.md
+
+---
 
 # RetroBoard
 
@@ -16,104 +22,156 @@ npm run lint         # Run ESLint
 
 **Environment:** Copy `.env.example` to `.env.local` and set `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `NEXT_PUBLIC_APP_URL`, and `ABLY_API_KEY`.
 
-## Architecture
+---
 
-### Stack
-- **UI:** React 19 + TypeScript 5.9 + Vite 7.3
-- **State:** Zustand 5 (single store, no Context providers)
-- **Backend:** Supabase (PostgreSQL + Realtime + Presence + Broadcast)
-- **Styling:** Tailwind CSS 4 with CSS custom property design tokens
-- **Routing:** React Router 7.13 (BrowserRouter)
-- **DnD:** @dnd-kit for card drag-and-drop
-- **Icons:** lucide-react
-- **IDs:** nanoid (10-char, URL-safe for boards)
+## Stack & Infrastructure
 
-### Routes
+| Layer | Choice | Notes |
+|-------|--------|-------|
+| Framework | Next.js 16.2 (App Router, Turbopack) | React 19, TypeScript 5.9 (strict), Tailwind CSS 4 |
+| Database | Neon serverless Postgres | `@neondatabase/serverless`, tagged template SQL |
+| Auth | Better Auth | Email/password, sessions stored in Neon, 7-day expiry |
+| Realtime | Ably | Pub/sub channels + presence, token auth via API route |
+| State | Zustand 5 | `boardStore` (board data), `authStore`, `featureFlagStore`, `appSettingsStore` |
+| DnD | @dnd-kit/core + sortable | Card drag-and-drop, cross-column moves |
+| Hosting | Vercel (Hobby plan) | Auto-deploy from Git |
+| Icons | Lucide React | Consistent icon library |
+| IDs | nanoid | 10-char URL-safe for boards/columns/cards |
+
+**Path alias:** `@/*` maps to project root (configured in `tsconfig.json`).
+
+---
+
+## Architecture (Migrated March 2026)
+
+**Previous stack (fully removed):** Supabase (Postgres + Realtime + Auth), Vite 7, React Router 7, `src/` directory structure.
+
+### Realtime Pattern
+
+All realtime events flow through Ably channels:
+- **Board channel:** `retro-board:{boardId}` — card/vote/column/participant/board state events
+- **Timer channel:** `retro-board:{boardId}:timer` — high-frequency timer ticks
+- **Presence:** Built into the board channel via Ably's presence protocol
+
+Every mutation follows this pipeline:
+1. Client calls API route (optimistic update applied immediately)
+2. API route writes to Neon
+3. API route publishes event to Ably channel
+4. All subscribed clients receive the event via `useBoardChannel` hook
+
+### Auth Pattern
+
+Better Auth handles admin sessions. Board participants join without auth.
+- Admin routes protected by Edge middleware (cookie check) + server-side `auth.api.getSession()`
+- Participant identity: client-generated ID in `sessionStorage` under `retro-pid-{boardId}`
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `lib/db.ts` | Neon database client (lazy-init to prevent build crashes) |
+| `lib/auth.ts` | Better Auth server config (lazy Proxy pattern) |
+| `lib/auth-client.ts` | Better Auth client |
+| `lib/ably-server.ts` | Ably server-side REST client |
+| `app/api/auth/[...all]/route.ts` | Better Auth API routes |
+| `app/api/ably-token/route.ts` | Ably token auth endpoint |
+| `components/providers/AblyProvider.tsx` | Ably React provider |
+| `hooks/useBoardChannel.ts` | Ably event handler with echo deduplication |
+| `hooks/usePresence.ts` | Ably presence tracking |
+| `hooks/useTimer.ts` | Timer countdown + Ably broadcast sync |
+| `stores/boardStore.ts` | All board CRUD + state (837 lines) |
+| `middleware.ts` | Admin route protection (cookie-presence check) |
+| `scripts/migrate.sql` | Combined Neon migration (9 tables) |
+
+---
+
+## Routes
+
 | Path | Page | Purpose |
 |------|------|---------|
 | `/` | HomePage | Create/join boards, template selection |
-| `/board/:boardId` | BoardPage | Main collaboration UI |
-| `*` | NotFoundPage | 404 |
+| `/board/[boardId]` | BoardPage | Main collaboration UI (wrapped in AblyProvider) |
+| `/login` | LoginPage | Admin login (Better Auth email/password) |
+| `/admin` | AdminDashboardPage | Admin dashboard with board stats |
+| `/admin/boards` | AdminBoardsPage | Board management |
+| `/admin/features` | AdminFeaturesPage | Feature flag management |
+| `/admin/settings` | AdminSettingsPage | App settings |
 
-### State Management
-Single Zustand store at `src/stores/boardStore.ts` (~780 lines). Contains all CRUD operations, optimistic updates, and Supabase realtime subscriptions. State shape:
+---
 
-```
-board, columns, cards, votes, actionItems, participants,
-connectionStatus, loading, error, currentParticipantId, onlineParticipantIds
-```
+## Data Model
 
-### Realtime (3 channels per board)
-1. **`board:{boardId}`** — `postgres_changes` for all persistent data (cards, columns, votes, participants, action_items, boards)
-2. **`presence:{boardId}`** — Presence protocol for online participant tracking
-3. **`timer:{boardId}`** — Broadcast for ephemeral timer state sync
+**9 tables** defined in `scripts/migrate.sql`:
 
-### Session Model
-No authentication in current phase. Participant ID stored in `sessionStorage` under `retro-pid-{boardId}`. First joiner without existing admins becomes facilitator.
+**Core:** `boards` -> `columns` -> `cards` -> `votes`. Boards also have `participants` and `action_items`.
+**Admin:** `admin_users`, `feature_flags`, `app_settings` (singleton).
+
+- **Board IDs:** 10-char nanoid (URL-safe)
+- **Vote/ActionItem IDs:** UUID (server-generated via `gen_random_uuid()`)
+- **`Board.settings`:** JSONB with card_visibility, voting_enabled, max_votes, secret_voting, board_locked, timer state, highlighted_card_id
+- **`Board.archived_at`:** NULL = active, timestamp = completed/read-only
+- **Vote uniqueness:** UNIQUE constraint on `(card_id, voter_id)`
+
+---
+
+## Key Patterns
+
+- **Optimistic updates:** Card moves, votes, and creation update UI immediately; revert on API error
+- **Ably echo deduplication:** `useBoardChannel` checks for existing IDs before adding entities to state
+- **Lazy initialization:** `lib/db.ts` and `lib/auth.ts` defer initialization to prevent Vercel build crashes
+- **Facilitator controls:** Reveal/hide cards, lock board, toggle voting, manage action items, complete retro
+- **Card obfuscation:** `card_visibility: 'hidden'` blurs non-author cards; authors always see their own
+- **Board completion:** Sets `archived_at`, locks board, reveals all cards, shows "Completed" badge
+- **Feature flag fallback:** `isEnabled(key)` returns `true` if flag not found (backwards compat)
+- **Theme persistence:** Inline `<script>` in layout prevents flash of wrong theme
+
+---
 
 ## Project Structure
 
 ```
-src/
-├── components/
-│   ├── ActionItems/     # ActionItemsPanel, ActionItemRow
-│   ├── Board/           # BoardColumn, RetroCard, SortableCard, AddCardForm,
-│   │                    # CardColorPicker, ViewToggle, FacilitatorToolbar,
-│   │                    # SwimlaneView, ListView, TimelineView, VoteStatus,
-│   │                    # ParticipantPopover, ConnectionStatusBanner
-│   ├── Layout/          # AppShell, Header
-│   ├── Timer/           # TimerDisplay, TimerControls
-│   └── common/          # Button, Input, Textarea, Modal, Badge
-├── hooks/
-│   ├── usePresence.ts   # Supabase presence channel
-│   └── useTimer.ts      # Countdown + broadcast sync
-├── lib/
-│   ├── supabase.ts      # Supabase client init
-│   └── audio.ts         # Timer ding sound
-├── pages/               # HomePage, BoardPage, NotFoundPage
-├── stores/
-│   └── boardStore.ts    # All business logic + realtime subscriptions
-├── styles/
-│   └── index.css        # Design tokens (CSS custom properties + @theme)
-├── types/
-│   └── index.ts         # All TypeScript interfaces
-└── utils/
-    ├── constants.ts     # Settings defaults, color palettes, timer presets
-    ├── templates.ts     # 5 board templates
-    ├── cardColors.ts    # WCAG contrast text color selection
-    ├── export.ts        # Markdown + CSV export
-    └── cn.ts            # clsx + tailwind-merge
+app/
+├── api/
+│   ├── ably-token/              # Ably token auth
+│   ├── admin/                   # Admin API routes (dashboard, boards, features, settings, verify)
+│   ├── auth/[...all]/           # Better Auth catch-all
+│   ├── boards/                  # Board CRUD + nested entity routes
+│   └── feature-flags/           # Public feature flag endpoint
+├── admin/                       # Admin pages (dashboard, boards, features, settings)
+├── board/[boardId]/             # Board page
+├── login/                       # Admin login
+├── layout.tsx                   # Root layout with theme script
+├── page.tsx                     # HomePage
+└── not-found.tsx                # 404
+components/
+├── ActionItems/                 # ActionItemsPanel, ActionItemRow
+├── Admin/                       # AdminShell, Sidebar, ProtectedRoute, FeatureFlagCard
+├── Board/                       # BoardColumn, RetroCard, SortableCard, AddCardForm, views, controls
+├── Layout/                      # AppShell, Header, ThemeToggle
+├── Timer/                       # TimerDisplay, TimerControls, TimerFloating
+├── common/                      # Button, Input, Textarea, Modal, Badge
+├── pages/                       # Page-level client components (HomePage, BoardPage, admin pages)
+└── providers/                   # AblyProvider
+hooks/                           # useBoardChannel, usePresence, useTimer, usePolling, useTheme
+lib/                             # db.ts, auth.ts, auth-client.ts, ably-server.ts, audio.ts
+stores/                          # boardStore, authStore, featureFlagStore, appSettingsStore
+styles/                          # index.css (design tokens + Tailwind @theme)
+types/                           # index.ts (all TypeScript interfaces)
+utils/                           # constants, templates, cardColors, export, cn, boardHistory
 ```
 
-**Database:** `supabase/migrations/001_initial_schema.sql` — 6 tables (boards, columns, cards, votes, participants, action_items) with RLS enabled, all added to realtime publication.
-
-**Docs:** `docs/plans/` — Design and implementation documents for features and bugfixes.
-
-## Data Model
-
-**Core entities:** Board → Columns → Cards → Votes. Boards also have Participants and ActionItems.
-
-- **Board IDs:** 10-char nanoid (URL-safe)
-- **Vote/ActionItem IDs:** UUID (server-generated)
-- **`Board.settings`:** JSONB with card_visibility, voting_enabled, max_votes, secret_voting, board_locked, timer state, etc.
-- **`Board.archived_at`:** NULL = active, timestamp = completed/read-only
-- **`Card.color`:** `string | null` — null uses column default, string is hex color
-- **Board views:** `'grid' | 'swimlane' | 'list' | 'timeline'` via URL `?view=` param
-
-## Key Patterns
-
-- **Optimistic updates:** Card moves, votes, and creation update UI immediately; revert on DB error
-- **Facilitator controls:** Reveal/hide cards, lock board, toggle voting, manage action items, complete retro
-- **Card obfuscation:** `card_visibility: 'hidden'` blurs non-author cards; authors always see their own
-- **Board completion:** Sets `archived_at`, locks board, hides editing controls, shows "Completed" badge
-- **Vote limiting:** Client-side check + DB UNIQUE constraint on (card_id, voter_id)
-- **Reconnect handling:** Auto-refetches all data on realtime reconnect with 3-second status indicator
+---
 
 ## Styling
 
-Design tokens defined as CSS custom properties in `src/styles/index.css`, mapped to Tailwind via `@theme` block. 8pt spacing grid. Brand colors: primary red (#DD0031), secondary navy (#004F71), plus tertiary palette. Typography: Apercu Std / Rooney with Inter fallback.
+Design tokens defined as CSS custom properties in `styles/index.css`, mapped to Tailwind via `@theme` block:
+- 8pt spacing grid (`--space-1` through `--space-24`)
+- Primary: `#DD0031` (CFA red), Secondary: `#004F71` (navy)
+- Grayscale ramp: `--color-gray-1` through `--color-gray-8`
+- Typography: Apercu Std / Rooney with Inter fallback
+- Dark mode: `data-theme` attribute on `<html>`, CSS custom properties swap per theme
 
-Path alias: `@/` → `./src/` (configured in both Vite and tsconfig).
+---
 
 ## Conventions
 
@@ -122,49 +180,38 @@ Path alias: `@/` → `./src/` (configured in both Vite and tsconfig).
 - **Components:** Barrel exports via `index.ts` files
 - **Class merging:** Use `cn()` utility (clsx + tailwind-merge) for conditional classes
 - **No tests yet:** No test framework configured
+- **Branching:** `develop` -> `main`. Never push directly to `main`.
 
-## Known Issues
+---
 
-- Lint warning: `setShowJoinModal(true)` in useEffect (BoardPage.tsx) — `set-state-in-effect` rule
-- Build chunk size may exceed 500KB — consider dynamic imports
-- Supabase realtime may need manual toggle per-table in Dashboard
-- `boardStore.ts` at ~780 lines — candidate for splitting into modules
+## Known Issues & Tech Debt
 
+- No test framework configured — zero test coverage
+- `boardStore.ts` at 837 lines — candidate for splitting into domain modules
+- `CONTEXT_SNAPSHOT.md` is stale (references pre-migration Supabase stack)
+- `README.md` is Vite boilerplate
+- `supabase-env-guard.sh` hook in `.claude/settings.local.json` is no longer relevant
+- See `.claude/context/architecture-notes.md` for full tech debt inventory
 
+---
 
-## MIGRATION AS OF MARCH 19 2026 VERY IMPORTANT!
-## Architecture (migrated March 2026)
+## Session Quickstart
 
-- **Database**: Neon (serverless Postgres, free tier)
-- **Auth**: Better Auth (open source, sessions in Neon)
-- **Realtime**: Ably (pub/sub + presence, free tier)
-- **Hosting**: Vercel (Next.js App Router)
-- **Previous stack**: Supabase (fully removed)
+> When starting a new Claude Code session, begin here:
 
-### Realtime pattern
+1. This file auto-loads `AGENTS.md` and all `.claude/context/*.md` files via `@imports` above — review them for current project state.
+2. Check the feature tracker in `.claude/context/feature-status.md` for what's built and what's missing.
+3. Review known footguns in `.claude/context/architecture-notes.md` before making changes.
+4. Run `/status-check` for a quick project dashboard, or `/project-health` for a comprehensive audit.
+5. Run `/context-refresh` if context files are stale (check timestamps at the top of each).
+6. Ask Jordan what to focus on in this session.
 
-All realtime events flow through Ably channels.
-- Channel naming: `retro-board:{boardId}` for card/vote/state events
-- Timer channel: `retro-board:{boardId}:timer` for high-frequency ticks
-- Presence: Ably's built-in presence on the board channel
+### Available Commands
 
-Every mutation follows this pattern:
-1. Client calls API route (optimistic update on client)
-2. API route writes to Neon
-3. API route publishes event to Ably channel
-4. All subscribed clients receive the event via useChannel hook
-
-### Auth pattern
-
-Better Auth handles sessions. All API routes verify session via:
-```typescript
-const session = await auth.api.getSession({ headers: request.headers });
-```
-
-### Key files
-
-- `lib/auth.ts` - Better Auth server config
-- `lib/auth-client.ts` - Better Auth client
-- `app/api/auth/[...all]/route.ts` - Auth API routes
-- `app/api/ably-token/route.ts` - Ably token auth
-- `components/providers/AblyProvider.tsx` - Ably React provider
+| Command | Purpose |
+|---------|---------|
+| `/test-report` | Run tests (if configured), update test-health.md, report status |
+| `/status-check` | Quick dashboard: git state, build, tests, context freshness |
+| `/context-refresh` | Refresh all 4 context files with live project data |
+| `/project-health` | Comprehensive audit: deps, lint, TODOs, tech debt |
+| `/session-end` | Capture session work, suggest memory updates, output summary |

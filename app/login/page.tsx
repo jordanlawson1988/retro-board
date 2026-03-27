@@ -1,38 +1,37 @@
 'use client';
 
 import { useState } from 'react';
-import { authClient } from '@/lib/auth-client';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useAuthStore } from '@/stores/authStore';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const signIn = useAuthStore((s) => s.signIn);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setLoading(true);
 
     try {
-      if (isSignUp) {
-        await authClient.signUp.email({ email, password, name: email.split('@')[0] });
-      } else {
-        await authClient.signIn.email({ email, password });
-      }
-      router.push('/admin');
+      const redirect = await signIn(email, password);
+      router.push(redirect);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Authentication failed');
+      setError(err instanceof Error ? err.message : 'Sign in failed');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[var(--color-gray-0)]">
       <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4 rounded-lg bg-white p-8 shadow-lg">
-        <h1 className="text-2xl font-bold text-[var(--color-navy)]">
-          {isSignUp ? 'Create Account' : 'Admin Login'}
-        </h1>
+        <h1 className="text-2xl font-bold text-[var(--color-navy)]">Sign In</h1>
         {error && <p className="text-sm text-red-600">{error}</p>}
         <input
           type="email"
@@ -50,12 +49,19 @@ export default function LoginPage() {
           className="w-full rounded border px-3 py-2"
           required
         />
-        <button type="submit" className="w-full rounded bg-[var(--color-navy)] px-4 py-2 text-white">
-          {isSignUp ? 'Sign Up' : 'Sign In'}
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full rounded bg-[var(--color-navy)] px-4 py-2 text-white disabled:opacity-50"
+        >
+          {loading ? 'Signing in...' : 'Sign In'}
         </button>
-        <button type="button" onClick={() => setIsSignUp(!isSignUp)} className="w-full text-sm text-[var(--color-navy)]">
-          {isSignUp ? 'Already have an account? Sign in' : 'Need an account? Sign up'}
-        </button>
+        <p className="text-center text-sm text-[var(--color-gray-5)]">
+          Don&apos;t have an account?{' '}
+          <Link href="/signup" className="text-[var(--color-navy)] hover:underline">
+            Sign up free
+          </Link>
+        </p>
       </form>
     </div>
   );

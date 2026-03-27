@@ -153,7 +153,7 @@ export interface User {
   email: string;
   name: string;
   image?: string | null;
-  createdAt?: string;
+  createdAt?: Date | string;
 }
 
 // Board membership

@@ -132,6 +132,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
             board_id: boardId,
             display_name: displayName,
             is_admin: true,
+            user_id: null,
             joined_at: new Date().toISOString(),
             last_seen: new Date().toISOString(),
           },
@@ -281,6 +282,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       board_id: boardId,
       display_name: displayName,
       is_admin: isAdmin,
+      user_id: null,
       joined_at: new Date().toISOString(),
       last_seen: new Date().toISOString(),
     };

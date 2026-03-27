@@ -5,6 +5,8 @@ export interface Board {
   description: string | null;
   template: BoardTemplate;
   created_by: string;
+  owner_id: string | null;       // Better Auth user ID (null for anonymous/legacy)
+  visibility: 'link' | 'invite_only';
   settings: BoardSettings;
   created_at: string;
   archived_at: string | null;
@@ -95,6 +97,7 @@ export interface Participant {
   board_id: string;
   display_name: string;
   is_admin: boolean;
+  user_id: string | null;        // Better Auth user ID (null for anonymous)
   joined_at: string;
   last_seen: string;
 }
@@ -143,3 +146,58 @@ export interface AdminUser {
   role: 'owner' | 'admin';
   created_at: string;
 }
+
+// User types (Better Auth user — subset of fields we use)
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  image?: string | null;
+  createdAt?: string;
+}
+
+// Board membership
+export type BoardMemberRole = 'owner' | 'facilitator' | 'participant' | 'viewer';
+
+export interface BoardMember {
+  id: string;
+  board_id: string;
+  user_id: string;
+  role: BoardMemberRole;
+  invited_by: string | null;
+  joined_at: string;
+  // Joined from user table for display
+  user_email?: string;
+  user_name?: string;
+}
+
+// Board invites
+export interface BoardInvite {
+  id: string;
+  board_id: string;
+  email: string;
+  role: BoardMemberRole;
+  token: string;
+  accepted_at: string | null;
+  expires_at: string;
+  created_at: string;
+}
+
+// Subscription (Better Auth Stripe plugin shape)
+export type SubscriptionStatus = 'active' | 'canceled' | 'past_due' | 'trialing' | 'incomplete';
+
+export interface Subscription {
+  id: string;
+  plan: string;
+  status: SubscriptionStatus;
+  currentPeriodEnd: string;
+  cancelAtPeriodEnd: boolean;
+}
+
+// Plan limits
+export const PLAN_LIMITS = {
+  free: { maxActiveBoards: 3, pdfExport: false, imageExport: false },
+  pro: { maxActiveBoards: Infinity, pdfExport: true, imageExport: true },
+} as const;
+
+export type PlanTier = keyof typeof PLAN_LIMITS;

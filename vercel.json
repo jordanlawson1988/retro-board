@@ -1,3 +1,10 @@
 {
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- . ':!*.md' ':!.claude/' ':!docs/' ':!scripts/' ':!.superpowers/' ':!*.mdx' ':!.gitignore' ':!.eslintrc*' ':!eslint.config*' ':!.worktrees/'",
+  "git": {
+    "deploymentEnabled": {
+      "main": true,
+      "develop": true
+    }
+  }
 }

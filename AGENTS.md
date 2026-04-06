@@ -7,14 +7,7 @@
 ## All Agents
 
 ### Stack & Constraints
-- **Next.js 16** (App Router, Turbopack), **React 19**, **TypeScript 5.9 (strict)**, **Tailwind CSS 4**
-- **Database:** PostgreSQL via Neon serverless (`@neondatabase/serverless`)
-- **Auth:** Better Auth (email/password, sessions stored in Neon)
-- **Realtime:** Ably (pub/sub channels + presence)
-- **State:** Zustand 5 (single `boardStore` for board state, plus `authStore`, `featureFlagStore`, `appSettingsStore`)
-- **DnD:** `@dnd-kit/core` + `@dnd-kit/sortable` for card drag-and-drop
-- **IDs:** nanoid (10-char, URL-safe) for boards/columns/cards; UUID for votes/action items
-- **Path alias:** `@/*` maps to project root
+**Stack & constraints:** See CLAUDE.md for full stack table. Key constraints below apply to all agents.
 
 ### Return Shapes (Non-Negotiable)
 - API routes return `NextResponse.json()` with consistent shape (`{ ok }` for mutations, full data objects for reads)
@@ -23,20 +16,11 @@
 
 ### Do NOT
 - Add new npm dependencies without confirming with Jordan
-- Re-introduce Supabase or `react-router-dom` — these were fully removed in the March 2026 migration
-- Use `supabase` anything — no imports, no references, no environment variables
 - Overwrite `.env.local` — it contains secrets that can't be recovered
-- Push to `main` or merge without going through `develop` first
 - Bypass the mutation pattern (optimistic + API + Ably publish) — all realtime data must flow through this pipeline
 
 ### Design System
-- Background: `#F4F1EC` (warm white) / dark mode via `data-theme` attribute
-- Primary: `#DD0031` (CFA red), Secondary: `#004F71` (navy)
-- Typography: Apercu Std / Rooney with Inter fallback
-- Icons: Lucide React only
-- Class utility: `cn()` from `utils/cn.ts` (clsx + tailwind-merge)
-- Design tokens in `styles/index.css` as CSS custom properties + `@theme` Tailwind block
-- 8pt spacing grid
+**Design system:** See CLAUDE.md for design tokens and styling conventions. Use `cn()` from `utils/cn.ts`.
 
 ---
 
@@ -52,11 +36,7 @@ When reviewing code in this project:
 - Board participant IDs are client-generated (stored in `sessionStorage`) — no auth required for board participation
 
 ### Known Tech Debt to Flag
-- `boardStore.ts` at 837 lines — candidate for splitting into domain modules
-- `CLAUDE.md` still contains outdated Supabase/Vite/react-router references in some sections
-- No test framework configured — no unit tests, no E2E tests
-- `.npmrc` exists to bypass corporate JFrog registry
-- `CONTEXT_SNAPSHOT.md` is stale (references pre-migration Supabase stack)
+**Known tech debt:** See `.claude/context/architecture-notes.md` for the full tech debt inventory.
 
 ### Performance-Sensitive Areas
 - Board page with many cards (Ably channel message handling + Zustand updates)
@@ -104,10 +84,7 @@ When reviewing code in this project:
 - **Free-tier infrastructure** — Neon free tier, Ably free tier, Vercel Hobby. Do not design for enterprise scale.
 
 ### Explicit Scope Boundaries
-- Do NOT plan for user accounts for board participants
-- Do NOT plan for persistent board history across sessions (boards are ephemeral)
-- Do NOT plan for team/organization features
-- If a feature could "prepare" for these, stop and ask Jordan first
+**Scope boundaries:** See CLAUDE.md — no user accounts for participants, no persistent board history, no team/org features.
 
 ### Performance / Scale Requirements
 - Current usage: small teams (2-10 participants per board)
@@ -118,20 +95,6 @@ When reviewing code in this project:
 ---
 
 ## Frontend / UI Agent
-
-### Design Tokens
-| Token | Value |
-|-------|-------|
-| `--color-primary` | `#DD0031` (CFA red) |
-| `--color-navy` | `#004F71` (navy) |
-| `--color-warm-white` | `#F4F1EC` |
-| `--color-error` | `#B8072F` |
-| `--color-success` | `#077E4C` |
-
-### Typography
-- Primary: Apercu Std with Inter fallback
-- Secondary: Rooney with Inter fallback
-- Scale: H1 (48px) through H4 (20px), subtitles, body, caption
 
 ### Component Patterns
 - **Common components:** `Button`, `Input`, `Textarea`, `Modal`, `Badge` in `components/common/`
@@ -213,16 +176,8 @@ All `/api/admin/*` routes must:
 - Soft deletes: `archived_at TIMESTAMPTZ` on boards
 - Foreign keys: `ON DELETE CASCADE` from child tables to boards
 
-### Schema (9 tables)
-1. `boards` — retrospective boards with nanoid IDs and JSONB settings
-2. `columns` — board columns with position ordering
-3. `participants` — board participants (client-generated IDs, no auth)
-4. `cards` — sticky note cards with author tracking and optional merge
-5. `votes` — card votes with UNIQUE(card_id, voter_id) constraint
-6. `action_items` — action items with status workflow (open -> in_progress -> done)
-7. `admin_users` — admin users linked to Better Auth accounts
-8. `feature_flags` — application feature flags with key/enabled toggle
-9. `app_settings` — singleton row for global app configuration
+### Schema
+**Schema:** See CLAUDE.md for the 9-table data model. Conventions below are agent-specific.
 
 ### Migration File
 - Single combined migration: `scripts/migrate.sql`

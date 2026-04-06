@@ -3,6 +3,9 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { LogIn } from 'lucide-react';
+import { AppShell } from '@/components/Layout';
+import { Input, Button } from '@/components/common';
 import { useAuthStore } from '@/stores/authStore';
 
 export default function LoginPage() {
@@ -29,40 +32,67 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[var(--color-gray-0)]">
-      <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4 rounded-lg bg-white p-8 shadow-lg">
-        <h1 className="text-2xl font-bold text-[var(--color-navy)]">Sign In</h1>
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="Email"
-          className="w-full rounded border px-3 py-2"
-          required
-        />
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="Password"
-          className="w-full rounded border px-3 py-2"
-          required
-        />
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded bg-[var(--color-navy)] px-4 py-2 text-white disabled:opacity-50"
-        >
-          {loading ? 'Signing in...' : 'Sign In'}
-        </button>
-        <p className="text-center text-sm text-[var(--color-gray-5)]">
-          Don&apos;t have an account?{' '}
-          <Link href="/signup" className="text-[var(--color-navy)] hover:underline">
-            Sign up free
-          </Link>
-        </p>
-      </form>
-    </div>
+    <AppShell>
+      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4 sm:px-6">
+        <div className="w-full max-w-md">
+          <form
+            onSubmit={handleSubmit}
+            className="rounded-xl border border-[var(--color-gray-1)] bg-[var(--color-surface)] p-8 shadow-sm"
+          >
+            <div className="mb-6 text-center">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--color-navy)]/10 text-[var(--color-navy)]">
+                <LogIn size={24} />
+              </div>
+              <h1 className="text-2xl font-bold text-[var(--color-gray-8)]">Welcome Back</h1>
+              <p className="mt-2 text-sm text-[var(--color-gray-6)]">
+                Sign in to access your boards.
+              </p>
+            </div>
+
+            {error && (
+              <div className="mb-4 rounded-lg bg-[var(--color-error)]/10 px-4 py-3 text-sm text-[var(--color-error)]">
+                {error}
+              </div>
+            )}
+
+            <div className="flex flex-col gap-4">
+              <Input
+                id="login-email"
+                label="Email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                required
+              />
+              <Input
+                id="login-password"
+                label="Password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Your password"
+                required
+              />
+
+              <Button
+                type="submit"
+                loading={loading}
+                className="mt-2 w-full"
+              >
+                <LogIn size={18} /> Sign In
+              </Button>
+            </div>
+
+            <p className="mt-6 text-center text-sm text-[var(--color-gray-6)]">
+              Don&apos;t have an account?{' '}
+              <Link href="/signup" className="font-medium text-[var(--color-navy)] hover:underline">
+                Sign up free
+              </Link>
+            </p>
+          </form>
+        </div>
+      </div>
+    </AppShell>
   );
 }

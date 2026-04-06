@@ -1,9 +1,3 @@
-@AGENTS.md
-@.claude/context/test-health.md
-@.claude/context/feature-status.md
-@.claude/context/architecture-notes.md
-@.claude/context/business-context.md
-
 ---
 
 # RetroBoard
@@ -186,12 +180,16 @@ Design tokens defined as CSS custom properties in `styles/index.css`, mapped to 
 
 ## Known Issues & Tech Debt
 
-- No test framework configured — zero test coverage
-- `boardStore.ts` at 837 lines — candidate for splitting into domain modules
-- `CONTEXT_SNAPSHOT.md` is stale (references pre-migration Supabase stack)
-- `README.md` is Vite boilerplate
-- `supabase-env-guard.sh` hook in `.claude/settings.local.json` is no longer relevant
-- See `.claude/context/architecture-notes.md` for full tech debt inventory
+See `.claude/context/architecture-notes.md` for the full tech debt inventory.
+
+---
+
+## Deploy Gate
+
+**Follow the global deploy discipline in `~/.claude/CLAUDE.md`.** Project-specific notes:
+- Pre-push verification: `npx tsc --noEmit && npm run build`
+- `main` = production, `develop` = preview
+- No unit tests in this project
 
 ---
 
@@ -199,12 +197,11 @@ Design tokens defined as CSS custom properties in `styles/index.css`, mapped to 
 
 > When starting a new Claude Code session, begin here:
 
-1. This file auto-loads `AGENTS.md` and all `.claude/context/*.md` files via `@imports` above — review them for current project state.
-2. Check the feature tracker in `.claude/context/feature-status.md` for what's built and what's missing.
-3. Review known footguns in `.claude/context/architecture-notes.md` before making changes.
-4. Run `/status-check` for a quick project dashboard, or `/project-health` for a comprehensive audit.
-5. Run `/context-refresh` if context files are stale (check timestamps at the top of each).
-6. Ask Jordan what to focus on in this session.
+1. **Scan available skills** — Invoke applicable skills BEFORE starting work (`brainstorming`, `systematic-debugging`, `TDD`, `full-stack-developer`, etc.).
+2. Read context files **as needed** — `.claude/context/` has `test-health.md`, `feature-status.md`, `architecture-notes.md`, `business-context.md`.
+3. Read `AGENTS.md` **before dispatching subagents** — contains agent-specific guidelines not in CLAUDE.md.
+3. Run `/status-check` or `/context-refresh` if you need a project overview.
+4. Ask Jordan what to focus on in this session.
 
 ### Available Commands
 
@@ -215,3 +212,8 @@ Design tokens defined as CSS custom properties in `styles/index.css`, mapped to 
 | `/context-refresh` | Refresh all 4 context files with live project data |
 | `/project-health` | Comprehensive audit: deps, lint, TODOs, tech debt |
 | `/session-end` | Capture session work, suggest memory updates, output summary |
+
+```bash
+# Pre-push verification (runs automatically on deploy branch pushes)
+npx tsc --noEmit && npm run build
+```

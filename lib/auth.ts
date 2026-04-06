@@ -20,10 +20,14 @@ function getAuth() {
   return _auth;
 }
 
-// Lazy proxy to avoid crashing at build time when DATABASE_URL is not set
+// Lazy proxy to avoid crashing at build time when DATABASE_URL is not set.
+// Traps: get (property access), has (the `in` operator — needed by toNextJsHandler).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const auth = new Proxy({} as any, {
   get(_target, prop) {
     return Reflect.get(getAuth(), prop);
+  },
+  has(_target, prop) {
+    return Reflect.has(getAuth(), prop);
   },
 }) as ReturnType<typeof betterAuth>;

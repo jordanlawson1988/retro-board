@@ -28,23 +28,28 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   initialize: async () => {
     set({ loading: true, error: null });
-    const session = await authClient.getSession();
-    if (!session.data?.user) {
+    try {
+      const session = await authClient.getSession();
+      if (!session.data?.user) {
+        set({ user: null, adminUser: null, subscription: null, loading: false, isAuthenticated: false });
+        return;
+      }
+
+      // Check admin access (optional — not all users are admins)
+      const adminRes = await fetch(`/api/admin/verify?userId=${session.data.user.id}`);
+      const adminUser = adminRes.ok ? await adminRes.json() : null;
+
+      set({
+        user: session.data.user,
+        adminUser,
+        subscription: null, // WS3 will populate this
+        loading: false,
+        isAuthenticated: true,
+      });
+    } catch {
+      // Network error or auth service unavailable — treat as unauthenticated
       set({ user: null, adminUser: null, subscription: null, loading: false, isAuthenticated: false });
-      return;
     }
-
-    // Check admin access (optional — not all users are admins)
-    const adminRes = await fetch(`/api/admin/verify?userId=${session.data.user.id}`);
-    const adminUser = adminRes.ok ? await adminRes.json() : null;
-
-    set({
-      user: session.data.user,
-      adminUser,
-      subscription: null, // WS3 will populate this
-      loading: false,
-      isAuthenticated: true,
-    });
   },
 
   signIn: async (email, password, redirectTo) => {

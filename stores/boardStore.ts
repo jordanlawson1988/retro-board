@@ -50,6 +50,9 @@ interface BoardState {
   // Voting
   toggleVote: (cardId: string) => Promise<void>;
 
+  // Reactions
+  toggleReaction: (cardId: string, emoji: string) => Promise<void>;
+
   // Action Items
   addActionItem: (description: string, assignee?: string, dueDate?: string) => Promise<void>;
   updateActionItem: (itemId: string, updates: Partial<Pick<ActionItem, 'description' | 'assignee' | 'due_date' | 'status'>>) => Promise<void>;
@@ -459,6 +462,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       color: null,
       position: newCard.position,
       merged_with: null,
+      reactions: {},
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -753,6 +757,45 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     }
 
     // Client and server now use the same vote ID — no replacement needed
+  },
+
+  // --- Reactions ---
+
+  toggleReaction: async (cardId, emoji) => {
+    const { board, cards, currentParticipantId } = get();
+    if (!board || !currentParticipantId) return;
+
+    const card = cards.find((c) => c.id === cardId);
+    if (!card) return;
+
+    const reactions = { ...(card.reactions || {}) };
+    const users = reactions[emoji] ? [...reactions[emoji]] : [];
+    const idx = users.indexOf(currentParticipantId);
+    if (idx >= 0) {
+      users.splice(idx, 1);
+      if (users.length === 0) delete reactions[emoji];
+      else reactions[emoji] = users;
+    } else {
+      reactions[emoji] = [...users, currentParticipantId];
+    }
+
+    // Optimistic update
+    set((state) => ({
+      cards: state.cards.map((c) => c.id === cardId ? { ...c, reactions } : c),
+    }));
+
+    const res = await fetch(`/api/boards/${board.id}/cards`, {
+      method: 'PATCH',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ cardId, updates: { reactions } }),
+    });
+
+    if (!res.ok) {
+      // Revert
+      set((state) => ({
+        cards: state.cards.map((c) => c.id === cardId ? { ...c, reactions: card.reactions } : c),
+      }));
+    }
   },
 
   // --- Action Items ---

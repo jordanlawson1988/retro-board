@@ -1,11 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { Pencil, Trash2, ThumbsUp, Check, X, Layers, ChevronDown, ChevronRight } from 'lucide-react';
+import { Pencil, Trash2, ThumbsUp, Check, X, Layers, ChevronDown, ChevronRight, SmilePlus } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { getCardTextColor, CARD_TEXT_CLASSES } from '../../utils/cardColors';
 import { CardColorPicker } from './CardColorPicker';
-import type { Card, Vote } from '@/types';
+import type { Card, CardReactions, Vote } from '@/types';
+
+const EMOJI_PALETTE = ['👍', '👎', '❤️', '😂', '🎉', '🤔', '🔥', '👏'];
 
 interface RetroCardProps {
   id: string;
@@ -23,6 +25,8 @@ interface RetroCardProps {
   onUpdate: (cardId: string, updates: Partial<{ text: string; color: string | null }>) => void;
   onDelete: (cardId: string) => void;
   onToggleVote: (cardId: string) => void;
+  reactions?: CardReactions;
+  onToggleReaction?: (cardId: string, emoji: string) => void;
   isCompleted?: boolean;
   // Merge props
   childCards?: Card[];
@@ -54,7 +58,10 @@ export function RetroCard({
   onUpdate,
   onDelete,
   onToggleVote,
+  reactions = {},
+  onToggleReaction,
   isCompleted,
+  currentParticipantId,
   childCards = [],
   canMerge,
   isMergeSource,
@@ -69,6 +76,7 @@ export function RetroCard({
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(text);
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
 
   const hasChildren = childCards.length > 0;
 
@@ -172,7 +180,7 @@ export function RetroCard({
               </div>
 
               <div className="flex items-center gap-1">
-                {/* Vote button (interactive) */}
+                {/* Vote button (interactive — only when voting enabled and board active) */}
                 {votingEnabled && !isCompleted && (
                   <button
                     onClick={(e) => { e.stopPropagation(); onToggleVote(id); }}
@@ -195,9 +203,9 @@ export function RetroCard({
                     }
                   </button>
                 )}
-                {/* Vote count (read-only, shown on completed boards) */}
-                {votingEnabled && isCompleted && !secretVoting && voteCount > 0 && (
-                  <span className={cn('flex items-center gap-1 rounded-[var(--radius-full)] px-2 py-0.5 text-xs', contrast.subtext)}>
+                {/* Vote count (read-only — voting disabled or board completed) */}
+                {(!votingEnabled || isCompleted) && !secretVoting && voteCount > 0 && (
+                  <span className={cn('flex items-center gap-1 rounded-[var(--radius-full)] bg-[var(--color-navy)]/10 px-2 py-0.5 text-xs font-medium', contrast.subtext)}>
                     <ThumbsUp size={12} />
                     <span>{voteCount}</span>
                   </span>
@@ -270,6 +278,55 @@ export function RetroCard({
                 )}
               </div>
             </div>
+
+            {/* Emoji reactions */}
+            {onToggleReaction && (
+              <div className="mt-2 flex flex-wrap items-center gap-1">
+                {Object.entries(reactions).map(([emoji, users]) => users.length > 0 && (
+                  <button
+                    key={emoji}
+                    onClick={(e) => { e.stopPropagation(); onToggleReaction(id, emoji); }}
+                    className={cn(
+                      'flex items-center gap-0.5 rounded-[var(--radius-full)] border px-1.5 py-0.5 text-xs transition-colors',
+                      users.includes(String(currentParticipantId || ''))
+                        ? 'border-[var(--color-navy)] bg-[var(--color-navy)]/10'
+                        : 'border-[var(--color-gray-2)] hover:border-[var(--color-gray-3)]'
+                    )}
+                  >
+                    <span>{emoji}</span>
+                    <span className={cn('text-[10px]', contrast.subtext)}>{users.length}</span>
+                  </button>
+                ))}
+                {!isCompleted && (
+                  <div className="relative">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setEmojiPickerOpen(!emojiPickerOpen); }}
+                      className={cn('rounded-[var(--radius-full)] p-1 transition-colors', contrast.icon, 'hover:bg-[var(--color-gray-1)]', contrast.iconHover)}
+                      title="Add reaction"
+                    >
+                      <SmilePlus size={14} />
+                    </button>
+                    {emojiPickerOpen && (
+                      <div className="absolute bottom-full left-0 z-30 mb-1 flex gap-0.5 rounded-[var(--radius-md)] border border-[var(--color-gray-2)] bg-[var(--color-surface)] p-1 shadow-md">
+                        {EMOJI_PALETTE.map((emoji) => (
+                          <button
+                            key={emoji}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onToggleReaction(id, emoji);
+                              setEmojiPickerOpen(false);
+                            }}
+                            className="rounded p-1 text-sm hover:bg-[var(--color-gray-1)] transition-colors"
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </>
         )}
       </div>

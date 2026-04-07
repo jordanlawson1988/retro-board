@@ -18,6 +18,7 @@ interface SwimlaneViewProps {
   onUpdateCard: (cardId: string, updates: Partial<{ text: string; color: string | null }>) => void;
   onDeleteCard: (cardId: string) => void;
   onToggleVote: (cardId: string) => void;
+  onToggleReaction?: (cardId: string, emoji: string) => void;
 }
 
 export function SwimlaneView({
@@ -33,6 +34,7 @@ export function SwimlaneView({
   onUpdateCard,
   onDeleteCard,
   onToggleVote,
+  onToggleReaction,
 }: SwimlaneViewProps) {
   const [collapsedRows, setCollapsedRows] = useState<Set<string>>(new Set());
 
@@ -135,6 +137,8 @@ export function SwimlaneView({
                             onUpdate={onUpdateCard}
                             onDelete={onDeleteCard}
                             onToggleVote={onToggleVote}
+                            reactions={card.reactions}
+                            onToggleReaction={onToggleReaction}
                             isCompleted={isCompleted}
                           />
                         );

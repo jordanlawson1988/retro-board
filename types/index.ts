@@ -54,6 +54,8 @@ export interface Column {
 }
 
 // Card types
+export type CardReactions = Record<string, string[]>; // { emoji: [participantId, ...] }
+
 export interface Card {
   id: string;
   column_id: string;
@@ -64,6 +66,7 @@ export interface Card {
   color: string | null;
   position: number;
   merged_with: string | null;
+  reactions: CardReactions;
   created_at: string;
   updated_at: string;
   votes?: Vote[];

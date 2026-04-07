@@ -27,6 +27,7 @@ interface BoardColumnProps {
   onToggleVote: (cardId: string) => void;
   onCombineCards: (parentCardId: string, childCardId: string) => void;
   onUncombineCard: (childCardId: string) => void;
+  onToggleReaction?: (cardId: string, emoji: string) => void;
   isCompleted?: boolean;
   isAdmin?: boolean;
   boardLocked?: boolean;
@@ -100,6 +101,7 @@ export function BoardColumn({
   onToggleVote,
   onCombineCards,
   onUncombineCard,
+  onToggleReaction,
   isCompleted,
   isAdmin,
   boardLocked,
@@ -459,6 +461,8 @@ export function BoardColumn({
                       onUpdate={onUpdateCard}
                       onDelete={onDeleteCard}
                       onToggleVote={onToggleVote}
+                      reactions={card.reactions}
+                      onToggleReaction={onToggleReaction}
                       isCompleted={isCompleted}
                       childCards={children}
                       votes={votes}

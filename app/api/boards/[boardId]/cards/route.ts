@@ -43,6 +43,9 @@ export async function PATCH(
   if (updates.merged_with !== undefined) {
     await sql`UPDATE cards SET merged_with = ${updates.merged_with} WHERE id = ${cardId} AND board_id = ${boardId}`;
   }
+  if (updates.reactions !== undefined) {
+    await sql`UPDATE cards SET reactions = ${JSON.stringify(updates.reactions)} WHERE id = ${cardId} AND board_id = ${boardId}`;
+  }
 
   const [card] = await sql`SELECT * FROM cards WHERE id = ${cardId} AND board_id = ${boardId}`;
 

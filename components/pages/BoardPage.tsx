@@ -58,6 +58,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
     deleteColumn,
     combineCards,
     uncombineCard,
+    toggleReaction,
   } = useBoardStore();
 
   const [showActionItems, setShowActionItems] = useState(false);
@@ -440,6 +441,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
                           onToggleVote={toggleVote}
                           onCombineCards={combineCards}
                           onUncombineCard={uncombineCard}
+                          onToggleReaction={toggleReaction}
                           isCompleted={isCompleted}
                           isAdmin={isAdmin}
                           boardLocked={board.settings.board_locked}
@@ -479,6 +481,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
                 onUpdateCard={updateCard}
                 onDeleteCard={deleteCard}
                 onToggleVote={toggleVote}
+                onToggleReaction={toggleReaction}
               />
             )}
 

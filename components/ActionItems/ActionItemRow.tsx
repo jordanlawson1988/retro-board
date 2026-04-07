@@ -108,7 +108,7 @@ export function ActionItemRow({ item, participants, onUpdate, onDelete, readOnly
           {/* Due date */}
           <input
             type="date"
-            value={item.due_date || ''}
+            value={item.due_date ? item.due_date.slice(0, 10) : ''}
             onChange={(e) => onUpdate(item.id, { due_date: e.target.value || null })}
             disabled={readOnly}
             className={cn(

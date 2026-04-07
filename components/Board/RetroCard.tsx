@@ -172,7 +172,7 @@ export function RetroCard({
               </div>
 
               <div className="flex items-center gap-1">
-                {/* Vote button */}
+                {/* Vote button (interactive) */}
                 {votingEnabled && !isCompleted && (
                   <button
                     onClick={(e) => { e.stopPropagation(); onToggleVote(id); }}
@@ -194,6 +194,13 @@ export function RetroCard({
                       : (voteCount > 0 && <span>{voteCount}</span>)
                     }
                   </button>
+                )}
+                {/* Vote count (read-only, shown on completed boards) */}
+                {votingEnabled && isCompleted && !secretVoting && voteCount > 0 && (
+                  <span className={cn('flex items-center gap-1 rounded-[var(--radius-full)] px-2 py-0.5 text-xs', contrast.subtext)}>
+                    <ThumbsUp size={12} />
+                    <span>{voteCount}</span>
+                  </span>
                 )}
 
                 {/* Author actions (visible on hover) */}

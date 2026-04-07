@@ -65,7 +65,12 @@ export function SwimlaneView({
         {sortedColumns.map((col) => {
           const colCards = cards
             .filter((c) => c.column_id === col.id && !c.merged_with)
-            .sort((a, b) => a.position - b.position);
+            .sort((a, b) => {
+              const aVotes = votes.filter((v) => v.card_id === a.id).length;
+              const bVotes = votes.filter((v) => v.card_id === b.id).length;
+              if (bVotes !== aVotes) return bVotes - aVotes;
+              return a.position - b.position;
+            });
           const isCollapsed = collapsedRows.has(col.id);
           const colVoteCount = votes.filter((v) =>
             colCards.some((c) => c.id === v.card_id)

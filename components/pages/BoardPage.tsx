@@ -64,6 +64,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [joinCodeCopied, setJoinCodeCopied] = useState(false);
+  const [activeColumnFilter, setActiveColumnFilter] = useState<string | null>(null);
 
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
 
@@ -97,6 +98,15 @@ export function BoardPage({ boardId }: { boardId: string }) {
     router.push(`?${params.toString()}`);
   }, [searchParams, router]);
 
+  const filteredColumns = useMemo(
+    () => activeColumnFilter ? columns.filter((c) => c.id === activeColumnFilter) : columns,
+    [columns, activeColumnFilter]
+  );
+  const filteredCards = useMemo(
+    () => activeColumnFilter ? cards.filter((c) => c.column_id === activeColumnFilter) : cards,
+    [cards, activeColumnFilter]
+  );
+
   const liveEventsEnabled = useFeatureFlagStore((s) => s.isEnabled('live_events'));
 
   const { timer, start: timerStart, pause: timerPause, resume: timerResume, reset: timerReset } = useTimer({
@@ -128,7 +138,8 @@ export function BoardPage({ boardId }: { boardId: string }) {
 
       const boardLocked = board?.settings.board_locked;
       const isArchived = !!board?.archived_at;
-      const canCombine = !boardLocked && !isArchived;
+      const isHidden = board?.settings.card_visibility === 'hidden';
+      const canCombine = !boardLocked && !isArchived && !isHidden;
 
       // Handle child card drag (uncombine or re-parent)
       if (activeIdStr.startsWith('child:')) {
@@ -350,10 +361,41 @@ export function BoardPage({ boardId }: { boardId: string }) {
       {/* Connection status */}
       <ConnectionStatusBanner />
 
-      {/* View toggle */}
+      {/* View toggle + column filter */}
       {isJoined && columns.length > 0 && (
         <div className="mx-auto max-w-[1400px] px-4 pt-4 sm:px-6">
-          <ViewToggle currentView={currentView} onChangeView={handleChangeView} />
+          <div className="flex flex-wrap items-center gap-3">
+            <ViewToggle currentView={currentView} onChangeView={handleChangeView} />
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setActiveColumnFilter(null)}
+                className={cn(
+                  'rounded-[var(--radius-md)] px-2.5 py-1.5 text-xs font-medium transition-colors',
+                  activeColumnFilter === null
+                    ? 'bg-[var(--color-navy)] text-white'
+                    : 'bg-[var(--color-surface)] border border-[var(--color-gray-2)] text-[var(--color-gray-5)] hover:border-[var(--color-gray-3)]'
+                )}
+              >
+                All
+              </button>
+              {[...columns].sort((a, b) => a.position - b.position).map((col) => (
+                <button
+                  key={col.id}
+                  onClick={() => setActiveColumnFilter(col.id === activeColumnFilter ? null : col.id)}
+                  className={cn(
+                    'flex items-center gap-1.5 rounded-[var(--radius-md)] px-2.5 py-1.5 text-xs font-medium transition-colors',
+                    activeColumnFilter === col.id
+                      ? 'text-white shadow-sm'
+                      : 'bg-[var(--color-surface)] border border-[var(--color-gray-2)] text-[var(--color-gray-5)] hover:border-[var(--color-gray-3)]'
+                  )}
+                  style={activeColumnFilter === col.id ? { backgroundColor: col.color } : undefined}
+                >
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: col.color }} />
+                  {col.title}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
@@ -373,16 +415,16 @@ export function BoardPage({ boardId }: { boardId: string }) {
                   <div
                     className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory sm:grid sm:overflow-x-visible sm:pb-0 sm:snap-none"
                     style={{
-                      gridTemplateColumns: `repeat(${Math.min(columns.length + (isAdmin && !isCompleted ? 1 : 0), 4)}, minmax(280px, 1fr))`,
+                      gridTemplateColumns: `repeat(${Math.min(filteredColumns.length + (isAdmin && !isCompleted && !activeColumnFilter ? 1 : 0), 4)}, minmax(280px, 1fr))`,
                     }}
                   >
-                    {[...columns]
+                    {[...filteredColumns]
                       .sort((a, b) => a.position - b.position)
                       .map((col) => (
                         <BoardColumn
                           key={col.id}
                           column={col}
-                          cards={cards.filter((c) => c.column_id === col.id)}
+                          cards={filteredCards.filter((c) => c.column_id === col.id)}
                           votes={votes}
                           currentParticipantId={currentParticipantId}
                           isObscured={isObscured}
@@ -425,8 +467,8 @@ export function BoardPage({ boardId }: { boardId: string }) {
 
             {currentView === 'swimlane' && (
               <SwimlaneView
-                columns={columns}
-                cards={cards}
+                columns={filteredColumns}
+                cards={filteredCards}
                 votes={votes}
                 currentParticipantId={currentParticipantId}
                 isObscured={isObscured}
@@ -442,8 +484,8 @@ export function BoardPage({ boardId }: { boardId: string }) {
 
             {currentView === 'list' && (
               <ListView
-                columns={columns}
-                cards={cards}
+                columns={filteredColumns}
+                cards={filteredCards}
                 votes={votes}
                 currentParticipantId={currentParticipantId}
                 isObscured={isObscured}
@@ -455,8 +497,8 @@ export function BoardPage({ boardId }: { boardId: string }) {
 
             {currentView === 'timeline' && (
               <TimelineView
-                columns={columns}
-                cards={cards}
+                columns={filteredColumns}
+                cards={filteredCards}
                 votes={votes}
                 currentParticipantId={currentParticipantId}
                 isObscured={isObscured}

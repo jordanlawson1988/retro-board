@@ -23,21 +23,21 @@ export function AdminSidebar() {
   };
 
   return (
-    <aside className="flex h-screen w-60 flex-col bg-[var(--color-gray-8)] text-[var(--color-gray-3)]">
-      <div className="border-b border-[var(--color-gray-7)] px-4 py-4">
-        <h2 className="text-sm font-semibold text-white">RetroBoard Admin</h2>
+    <aside className="flex h-screen w-60 flex-col border-r border-white/10 bg-[var(--color-navy-pressed)] text-white/70 shadow-lg">
+      <div className="border-b border-white/10 px-4 py-4">
+        <h2 className="text-sm font-semibold text-white tracking-wide">RetroBoard Admin</h2>
       </div>
 
-      <nav className="flex-1 py-2">
+      <nav className="flex-1 space-y-0.5 px-2 py-3">
         {navItems.map((item) => (
           <Link
             key={item.href}
             href={item.href}
             className={cn(
-              'flex items-center gap-3 px-4 py-2.5 text-sm transition-colors',
+              'flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2.5 text-sm transition-colors',
               isActive(item.href, item.exact)
-                ? 'border-l-3 border-[var(--color-primary)] bg-white/5 text-white'
-                : 'border-l-3 border-transparent hover:bg-white/5 hover:text-white'
+                ? 'bg-white/15 text-white font-medium shadow-sm'
+                : 'hover:bg-white/10 hover:text-white'
             )}
           >
             <item.icon size={18} />
@@ -46,21 +46,21 @@ export function AdminSidebar() {
         ))}
       </nav>
 
-      <div className="border-t border-[var(--color-gray-7)] p-4">
-        <div className="mb-3 text-xs text-[var(--color-gray-4)]">
+      <div className="border-t border-white/10 p-4">
+        <div className="mb-3 truncate text-xs text-white/50">
           {adminUser?.email}
         </div>
         <div className="flex flex-col gap-1">
           <Link
             href="/"
-            className="flex items-center gap-2 rounded-[var(--radius-md)] px-2 py-1.5 text-xs text-[var(--color-gray-4)] hover:bg-white/5 hover:text-white transition-colors"
+            className="flex items-center gap-2 rounded-[var(--radius-md)] px-2 py-1.5 text-xs text-white/50 no-underline hover:bg-white/10 hover:text-white hover:no-underline transition-colors"
           >
             <ArrowLeft size={14} />
             Back to App
           </Link>
           <button
             onClick={signOut}
-            className="flex items-center gap-2 rounded-[var(--radius-md)] px-2 py-1.5 text-xs text-[var(--color-gray-4)] hover:bg-white/5 hover:text-white transition-colors text-left"
+            className="flex items-center gap-2 rounded-[var(--radius-md)] px-2 py-1.5 text-xs text-white/50 hover:bg-white/10 hover:text-white transition-colors text-left"
           >
             <LogOut size={14} />
             Sign Out

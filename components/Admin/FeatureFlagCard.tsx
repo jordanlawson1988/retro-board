@@ -37,7 +37,7 @@ export function FeatureFlagCard({ flag, onToggle }: FeatureFlagCardProps) {
 
         <button
           onClick={() => onToggle(flag.id, !flag.is_enabled)}
-          className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+          className={`relative h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors ${
             flag.is_enabled ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-gray-3)]'
           }`}
           role="switch"
@@ -45,8 +45,8 @@ export function FeatureFlagCard({ flag, onToggle }: FeatureFlagCardProps) {
           aria-label={`Toggle ${flag.name}`}
         >
           <span
-            className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
-              flag.is_enabled ? 'translate-x-5' : 'translate-x-0.5'
+            className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+              flag.is_enabled ? 'translate-x-5' : 'translate-x-0'
             }`}
           />
         </button>

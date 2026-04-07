@@ -129,7 +129,7 @@ export function AdminBoardsPage() {
             onClick={() => { setFilter(tab.key); setPage(0); }}
             className={`rounded-[var(--radius-md)] px-3 py-1.5 text-sm font-medium transition-colors ${
               filter === tab.key
-                ? 'bg-[var(--color-gray-8)] text-white'
+                ? 'bg-[var(--color-primary)] text-white shadow-sm'
                 : 'bg-[var(--color-surface)] border border-[var(--color-gray-2)] text-[var(--color-gray-6)] hover:border-[var(--color-gray-3)]'
             }`}
           >

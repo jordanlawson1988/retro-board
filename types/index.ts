@@ -7,6 +7,7 @@ export interface Board {
   created_by: string;
   owner_id: string | null;       // Better Auth user ID (null for anonymous/legacy)
   visibility: 'link' | 'invite_only';
+  join_code: string;             // 5-digit code for easy sharing
   settings: BoardSettings;
   created_at: string;
   archived_at: string | null;

@@ -63,6 +63,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
   const [showActionItems, setShowActionItems] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [joinCodeCopied, setJoinCodeCopied] = useState(false);
 
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
 
@@ -220,6 +221,14 @@ export function BoardPage({ boardId }: { boardId: string }) {
     setTimeout(() => setLinkCopied(false), 2000);
   }, []);
 
+  const handleCopyJoinCode = useCallback(async () => {
+    if (!board?.join_code) return;
+    const joinUrl = `${window.location.origin}/board/${boardId}`;
+    await navigator.clipboard.writeText(joinUrl);
+    setJoinCodeCopied(true);
+    setTimeout(() => setJoinCodeCopied(false), 2000);
+  }, [board?.join_code, boardId]);
+
   const handleCompleteRetro = useCallback(async () => {
     await completeBoard();
     setShowCompleteModal(false);
@@ -280,19 +289,31 @@ export function BoardPage({ boardId }: { boardId: string }) {
         ) : undefined
       }
     >
-      {/* Board header */}
-      <div className="border-b border-[var(--color-gray-1)] bg-[var(--color-surface)] px-4 py-3 sm:px-6">
+      {/* Board header — sticky below the main header */}
+      <div className="sticky top-16 z-30 border-b border-[var(--color-gray-1)] bg-[var(--color-surface-translucent)] px-4 py-3 backdrop-blur-sm sm:px-6">
         <div className="mx-auto max-w-[1400px]">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-            <div className="min-w-0">
-              <h2 className="truncate text-lg sm:text-xl text-[var(--color-gray-8)]">
-                {board.title}
-                {isCompleted && (
-                  <span className="ml-2 inline-flex items-center rounded-[var(--radius-full)] bg-[var(--color-success)]/10 px-2 py-0.5 text-xs font-medium text-[var(--color-success)]">
-                    Completed
-                  </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-3">
+                <h2 className="truncate text-lg sm:text-xl text-[var(--color-gray-8)]">
+                  {board.title}
+                  {isCompleted && (
+                    <span className="ml-2 inline-flex items-center rounded-[var(--radius-full)] bg-[var(--color-success)]/10 px-2 py-0.5 text-xs font-medium text-[var(--color-success)]">
+                      Completed
+                    </span>
+                  )}
+                </h2>
+                {board.join_code && (
+                  <button
+                    onClick={handleCopyJoinCode}
+                    className="flex shrink-0 items-center gap-1.5 rounded-[var(--radius-md)] bg-[var(--color-navy)]/10 px-2.5 py-1 text-xs font-mono font-semibold text-[var(--color-navy)] transition-colors hover:bg-[var(--color-navy)]/20"
+                    title="Click to copy join link"
+                  >
+                    {joinCodeCopied ? <Check size={12} /> : <Link2 size={12} />}
+                    {joinCodeCopied ? 'Link Copied!' : `Join: ${board.join_code}`}
+                  </button>
                 )}
-              </h2>
+              </div>
               {board.description && (
                 <p className="mt-1 text-sm text-[var(--color-gray-5)] line-clamp-1">{board.description}</p>
               )}

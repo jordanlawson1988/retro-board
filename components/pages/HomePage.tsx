@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus } from 'lucide-react';
+import { Plus, LogIn } from 'lucide-react';
 import { AppShell } from '@/components/Layout';
 import { Button, Input, Textarea, Modal } from '@/components/common';
 import { BoardHistorySidebar } from '@/components/Board';
@@ -13,10 +13,14 @@ import type { BoardTemplate } from '@/types';
 
 export function HomePage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showJoinModal, setShowJoinModal] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState<BoardTemplate>('mad-sad-glad');
   const [creating, setCreating] = useState(false);
+  const [joinCode, setJoinCode] = useState('');
+  const [joining, setJoining] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
   const router = useRouter();
   const createBoard = useBoardStore((s) => s.createBoard);
   const appSettings = useAppSettingsStore((s) => s.settings);
@@ -45,6 +49,33 @@ export function HomePage() {
     }
   };
 
+  const handleJoin = async () => {
+    const code = joinCode.replace(/\s/g, '');
+    if (code.length !== 5) {
+      setJoinError('Please enter a 5-digit code');
+      return;
+    }
+    setJoining(true);
+    setJoinError(null);
+    try {
+      const res = await fetch('/api/boards/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ joinCode: code }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setJoinError(data.error || 'Failed to join');
+        return;
+      }
+      router.push(`/board/${data.boardId}`);
+    } catch {
+      setJoinError('Something went wrong');
+    } finally {
+      setJoining(false);
+    }
+  };
+
   return (
     <AppShell headerRight={<BoardHistorySidebar />}>
       <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4 sm:px-6">
@@ -57,10 +88,14 @@ export function HomePage() {
             A real-time retrospective board for teams. Create columns, add cards,
             vote, and turn insights into action items — all in one place.
           </p>
-          <div className="mt-8">
+          <div className="mt-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
             <Button size="lg" onClick={() => setShowCreateModal(true)}>
               <Plus size={20} />
               Create a Retro Board
+            </Button>
+            <Button size="lg" variant="secondary" onClick={() => setShowJoinModal(true)}>
+              <LogIn size={20} />
+              Join a Retro
             </Button>
           </div>
         </div>
@@ -135,6 +170,42 @@ export function HomePage() {
             </Button>
             <Button onClick={handleCreate} loading={creating} disabled={!title.trim()}>
               Create Board
+            </Button>
+          </div>
+        </div>
+      </Modal>
+      {/* Join Board Modal */}
+      <Modal
+        open={showJoinModal}
+        onClose={() => { setShowJoinModal(false); setJoinCode(''); setJoinError(null); }}
+        title="Join a Retro"
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-[var(--color-gray-5)]">
+            Enter the 5-digit code shared by your facilitator.
+          </p>
+          <Input
+            id="join-code"
+            label="Join Code"
+            placeholder="e.g. 48291"
+            value={joinCode}
+            onChange={(e) => {
+              const v = e.target.value.replace(/[^0-9]/g, '').slice(0, 5);
+              setJoinCode(v);
+              setJoinError(null);
+            }}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleJoin(); }}
+            autoFocus
+          />
+          {joinError && (
+            <p className="text-sm text-[var(--color-error)]">{joinError}</p>
+          )}
+          <div className="flex justify-end gap-3 border-t border-[var(--color-gray-1)] pt-4">
+            <Button variant="ghost" onClick={() => { setShowJoinModal(false); setJoinCode(''); setJoinError(null); }}>
+              Cancel
+            </Button>
+            <Button onClick={handleJoin} loading={joining} disabled={joinCode.length !== 5}>
+              Join Board
             </Button>
           </div>
         </div>

@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getSessionCookie } from 'better-auth/cookies';
 
-// Better Auth stores sessions in a signed cookie named 'better-auth.session_token'.
-// We do a lightweight cookie-presence check here (Edge Runtime compatible).
+// Better Auth uses the `__Secure-` prefix on HTTPS (production). `getSessionCookie`
+// checks for both `better-auth.session_token` and `__Secure-better-auth.session_token`
+// so the middleware works in both dev and production.
 // Full session validation happens inside each API route via auth.api.getSession().
 export function middleware(request: NextRequest) {
-  const sessionCookie = request.cookies.get('better-auth.session_token');
+  const sessionToken = getSessionCookie(request);
 
-  if (!sessionCookie?.value) {
+  if (!sessionToken) {
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('redirect', request.nextUrl.pathname);
     return NextResponse.redirect(loginUrl);

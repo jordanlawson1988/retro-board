@@ -426,6 +426,14 @@ export function BoardColumn({
         </div>
       )}
 
+      {/* Add card — at top for easy access */}
+      <div className="px-3 pt-3">
+        <AddCardForm
+          onSubmit={(text) => onAddCard(column.id, text)}
+          disabled={cardCreationDisabled}
+        />
+      </div>
+
       {/* Cards */}
       <div className="flex flex-1 flex-col gap-2 p-3">
         <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
@@ -549,12 +557,6 @@ export function BoardColumn({
           })}
         </SortableContext>
 
-        <div className="mt-auto pt-2">
-          <AddCardForm
-            onSubmit={(text) => onAddCard(column.id, text)}
-            disabled={cardCreationDisabled}
-          />
-        </div>
       </div>
     </div>
   );

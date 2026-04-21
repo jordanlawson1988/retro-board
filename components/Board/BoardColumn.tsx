@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useMemo, type ReactNode } from 'react';
 import { useDroppable, useDraggable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { ThumbsUp, Trash2, Palette, Unlink, Layers } from 'lucide-react';
+import { ThumbsUp, Trash2, Palette, Unlink, Merge } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { COLUMN_COLORS } from '@/utils/constants';
 import { RetroCard } from './RetroCard';
@@ -61,7 +61,7 @@ function CombineDropZone({ cardId }: { cardId: string }) {
             ? 'bg-[var(--color-navy)] text-white'
             : 'bg-[var(--color-navy)]/10 text-[var(--color-navy)]'
         )}>
-          <Layers size={10} />
+          <Merge size={10} />
           {isOver ? 'Drop to combine' : 'Combine'}
         </span>
       </div>

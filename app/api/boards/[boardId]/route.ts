@@ -1,6 +1,7 @@
 import { sql } from '@/lib/db';
 import { ablyServer } from '@/lib/ably-server';
 import { NextRequest, NextResponse } from 'next/server';
+import { getSessionOrNull } from '@/lib/auth-helpers';
 
 export async function GET(
   request: NextRequest,
@@ -21,7 +22,54 @@ export async function GET(
     sql`SELECT * FROM participants WHERE board_id = ${boardId}`,
   ]);
 
-  return NextResponse.json({ board, columns, cards, votes, actionItems, participants });
+  // If authenticated, resolve the user's existing participant on this board so
+  // they regain their role (admin/participant) across devices. Prefer the admin
+  // record when multiple exist (can happen if user joined from several devices
+  // before this resolver existed).
+  const session = await getSessionOrNull();
+  const userId = session?.user?.id ?? null;
+  let yourParticipantId: string | null = null;
+  let youCanFacilitate = false;
+  if (userId) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const userParticipants = (participants as any[]).filter((p) => p.user_id === userId);
+    if (userParticipants.length > 0) {
+      userParticipants.sort((a, b) => {
+        if (a.is_admin !== b.is_admin) return a.is_admin ? -1 : 1;
+        return new Date(a.joined_at).getTime() - new Date(b.joined_at).getTime();
+      });
+      yourParticipantId = userParticipants[0].id;
+    }
+
+    // Facilitator authority comes from any of:
+    //   - board.owner_id matches this user,
+    //   - an entry in board_members with role owner/facilitator,
+    //   - or membership in admin_users (system admin — covers legacy boards
+    //     created before user_accounts migration where owner_id is NULL).
+    const [authorityCheck] = await sql`
+      SELECT EXISTS (
+        SELECT 1 FROM boards WHERE id = ${boardId} AND owner_id = ${userId}
+        UNION ALL
+        SELECT 1 FROM board_members
+          WHERE board_id = ${boardId} AND user_id = ${userId}
+            AND role IN ('owner', 'facilitator')
+        UNION ALL
+        SELECT 1 FROM admin_users WHERE id = ${userId}
+      ) AS has_authority
+    `;
+    youCanFacilitate = !!authorityCheck?.has_authority;
+  }
+
+  return NextResponse.json({
+    board,
+    columns,
+    cards,
+    votes,
+    actionItems,
+    participants,
+    yourParticipantId,
+    youCanFacilitate,
+  });
 }
 
 export async function PATCH(

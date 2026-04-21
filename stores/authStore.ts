@@ -77,7 +77,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       isAuthenticated: true,
     });
 
-    return redirectTo || (adminUser ? '/admin' : '/dashboard');
+    // Default everyone (including admins) to their personal dashboard on login.
+    // Admins reach /admin via the header dropdown. An explicit ?redirect= param
+    // (e.g. when bounced off a protected route) takes precedence.
+    return redirectTo || '/dashboard';
   },
 
   signUp: async (email, password, name) => {

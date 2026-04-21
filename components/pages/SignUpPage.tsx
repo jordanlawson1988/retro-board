@@ -1,9 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { UserPlus } from 'lucide-react';
+import { UserPlus, CheckCircle2 } from 'lucide-react';
 import { AppShell } from '@/components/Layout';
 import { Input, Button } from '@/components/common';
 import { useAuthStore } from '@/stores/authStore';
@@ -13,8 +12,8 @@ export function SignUpPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
   const signUp = useAuthStore((s) => s.signUp);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -23,11 +22,15 @@ export function SignUpPage() {
     setLoading(true);
 
     try {
-      const redirect = await signUp(email, password, name.trim() || email.split('@')[0]);
-      router.push(redirect);
+      const destination = await signUp(email, password, name.trim() || email.split('@')[0]);
+      setLoading(false);
+      setSuccess(true);
+      // Full page load so middleware reads the fresh Better Auth cookie
+      setTimeout(() => {
+        window.location.href = destination;
+      }, 900);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign up failed');
-    } finally {
       setLoading(false);
     }
   };
@@ -56,6 +59,17 @@ export function SignUpPage() {
               </div>
             )}
 
+            {success && (
+              <div
+                role="status"
+                aria-live="polite"
+                className="mb-4 flex items-center gap-2 rounded-lg bg-[var(--color-success)]/10 px-4 py-3 text-sm font-medium text-[var(--color-success)]"
+              >
+                <CheckCircle2 size={16} />
+                <span>Account created. Redirecting...</span>
+              </div>
+            )}
+
             <div className="flex flex-col gap-4">
               <Input
                 id="signup-name"
@@ -64,6 +78,7 @@ export function SignUpPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="John Smith"
+                disabled={loading || success}
               />
               <Input
                 id="signup-email"
@@ -73,6 +88,7 @@ export function SignUpPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
                 required
+                disabled={loading || success}
               />
               <Input
                 id="signup-password"
@@ -83,11 +99,13 @@ export function SignUpPage() {
                 placeholder="Min 8 characters"
                 minLength={8}
                 required
+                disabled={loading || success}
               />
 
               <Button
                 type="submit"
                 loading={loading}
+                disabled={success}
                 className="mt-2 w-full"
               >
                 <UserPlus size={18} /> Create Account

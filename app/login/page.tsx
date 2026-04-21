@@ -1,19 +1,22 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { LogIn } from 'lucide-react';
+import { LogIn, CheckCircle2 } from 'lucide-react';
 import { AppShell } from '@/components/Layout';
 import { Input, Button } from '@/components/common';
 import { useAuthStore } from '@/stores/authStore';
+
+function isSafeRedirect(url: string | null | undefined): url is string {
+  return !!url && url.startsWith('/') && !url.startsWith('//');
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
   const signIn = useAuthStore((s) => s.signIn);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -22,11 +25,18 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const redirect = await signIn(email, password);
-      router.push(redirect);
+      const urlParams = new URLSearchParams(window.location.search);
+      const rawRedirect = urlParams.get('redirect') || urlParams.get('from');
+      const redirectParam = isSafeRedirect(rawRedirect) ? rawRedirect : undefined;
+      const destination = await signIn(email, password, redirectParam);
+      setLoading(false);
+      setSuccess(true);
+      // Full page load so middleware reads the fresh Better Auth cookie
+      setTimeout(() => {
+        window.location.href = destination;
+      }, 900);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign in failed');
-    } finally {
       setLoading(false);
     }
   };
@@ -55,6 +65,17 @@ export default function LoginPage() {
               </div>
             )}
 
+            {success && (
+              <div
+                role="status"
+                aria-live="polite"
+                className="mb-4 flex items-center gap-2 rounded-lg bg-[var(--color-success)]/10 px-4 py-3 text-sm font-medium text-[var(--color-success)]"
+              >
+                <CheckCircle2 size={16} />
+                <span>Successfully logged in. Redirecting...</span>
+              </div>
+            )}
+
             <div className="flex flex-col gap-4">
               <Input
                 id="login-email"
@@ -64,6 +85,7 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
                 required
+                disabled={loading || success}
               />
               <Input
                 id="login-password"
@@ -73,11 +95,13 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Your password"
                 required
+                disabled={loading || success}
               />
 
               <Button
                 type="submit"
                 loading={loading}
+                disabled={success}
                 className="mt-2 w-full"
               >
                 <LogIn size={18} /> Sign In

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Pencil, Trash2, ThumbsUp, Check, X, Layers, ChevronDown, ChevronRight, SmilePlus } from 'lucide-react';
+import { Pencil, Trash2, ThumbsUp, Check, X, Merge, ChevronDown, ChevronRight, SmilePlus } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { getCardTextColor, CARD_TEXT_CLASSES } from '../../utils/cardColors';
 import { CardColorPicker } from './CardColorPicker';
@@ -185,7 +185,7 @@ export function RetroCard({
                     className="flex items-center gap-0.5 rounded-[var(--radius-full)] bg-[var(--color-navy)]/10 px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-navy)] hover:bg-[var(--color-navy)]/20 transition-colors"
                     title={`${childCards.length} combined card${childCards.length === 1 ? '' : 's'}`}
                   >
-                    <Layers size={10} />
+                    <Merge size={10} />
                     <span>+{childCards.length}</span>
                     {expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
                   </button>
@@ -234,7 +234,7 @@ export function RetroCard({
                         aria-label="Combine with another card"
                         title="Combine cards"
                       >
-                        <Layers size={14} />
+                        <Merge size={14} />
                       </button>
                     )}
                     <CardColorPicker
@@ -274,7 +274,7 @@ export function RetroCard({
                       aria-label="Combine with another card"
                       title="Combine cards"
                     >
-                      <Layers size={14} />
+                      <Merge size={14} />
                     </button>
                   </div>
                 )}

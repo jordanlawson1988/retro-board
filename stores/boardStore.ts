@@ -21,6 +21,7 @@ interface BoardState {
   loading: boolean;
   error: string | null;
   currentParticipantId: string | null;
+  youCanFacilitate: boolean;
 
   // Board lifecycle
   createBoard: (title: string, description: string | null, template: BoardTemplate, displayName?: string) => Promise<string>;
@@ -74,6 +75,7 @@ const initialState = {
   loading: false,
   error: null as string | null,
   currentParticipantId: null as string | null,
+  youCanFacilitate: false,
   onlineParticipantIds: [] as string[],
 };
 
@@ -169,9 +171,16 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       return;
     }
 
-    const { board, columns, cards, votes, actionItems, participants } = await res.json();
+    const { board, columns, cards, votes, actionItems, participants, yourParticipantId, youCanFacilitate } = await res.json();
 
+    // Prefer the server-resolved participant (matched via the authenticated user's
+    // user_id) over localStorage, so owners/facilitators keep their role when
+    // opening a board from a new device or after clearing site data.
     const stored = localStorage.getItem(`retro-pid-${boardId}`);
+    const resolvedParticipantId = yourParticipantId || stored || null;
+    if (yourParticipantId && yourParticipantId !== stored) {
+      localStorage.setItem(`retro-pid-${boardId}`, yourParticipantId);
+    }
 
     saveBoardToHistory({
       boardId,
@@ -188,7 +197,8 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       votes: votes || [],
       actionItems: actionItems || [],
       participants: participants || [],
-      currentParticipantId: stored || null,
+      currentParticipantId: resolvedParticipantId,
+      youCanFacilitate: !!youCanFacilitate,
       loading: false,
     });
   },
@@ -249,7 +259,8 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   },
 
   joinBoard: async (boardId, displayName) => {
-    // Check if already joined (e.g., creator who auto-joined in createBoard)
+    // Check if already joined (e.g., creator who auto-joined in createBoard,
+    // or user whose participant was resolved by fetchBoard via user_id)
     const stored = localStorage.getItem(`retro-pid-${boardId}`);
     if (stored) {
       const { participants } = get();
@@ -262,7 +273,9 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
     const participantId = crypto.randomUUID();
 
-    // First joiner (no existing admins) becomes the facilitator
+    // First joiner (no existing admins) becomes the facilitator. The server
+    // has final say — it may reuse an existing participant, or auto-promote
+    // the caller to admin if they own the board.
     const { participants: currentParticipants } = get();
     const hasAdmin = currentParticipants.some((p) => p.is_admin);
     const isAdmin = !hasAdmin;
@@ -278,23 +291,25 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       throw new Error(err.error || 'Failed to join board');
     }
 
-    localStorage.setItem(`retro-pid-${boardId}`, participantId);
+    // Use the participant the server actually returned — it may have reused
+    // an existing record (different id) or overridden is_admin.
+    const { participant } = await res.json();
+    const actualId: string = participant.id;
+    localStorage.setItem(`retro-pid-${boardId}`, actualId);
 
-    const newParticipant: Participant = {
-      id: participantId,
-      board_id: boardId,
-      display_name: displayName,
-      is_admin: isAdmin,
-      user_id: null,
-      joined_at: new Date().toISOString(),
-      last_seen: new Date().toISOString(),
-    };
-
-    set((state) => ({
-      currentParticipantId: participantId,
-      board: isAdmin && state.board ? { ...state.board, created_by: participantId } : state.board,
-      participants: [...state.participants, newParticipant],
-    }));
+    set((state) => {
+      const existingIdx = state.participants.findIndex((p) => p.id === actualId);
+      const participants = existingIdx >= 0
+        ? state.participants.map((p, i) => (i === existingIdx ? participant : p))
+        : [...state.participants, participant];
+      return {
+        currentParticipantId: actualId,
+        board: participant.is_admin && state.board
+          ? { ...state.board, created_by: actualId }
+          : state.board,
+        participants,
+      };
+    });
   },
 
   updateParticipant: async (participantId, updates) => {

@@ -27,15 +27,14 @@ export function BoardPageWrapper({ boardId }: { boardId: string }) {
     fetchBoard(boardId);
   }, [boardId, fetchBoard]);
 
-  // Show join modal if not already joined
+  // Show join modal only if fetchBoard couldn't resolve a participant for this
+  // user. fetchBoard sets currentParticipantId from the server's yourParticipantId
+  // (matched via user_id) or from localStorage — if either is present, skip the modal.
   useEffect(() => {
-    if (boardId && !loading && board) {
-      const stored = localStorage.getItem(`retro-pid-${boardId}`);
-      if (!stored) {
-        setShowJoinModal(true);
-      }
+    if (boardId && !loading && board && !currentParticipantId) {
+      setShowJoinModal(true);
     }
-  }, [boardId, loading, board]);
+  }, [boardId, loading, board, currentParticipantId]);
 
   const handleJoin = async () => {
     if (!participantName.trim()) return;

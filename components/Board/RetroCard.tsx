@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Pencil, Trash2, ThumbsUp, Check, X, Layers, ChevronDown, ChevronRight, SmilePlus } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { getCardTextColor, CARD_TEXT_CLASSES } from '../../utils/cardColors';
@@ -77,6 +77,19 @@ export function RetroCard({
   const [editText, setEditText] = useState(text);
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
+
+  // Close emoji picker on outside click
+  useEffect(() => {
+    if (!emojiPickerOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
+        setEmojiPickerOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [emojiPickerOpen]);
 
   const hasChildren = childCards.length > 0;
 
@@ -298,7 +311,7 @@ export function RetroCard({
                   </button>
                 ))}
                 {!isCompleted && (
-                  <div className="relative">
+                  <div className="relative" ref={emojiPickerRef}>
                     <button
                       onClick={(e) => { e.stopPropagation(); setEmojiPickerOpen(!emojiPickerOpen); }}
                       className={cn('rounded-[var(--radius-full)] p-1 transition-colors', contrast.icon, 'hover:bg-[var(--color-gray-1)]', contrast.iconHover)}

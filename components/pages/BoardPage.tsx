@@ -414,7 +414,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
                   onDragCancel={handleDragCancel}
                 >
                   <div
-                    className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory sm:grid sm:overflow-x-visible sm:pb-0 sm:snap-none"
+                    className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory sm:grid sm:items-start sm:overflow-x-visible sm:pb-0 sm:snap-none"
                     style={{
                       gridTemplateColumns: `repeat(${Math.min(filteredColumns.length + (isAdmin && !isCompleted && !activeColumnFilter ? 1 : 0), 4)}, minmax(280px, 1fr))`,
                     }}

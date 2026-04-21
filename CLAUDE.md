@@ -203,15 +203,7 @@ See `.claude/context/architecture-notes.md` for the full tech debt inventory.
 3. Run `/status-check` or `/context-refresh` if you need a project overview.
 4. Ask Jordan what to focus on in this session.
 
-### Available Commands
-
-| Command | Purpose |
-|---------|---------|
-| `/test-report` | Run tests (if configured), update test-health.md, report status |
-| `/status-check` | Quick dashboard: git state, build, tests, context freshness |
-| `/context-refresh` | Refresh all 4 context files with live project data |
-| `/project-health` | Comprehensive audit: deps, lint, TODOs, tech debt |
-| `/session-end` | Capture session work, suggest memory updates, output summary |
+> **Available Commands:** See global `~/.claude/CLAUDE.md` for the full list of slash commands.
 
 ```bash
 # Pre-push verification (runs automatically on deploy branch pushes)

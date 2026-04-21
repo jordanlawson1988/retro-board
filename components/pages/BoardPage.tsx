@@ -39,6 +39,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
     votes,
     participants,
     currentParticipantId,
+    youCanFacilitate,
     addCard,
     updateCard,
     deleteCard,
@@ -284,7 +285,11 @@ export function BoardPage({ boardId }: { boardId: string }) {
   const isObscured = board.settings.card_visibility === 'hidden';
   const isCompleted = !!board.archived_at;
   const currentParticipant = participants.find((p) => p.id === currentParticipantId);
-  const isAdmin = currentParticipant?.is_admin ?? false;
+  // Authenticated board owners (and system admins) always get facilitator
+  // controls, even if their participant record isn't flagged as admin —
+  // covers legacy boards created before user_accounts, cross-device joins,
+  // and participants with out-of-sync is_admin flags.
+  const isAdmin = (currentParticipant?.is_admin ?? false) || youCanFacilitate;
 
   return (
     <AppShell

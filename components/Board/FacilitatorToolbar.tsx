@@ -26,7 +26,7 @@ export function FacilitatorToolbar({
   const votingOn = settings.voting_enabled;
 
   return (
-    <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto">
+    <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto">
       {!isCompleted && (
         <>
           {/* Reveal / Hide cards */}
@@ -74,15 +74,23 @@ export function FacilitatorToolbar({
             onClick={onToggleActionItems}
           />
 
-          {/* Complete Retro */}
-          <ToolbarButton
-            icon={CheckCircle2}
-            label="Complete Retro"
+          {/* 1px × 22px divider */}
+          <span aria-hidden className="w-px h-[22px] bg-[var(--line)] mx-1 shrink-0" />
+
+          {/* Complete Retro — accent CTA */}
+          <button
             onClick={onCompleteRetro}
-          />
+            className={cn(
+              'inline-flex items-center gap-1.5 whitespace-nowrap rounded-[var(--r-md)] px-2.5 py-1.5 text-sm font-medium transition-colors',
+              'bg-[var(--accent)] text-[var(--on-accent)] hover:bg-[var(--accent-hover)]'
+            )}
+            aria-label="Complete Retro"
+          >
+            <CheckCircle2 size={14} />
+            <span className="hidden sm:inline">Complete Retro</span>
+          </button>
         </>
       )}
-
     </div>
   );
 }
@@ -102,10 +110,10 @@ function ToolbarButton({
     <button
       onClick={onClick}
       className={cn(
-        'flex items-center gap-1.5 whitespace-nowrap rounded-[var(--radius-md)] px-2.5 py-2 text-sm transition-colors',
+        'flex items-center gap-1.5 whitespace-nowrap rounded-[var(--r-md)] px-2.5 py-1.5 text-sm transition-colors',
         active
-          ? 'bg-[var(--color-navy)]/10 text-[var(--color-navy)] font-medium'
-          : 'text-[var(--color-gray-5)] hover:bg-[var(--color-gray-1)] hover:text-[var(--color-gray-7)]'
+          ? 'bg-[var(--accent-soft)] text-[var(--accent)] font-medium'
+          : 'text-[var(--ink-3)] hover:bg-[var(--surface-muted)] hover:text-[var(--ink)]'
       )}
       title={label}
       aria-label={label}

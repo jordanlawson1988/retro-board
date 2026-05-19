@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { LogIn, CheckCircle2 } from 'lucide-react';
 import { AppShell } from '@/components/Layout';
-import { Input, Button } from '@/components/common';
+import { Input, Button, Turnstile, type TurnstileHandle } from '@/components/common';
 import { useAuthStore } from '@/stores/authStore';
+import { HONEYPOT_FIELD_NAME } from '@/lib/anti-bot/constants';
 
 function isSafeRedirect(url: string | null | undefined): url is string {
   return !!url && url.startsWith('/') && !url.startsWith('//');
@@ -14,30 +15,53 @@ function isSafeRedirect(url: string | null | undefined): url is string {
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [honeypot, setHoneypot] = useState('');
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [verificationUnavailable, setVerificationUnavailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  const mountedAtRef = useRef<number>(Date.now());
+  const turnstileRef = useRef<TurnstileHandle | null>(null);
   const signIn = useAuthStore((s) => s.signIn);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (!captchaToken) {
+      setError('Verification not ready yet — please wait a moment.');
+      return;
+    }
+
     setLoading(true);
 
     try {
       const urlParams = new URLSearchParams(window.location.search);
       const rawRedirect = urlParams.get('redirect') || urlParams.get('from');
       const redirectParam = isSafeRedirect(rawRedirect) ? rawRedirect : undefined;
-      const destination = await signIn(email, password, redirectParam);
+      const destination = await signIn(
+        email,
+        password,
+        {
+          captchaToken,
+          honeypot: { value: honeypot, mountedAt: mountedAtRef.current },
+        },
+        redirectParam
+      );
       setLoading(false);
       setSuccess(true);
-      // Full page load so middleware reads the fresh Better Auth cookie
       setTimeout(() => {
         window.location.href = destination;
       }, 900);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sign in failed');
+      const raw = err instanceof Error ? err.message : 'Sign in failed';
+      const isVerificationLayer =
+        raw.toLowerCase().includes('verify') || raw.toLowerCase().includes('captcha');
+      setError(isVerificationLayer ? 'Verification failed — please try again.' : raw);
       setLoading(false);
+      setCaptchaToken(null);
+      turnstileRef.current?.reset();
     }
   };
 
@@ -62,6 +86,12 @@ export default function LoginPage() {
             {error && (
               <div className="mb-4 rounded-lg bg-[var(--color-error)]/10 px-4 py-3 text-sm text-[var(--color-error)]">
                 {error}
+              </div>
+            )}
+
+            {verificationUnavailable && (
+              <div className="mb-4 rounded-lg bg-[var(--color-error)]/10 px-4 py-3 text-sm text-[var(--color-error)]">
+                Verification service unavailable. Please disable privacy blockers for this page and refresh.
               </div>
             )}
 
@@ -98,10 +128,29 @@ export default function LoginPage() {
                 disabled={loading || success}
               />
 
+              {/* Honeypot: hidden from humans, visible to naïve bots */}
+              <input
+                type="text"
+                name={HONEYPOT_FIELD_NAME}
+                value={honeypot}
+                onChange={(e) => setHoneypot(e.target.value)}
+                tabIndex={-1}
+                autoComplete="off"
+                aria-hidden="true"
+                style={{ position: 'absolute', left: '-9999px', width: '1px', height: '1px' }}
+              />
+
+              <Turnstile
+                ref={turnstileRef}
+                onToken={setCaptchaToken}
+                onError={() => setVerificationUnavailable(true)}
+                onExpire={() => setCaptchaToken(null)}
+              />
+
               <Button
                 type="submit"
                 loading={loading}
-                disabled={success}
+                disabled={success || !captchaToken || verificationUnavailable}
                 className="mt-2 w-full"
               >
                 <LogIn size={18} /> Sign In

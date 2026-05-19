@@ -2,7 +2,23 @@
 
 import { create } from 'zustand';
 import { authClient } from '@/lib/auth-client';
+import { ANTI_BOT_HEADERS } from '@/lib/anti-bot/constants';
+import { encodeHoneypotHeader, type HoneypotPayload } from '@/lib/anti-bot/honeypot';
 import type { AdminUser, User, Subscription } from '@/types';
+
+export interface AntiBotPayload {
+  /** Token issued by the Cloudflare Turnstile widget. */
+  captchaToken: string;
+  /** Honeypot field value + mountedAt timestamp. */
+  honeypot: HoneypotPayload;
+}
+
+function buildAntiBotHeaders(antiBot: AntiBotPayload): Record<string, string> {
+  return {
+    [ANTI_BOT_HEADERS.CAPTCHA_RESPONSE]: antiBot.captchaToken,
+    [ANTI_BOT_HEADERS.HONEYPOT]: encodeHoneypotHeader(antiBot.honeypot),
+  };
+}
 
 interface AuthState {
   user: User | null;
@@ -13,12 +29,12 @@ interface AuthState {
   isAuthenticated: boolean;
 
   initialize: () => Promise<void>;
-  signIn: (email: string, password: string, redirectTo?: string) => Promise<string>;
-  signUp: (email: string, password: string, name: string) => Promise<string>;
+  signIn: (email: string, password: string, antiBot: AntiBotPayload, redirectTo?: string) => Promise<string>;
+  signUp: (email: string, password: string, name: string, antiBot: AntiBotPayload) => Promise<string>;
   signOut: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set, get) => ({
+export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   adminUser: null,
   subscription: null,
@@ -35,26 +51,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         return;
       }
 
-      // Check admin access (optional — not all users are admins)
       const adminRes = await fetch(`/api/admin/verify?userId=${session.data.user.id}`);
       const adminUser = adminRes.ok ? await adminRes.json() : null;
 
       set({
         user: session.data.user,
         adminUser,
-        subscription: null, // WS3 will populate this
+        subscription: null,
         loading: false,
         isAuthenticated: true,
       });
     } catch {
-      // Network error or auth service unavailable — treat as unauthenticated
       set({ user: null, adminUser: null, subscription: null, loading: false, isAuthenticated: false });
     }
   },
 
-  signIn: async (email, password, redirectTo) => {
+  signIn: async (email, password, antiBot, redirectTo) => {
     set({ loading: true, error: null });
-    const result = await authClient.signIn.email({ email, password });
+    const result = await authClient.signIn.email(
+      { email, password },
+      { headers: buildAntiBotHeaders(antiBot) }
+    );
     if (result.error) {
       set({ loading: false, error: result.error.message });
       throw new Error(result.error.message);
@@ -66,7 +83,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       throw new Error('Sign in failed');
     }
 
-    // Check admin access (optional)
     const adminRes = await fetch(`/api/admin/verify?userId=${session.data.user.id}`);
     const adminUser = adminRes.ok ? await adminRes.json() : null;
 
@@ -77,15 +93,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       isAuthenticated: true,
     });
 
-    // Default everyone (including admins) to their personal dashboard on login.
-    // Admins reach /admin via the header dropdown. An explicit ?redirect= param
-    // (e.g. when bounced off a protected route) takes precedence.
     return redirectTo || '/dashboard';
   },
 
-  signUp: async (email, password, name) => {
+  signUp: async (email, password, name, antiBot) => {
     set({ loading: true, error: null });
-    const result = await authClient.signUp.email({ email, password, name });
+    const result = await authClient.signUp.email(
+      { email, password, name },
+      { headers: buildAntiBotHeaders(antiBot) }
+    );
     if (result.error) {
       set({ loading: false, error: result.error.message });
       throw new Error(result.error.message);

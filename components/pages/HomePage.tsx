@@ -93,7 +93,7 @@ export function HomePage() {
               <Plus size={20} />
               Create a Retro Board
             </Button>
-            <Button size="lg" variant="secondary" onClick={() => setShowJoinModal(true)}>
+            <Button size="lg" variant="primary" onClick={() => setShowJoinModal(true)}>
               <LogIn size={20} />
               Join a Retro
             </Button>

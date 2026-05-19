@@ -2,6 +2,7 @@
 
 import { cn } from '@/utils/cn';
 import type { ReactNode } from 'react';
+import { Pill } from './Pill';
 
 type BadgeVariant = 'default' | 'success' | 'warning' | 'error' | 'info';
 
@@ -11,24 +12,22 @@ interface BadgeProps {
   className?: string;
 }
 
-const variantStyles: Record<BadgeVariant, string> = {
-  default: 'bg-[var(--color-gray-1)] text-[var(--color-gray-7)]',
-  success: 'bg-[var(--color-success)]/10 text-[var(--color-success)]',
-  warning: 'bg-[var(--color-warning)]/10 text-[var(--color-gray-8)]',
-  error: 'bg-[var(--color-error)]/10 text-[var(--color-error)]',
-  info: 'bg-[var(--color-info)]/10 text-[var(--color-info)]',
+const variantAccent: Record<BadgeVariant, string | undefined> = {
+  default: undefined,
+  success: 'bg-[color-mix(in_oklab,var(--success)_18%,transparent)] text-[var(--success)] border-transparent',
+  warning: 'bg-[color-mix(in_oklab,var(--warning)_22%,transparent)] text-[var(--ink-2)] border-transparent',
+  error:   'bg-[color-mix(in_oklab,var(--danger)_18%,transparent)] text-[var(--danger)] border-transparent',
+  info:    'bg-[color-mix(in_oklab,var(--info)_18%,transparent)] text-[var(--info)] border-transparent',
 };
 
 export function Badge({ children, variant = 'default', className }: BadgeProps) {
+  const accent = variantAccent[variant];
   return (
-    <span
-      className={cn(
-        'inline-flex items-center rounded-[var(--radius-full)] px-2.5 py-0.5 text-xs font-semibold',
-        variantStyles[variant],
-        className
-      )}
+    <Pill
+      variant={variant === 'default' ? 'default' : 'tinted'}
+      className={cn(accent, className)}
     >
       {children}
-    </span>
+    </Pill>
   );
 }

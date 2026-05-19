@@ -6,5 +6,9 @@ export default async function BoardRoute({
   params: Promise<{ boardId: string }>;
 }) {
   const { boardId } = await params;
-  return <BoardPageWrapper boardId={boardId} />;
+  return (
+    <div className="min-h-screen bg-[var(--bg-sunken)]">
+      <BoardPageWrapper boardId={boardId} />
+    </div>
+  );
 }

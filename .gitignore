@@ -29,3 +29,5 @@ node_modules
 # Superpowers
 .superpowers/
 .worktrees/
+.vercel
+.env*.local

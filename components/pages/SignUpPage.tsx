@@ -1,37 +1,62 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { UserPlus, CheckCircle2 } from 'lucide-react';
 import { AppShell } from '@/components/Layout';
-import { Input, Button } from '@/components/common';
+import { Input, Button, Turnstile, type TurnstileHandle } from '@/components/common';
 import { useAuthStore } from '@/stores/authStore';
+import { HONEYPOT_FIELD_NAME } from '@/lib/anti-bot/constants';
 
 export function SignUpPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [honeypot, setHoneypot] = useState('');
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [verificationUnavailable, setVerificationUnavailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  const mountedAtRef = useRef<number>(Date.now());
+  const turnstileRef = useRef<TurnstileHandle | null>(null);
   const signUp = useAuthStore((s) => s.signUp);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (!captchaToken) {
+      setError('Verification not ready yet — please wait a moment.');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const destination = await signUp(email, password, name.trim() || email.split('@')[0]);
+      const destination = await signUp(
+        email,
+        password,
+        name.trim() || email.split('@')[0],
+        {
+          captchaToken,
+          honeypot: { value: honeypot, mountedAt: mountedAtRef.current },
+        }
+      );
       setLoading(false);
       setSuccess(true);
-      // Full page load so middleware reads the fresh Better Auth cookie
       setTimeout(() => {
         window.location.href = destination;
       }, 900);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sign up failed');
+      // Generic message — never expose which layer rejected.
+      const raw = err instanceof Error ? err.message : 'Sign up failed';
+      const isVerificationLayer =
+        raw.toLowerCase().includes('verify') || raw.toLowerCase().includes('captcha');
+      setError(isVerificationLayer ? 'Verification failed — please try again.' : raw);
       setLoading(false);
+      setCaptchaToken(null);
+      turnstileRef.current?.reset();
     }
   };
 
@@ -56,6 +81,12 @@ export function SignUpPage() {
             {error && (
               <div className="mb-4 rounded-lg bg-[var(--color-error)]/10 px-4 py-3 text-sm text-[var(--color-error)]">
                 {error}
+              </div>
+            )}
+
+            {verificationUnavailable && (
+              <div className="mb-4 rounded-lg bg-[var(--color-error)]/10 px-4 py-3 text-sm text-[var(--color-error)]">
+                Verification service unavailable. Please disable privacy blockers for this page and refresh.
               </div>
             )}
 
@@ -102,10 +133,29 @@ export function SignUpPage() {
                 disabled={loading || success}
               />
 
+              {/* Honeypot: hidden from humans, visible to naïve bots */}
+              <input
+                type="text"
+                name={HONEYPOT_FIELD_NAME}
+                value={honeypot}
+                onChange={(e) => setHoneypot(e.target.value)}
+                tabIndex={-1}
+                autoComplete="off"
+                aria-hidden="true"
+                style={{ position: 'absolute', left: '-9999px', width: '1px', height: '1px' }}
+              />
+
+              <Turnstile
+                ref={turnstileRef}
+                onToken={setCaptchaToken}
+                onError={() => setVerificationUnavailable(true)}
+                onExpire={() => setCaptchaToken(null)}
+              />
+
               <Button
                 type="submit"
                 loading={loading}
-                disabled={success}
+                disabled={success || !captchaToken || verificationUnavailable}
                 className="mt-2 w-full"
               >
                 <UserPlus size={18} /> Create Account

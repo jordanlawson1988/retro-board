@@ -5,8 +5,11 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/authStore';
 import { AppShell } from '@/components/Layout';
 import { useTheme, type Theme } from '@/hooks/useTheme';
-import { Sun, Moon, Monitor } from 'lucide-react';
+import { Sun, Moon, Monitor, Lock } from 'lucide-react';
 import { cn } from '@/utils/cn';
+import { authClient } from '@/lib/auth-client';
+import { avatarBackground } from '@/utils/avatarHue';
+import type { User } from '@/types';
 
 function Section({ title, description, children }: {
   title: string;
@@ -57,6 +60,75 @@ function AppearanceSection() {
   );
 }
 
+function ProfileSection({ user }: { user: User }) {
+  const refreshUser = useAuthStore((s) => s.initialize);
+  const [name, setName] = useState(user.name ?? '');
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
+  const dirty = name.trim() !== (user.name ?? '').trim();
+  const memberSince = user.createdAt
+    ? new Date(user.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long' })
+    : '—';
+
+  const save = async () => {
+    const trimmed = name.trim();
+    if (!trimmed) { setMsg({ kind: 'err', text: 'Name cannot be empty.' }); return; }
+    setSaving(true);
+    setMsg(null);
+    const { error } = await authClient.updateUser({ name: trimmed });
+    setSaving(false);
+    if (error) { setMsg({ kind: 'err', text: error.message ?? 'Could not update name.' }); return; }
+    await refreshUser();
+    setMsg({ kind: 'ok', text: 'Saved.' });
+  };
+
+  return (
+    <Section title="Profile">
+      <div className="flex items-center gap-3 mb-5">
+        <div
+          className="w-10 h-10 rounded-full grid place-items-center text-[15px] font-medium text-[var(--bg-elev)]"
+          style={{ background: avatarBackground(user.id) }}
+        >
+          {(user.name || user.email).charAt(0).toUpperCase()}
+        </div>
+        <div className="text-[12px] text-[var(--ink-4)]">Member since {memberSince}</div>
+      </div>
+
+      <label className="block text-[13px] text-[var(--ink-2)] mb-1.5" htmlFor="settings-name">Name</label>
+      <div className="flex gap-2 mb-1">
+        <input
+          id="settings-name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          maxLength={100}
+          className="flex-1 px-3 py-2.5 rounded-[var(--r-md)] text-[15px] bg-[var(--surface)] border border-[var(--line)] text-[var(--ink)] outline-none focus:border-[var(--accent)] focus:shadow-[0_0_0_3px_var(--accent-soft)] transition-[border-color,box-shadow] duration-150"
+        />
+        <button
+          type="button"
+          onClick={save}
+          disabled={!dirty || saving}
+          className="px-3.5 py-2.5 rounded-[var(--r-md)] text-[13px] font-medium bg-[var(--ink)] text-[var(--bg-elev)] disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+      {msg && (
+        <p className={cn('text-[12px] mb-4', msg.kind === 'ok' ? 'text-[var(--success)]' : 'text-[var(--danger)]')}>
+          {msg.text}
+        </p>
+      )}
+
+      <label className="block text-[13px] text-[var(--ink-2)] mt-4 mb-1.5">Email (username)</label>
+      <div className="flex items-center gap-2 px-3 py-2.5 rounded-[var(--r-md)] bg-[var(--surface-muted)] border border-[var(--line)] text-[15px] text-[var(--ink-3)]">
+        <Lock size={14} className="text-[var(--ink-4)]" />
+        <span>{user.email}</span>
+      </div>
+      <p className="text-[12px] text-[var(--ink-4)] mt-1.5">Your email is your username and can&apos;t be changed.</p>
+    </Section>
+  );
+}
+
 export function SettingsPage() {
   const router = useRouter();
   const { user, isAuthenticated, loading: authLoading } = useAuthStore();
@@ -85,6 +157,7 @@ export function SettingsPage() {
         </div>
         <div className="flex flex-col gap-4">
           <AppearanceSection />
+          <ProfileSection user={user} />
         </div>
       </div>
     </AppShell>

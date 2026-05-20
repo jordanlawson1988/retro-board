@@ -129,6 +129,55 @@ function ProfileSection({ user }: { user: User }) {
   );
 }
 
+function ChangePasswordBlock() {
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
+  const inputCls =
+    'w-full px-3 py-2.5 rounded-[var(--r-md)] text-[15px] bg-[var(--surface)] border border-[var(--line)] text-[var(--ink)] outline-none focus:border-[var(--accent)] focus:shadow-[0_0_0_3px_var(--accent-soft)] transition-[border-color,box-shadow] duration-150';
+
+  const submit = async () => {
+    if (next.length < 8) { setMsg({ kind: 'err', text: 'New password must be at least 8 characters.' }); return; }
+    if (next !== confirm) { setMsg({ kind: 'err', text: 'New passwords do not match.' }); return; }
+    setBusy(true);
+    setMsg(null);
+    const { error } = await authClient.changePassword({
+      currentPassword: current,
+      newPassword: next,
+      revokeOtherSessions: false,
+    });
+    setBusy(false);
+    if (error) { setMsg({ kind: 'err', text: error.message ?? 'Could not change password.' }); return; }
+    setCurrent(''); setNext(''); setConfirm('');
+    setMsg({ kind: 'ok', text: 'Password changed.' });
+  };
+
+  return (
+    <div>
+      <h3 className="text-[14px] font-semibold mb-3">Change password</h3>
+      <div className="flex flex-col gap-2.5 max-w-sm">
+        <input type="password" placeholder="Current password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} className={inputCls} />
+        <input type="password" placeholder="New password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} className={inputCls} />
+        <input type="password" placeholder="Confirm new password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} className={inputCls} />
+        <button
+          type="button"
+          onClick={submit}
+          disabled={busy || !current || !next || !confirm}
+          className="self-start px-3.5 py-2.5 rounded-[var(--r-md)] text-[13px] font-medium bg-[var(--ink)] text-[var(--bg-elev)] disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {busy ? 'Updating…' : 'Update password'}
+        </button>
+        {msg && (
+          <p className={cn('text-[12px]', msg.kind === 'ok' ? 'text-[var(--success)]' : 'text-[var(--danger)]')}>{msg.text}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function SettingsPage() {
   const router = useRouter();
   const { user, isAuthenticated, loading: authLoading } = useAuthStore();

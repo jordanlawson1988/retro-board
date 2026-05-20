@@ -410,3 +410,9 @@
   background: var(--accent);
   bottom: 4px; right: 4px;
 }
+
+/* ============================================================ */
+/* Scrollbar hide — used by MobileColumnTabs                    */
+/* ============================================================ */
+.scroll-hide::-webkit-scrollbar { display: none; }
+.scroll-hide { scrollbar-width: none; }

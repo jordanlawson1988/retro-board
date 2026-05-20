@@ -20,6 +20,7 @@ import { cn } from '@/utils/cn';
 import { AppShell } from '@/components/Layout';
 import { Button, Modal } from '@/components/common';
 import { BoardColumn, FacilitatorToolbar, VoteStatus, ViewToggle, SwimlaneView, ListView, TimelineView, ParticipantPopover, ConnectionStatusBanner, AddColumnButton } from '@/components/Board';
+import { MobileBoardShell } from '@/components/Board/MobileBoardShell';
 import type { BoardView } from '@/types';
 import { useBoardStore } from '@/stores/boardStore';
 import { useFeatureFlagStore } from '@/stores/featureFlagStore';
@@ -288,7 +289,45 @@ export function BoardPage({ boardId }: { boardId: string }) {
   // and participants with out-of-sync is_admin flags.
   const isAdmin = (currentParticipant?.is_admin ?? false) || youCanFacilitate;
 
+  const cardCreationDisabled =
+    board.settings.card_creation_disabled || board.settings.board_locked;
+
   return (
+    <>
+      {/* ── Mobile shell (< 768px) ───────────────────────────────── */}
+      <div className="md:hidden">
+        {isJoined ? (
+          <MobileBoardShell
+            columns={columns}
+            cards={cards}
+            votes={votes}
+            actionItems={actionItems}
+            currentParticipantId={currentParticipantId}
+            isObscured={isObscured}
+            isCompleted={isCompleted}
+            isAdmin={isAdmin}
+            votingEnabled={board.settings.voting_enabled}
+            secretVoting={board.settings.secret_voting}
+            cardCreationDisabled={cardCreationDisabled}
+            maxVotesPerParticipant={board.settings.max_votes_per_participant}
+            boardLocked={board.settings.board_locked}
+            onAddCard={handleAddCard}
+            onUpdateCard={updateCard}
+            onDeleteCard={deleteCard}
+            onToggleVote={toggleVote}
+            onToggleReaction={toggleReaction}
+            onCombineCards={combineCards}
+            onUncombineCard={uncombineCard}
+          />
+        ) : (
+          <div className="min-h-dvh bg-[var(--bg)] flex items-center justify-center">
+            <p className="text-[var(--ink-4)] text-[13px]">Join the board to participate</p>
+          </div>
+        )}
+      </div>
+
+      {/* ── Desktop shell (≥ 768px) ──────────────────────────────── */}
+      <div className="hidden md:block">
     <AppShell
       headerRight={
         isAdmin && !isCompleted ? (
@@ -597,5 +636,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
         />
       )}
     </AppShell>
+      </div>
+    </>
   );
 }

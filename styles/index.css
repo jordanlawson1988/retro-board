@@ -386,3 +386,27 @@
 
 @keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
 @keyframes scale-in { from { opacity: 0; transform: scale(0.95) } to { opacity: 1; transform: scale(1) } }
+
+/* ============================================================ */
+/* Logo mark — CSS-rendered Quiet Modern logo                    */
+/* ============================================================ */
+.rb-logo-mark {
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  background: var(--ink);
+  color: var(--bg-elev);
+  display: grid; place-items: center;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 14px;
+  position: relative;
+  flex-shrink: 0;
+}
+.rb-logo-mark::after {
+  content: '';
+  position: absolute;
+  width: 6px; height: 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  bottom: 4px; right: 4px;
+}

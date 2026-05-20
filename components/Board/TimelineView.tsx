@@ -80,21 +80,21 @@ export function TimelineView({
   return (
     <div className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6">
       {groups.length === 0 ? (
-        <div className="rounded-[var(--radius-lg)] border-2 border-dashed border-[var(--color-gray-2)] bg-[var(--color-surface-subtle)] p-12 text-center">
-          <p className="text-sm text-[var(--color-gray-4)]">No cards to display</p>
+        <div className="rounded-[var(--r-lg)] border-2 border-dashed border-[var(--line)] bg-[var(--surface-muted)] p-12 text-center">
+          <p className="text-sm text-[var(--ink-4)]">No cards to display</p>
         </div>
       ) : (
         <div className="relative ml-4">
-          {/* Vertical timeline line */}
-          <div className="absolute top-0 bottom-0 left-0 w-0.5 bg-[var(--color-gray-2)]" />
+          {/* Vertical timeline connector line */}
+          <div className="absolute top-0 bottom-0 left-0 w-0.5 bg-[var(--line)]" />
 
           {groups.map((group, gi) => (
             <div key={gi} className="relative mb-6 pl-8">
-              {/* Timeline dot */}
-              <div className="absolute left-[-5px] top-1.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--color-navy)] bg-[var(--color-surface)]" />
+              {/* Timeline dot — outer ring uses surface bg + line-strong border */}
+              <div className="absolute left-[-5px] top-1.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--line-strong)] bg-[var(--surface)]" />
 
               {/* Timestamp */}
-              <div className="mb-2 text-xs font-medium text-[var(--color-gray-4)]">
+              <div className="mb-2 text-[11px] font-medium font-mono tabular-nums text-[var(--ink-4)]">
                 {group.timestamp}
               </div>
 
@@ -111,20 +111,20 @@ export function TimelineView({
                   return (
                     <div
                       key={card.id}
-                      className="rounded-[var(--radius-md)] border border-[var(--color-gray-1)] bg-[var(--color-surface)] p-3 shadow-sm"
-                      style={{ backgroundColor: card.color || undefined }}
+                      className="rounded-[var(--r-md)] border border-[var(--line)] bg-[var(--surface)] p-3 shadow-sm"
+                      style={card.color ? { borderLeftWidth: 3, borderLeftColor: card.color } : undefined}
                     >
                       {/* Column tag + author */}
                       <div className="mb-1.5 flex items-center gap-2">
                         {col && (
                           <span
-                            className="inline-flex items-center rounded-[var(--radius-full)] px-2 py-0.5 text-[10px] font-medium text-white"
+                            className="inline-flex items-center rounded-[var(--r-pill)] px-2 py-0.5 text-[10px] font-medium text-white"
                             style={{ backgroundColor: col.color }}
                           >
                             {col.title}
                           </span>
                         )}
-                        <span className="text-xs text-[var(--color-gray-4)]">
+                        <span className="text-xs text-[var(--ink-4)]">
                           {card.author_name}
                         </span>
                       </div>
@@ -132,7 +132,7 @@ export function TimelineView({
                       {/* Card text */}
                       <p
                         className={cn(
-                          'whitespace-pre-wrap text-sm text-[var(--color-gray-8)]',
+                          'whitespace-pre-wrap text-sm text-[var(--ink)]',
                           blurred && 'select-none blur-sm'
                         )}
                       >
@@ -146,10 +146,10 @@ export function TimelineView({
                             onClick={() => onToggleVote(card.id)}
                             disabled={!hasVoted && voteLimitReached}
                             className={cn(
-                              'flex items-center gap-1 rounded-[var(--radius-full)] px-2 py-0.5 text-xs transition-colors',
+                              'flex items-center gap-1 rounded-[var(--r-pill)] px-2 py-0.5 text-xs font-mono tabular-nums transition-colors',
                               hasVoted
-                                ? 'bg-[var(--color-navy)]/10 text-[var(--color-navy)] font-medium'
-                                : 'text-[var(--color-gray-4)] hover:bg-[var(--color-gray-1)] hover:text-[var(--color-gray-6)]'
+                                ? 'bg-[var(--accent-soft)] text-[var(--accent)] font-medium'
+                                : 'text-[var(--ink-4)] hover:bg-[var(--surface-muted)] hover:text-[var(--ink-2)]'
                             )}
                           >
                             <ThumbsUp size={12} />

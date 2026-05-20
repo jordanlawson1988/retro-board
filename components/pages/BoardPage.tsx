@@ -16,7 +16,6 @@ import {
   type CollisionDetection,
 } from '@dnd-kit/core';
 import { Link2, Check } from 'lucide-react';
-import { getCardTextColor, CARD_TEXT_CLASSES } from '@/utils/cardColors';
 import { cn } from '@/utils/cn';
 import { AppShell } from '@/components/Layout';
 import { Button, Modal } from '@/components/common';
@@ -247,30 +246,28 @@ export function BoardPage({ boardId }: { boardId: string }) {
     setShowCompleteModal(false);
   }, [completeBoard]);
 
-  // Card preview for DragOverlay
+  // Card preview for DragOverlay — matches new neutral RetroCard treatment
   const dragOverlayContent = useMemo(() => {
     if (!activeDragId) return null;
     const isChild = activeDragId.startsWith('child:');
     const cardId = isChild ? activeDragId.slice(6) : activeDragId;
     const card = cards.find((c) => c.id === cardId);
     if (!card) return null;
-    const contrast = CARD_TEXT_CLASSES[getCardTextColor(card.color)];
     return (
       <div
         className={cn(
-          'rounded-[var(--radius-md)] border border-[var(--color-gray-1)] p-3 shadow-lg',
+          'bg-[var(--surface)] border border-[var(--line)] rounded-[var(--r-lg)] shadow-[var(--shadow-md)] p-3 cursor-grabbing',
           isChild ? 'w-[260px] rotate-1' : 'w-[280px] rotate-2'
         )}
-        style={{ backgroundColor: card.color || 'var(--color-surface)' }}
+        style={card.color ? { borderLeftWidth: 3, borderLeftColor: card.color } : undefined}
       >
         <p className={cn(
-          'whitespace-pre-wrap',
-          isChild ? 'text-xs' : 'text-sm',
-          contrast.text
+          'whitespace-pre-wrap text-[var(--ink)]',
+          isChild ? 'text-xs' : 'text-[15px] leading-[1.45]'
         )}>
           {card.text}
         </p>
-        <span className={cn('mt-1 block text-xs', contrast.subtext)}>
+        <span className="mt-1 block text-xs text-[var(--ink-4)]">
           {card.author_name}
         </span>
       </div>

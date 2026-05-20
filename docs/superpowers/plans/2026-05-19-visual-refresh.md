@@ -10,7 +10,9 @@
 
 **Spec:** [`docs/superpowers/specs/2026-05-19-visual-refresh-design.md`](../specs/2026-05-19-visual-refresh-design.md)
 
-**Convention note:** This repo has no automated tests by design (`CLAUDE.md`: "No tests"). The TDD red-green-refactor cycle is replaced with `implement → tsc --noEmit → npm run build → preview walkthrough → commit`. Each PR's preview walkthrough uses ui-feature-verify with the checklist in spec §7–§8.
+**Convention note:** This repo has no automated tests by design (`CLAUDE.md`: "No tests"). The TDD red-green-refactor cycle is replaced with `implement → tsc --noEmit → npm run build → local verification → commit`. Each PR's verification uses ui-feature-verify with the checklist in spec §7–§8.
+
+**Verification model (corrected 2026-05-19):** `vercel.json` only enables auto-deploy for `main` and `develop` — **feature branches do NOT get a Vercel preview**. So per-PR verification is done **locally** (`npm run dev` + walk the checklist), not on a preview URL. Any "Vercel preview" / "preview walkthrough" phrasing in the per-task steps below should be read as "local `npm run dev` walkthrough." A real Vercel preview only appears once the feature branch is merged to `develop`.
 
 **Commit message convention (per project memory):**
 ```

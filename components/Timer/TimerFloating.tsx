@@ -99,7 +99,7 @@ export function TimerFloating({ timer, isAdmin, onStart, onPause, onResume, onRe
             'inline-flex items-center gap-2.5 px-3.5 py-2 rounded-full',
             'border border-[var(--line)] shadow-[var(--shadow-lg)]',
             'bg-[var(--bg-elev)] text-[var(--ink)]',
-            'transition-[box-shadow,background-color] duration-150 hover:shadow-[var(--shadow-md)]',
+            'transition-[box-shadow,background-color] duration-150 hover:shadow-[var(--shadow-md)] active:translate-y-px',
             isExpired && 'animate-pulse border-[var(--danger)] text-[var(--danger)]'
           )}
           title={isActive ? `Timer: ${formatTime(timer.remaining)}` : 'Open timer'}

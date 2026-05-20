@@ -11,6 +11,9 @@ node_modules
 .next/
 .vercel/
 *.local
+
+# TypeScript incremental build cache (machine-specific — not for git)
+tsconfig.tsbuildinfo
 .env
 .env.local
 .env.production.local

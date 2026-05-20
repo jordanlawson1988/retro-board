@@ -1,0 +1,262 @@
+/*
+ * RetroBoard — Visual Refresh ("Quiet Modern")
+ * Drop-in design tokens. Replaces the old --color-* block in styles/index.css.
+ *
+ * Two ways to adopt:
+ *  (a) Replace the existing :root + [data-theme="dark"] blocks wholesale and
+ *      update component classNames to use the new var names (--bg, --ink, …).
+ *  (b) Re-point the existing --color-* names at the new oklch values to
+ *      minimize component churn. Sample mapping at the bottom of this file.
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap');
+
+:root {
+  /* ---- Type ---- */
+  --font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* ---- Radius ---- */
+  --r-xs: 6px;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 14px;   /* RetroCard */
+  --r-xl: 18px;   /* BoardCard tiles */
+  --r-2xl: 22px;  /* Columns, modals */
+  --r-pill: 999px;
+}
+
+/* ===================================================================
+ * LIGHT (default)
+ * =================================================================== */
+:root, [data-theme="light"] {
+  color-scheme: light;
+
+  /* Surfaces */
+  --bg:            oklch(0.985 0.004 80);
+  --bg-elev:       oklch(1     0     0);
+  --bg-sunken:     oklch(0.965 0.005 80);
+  --surface:       oklch(1     0     0);
+  --surface-hover: oklch(0.98  0.004 80);
+  --surface-muted: oklch(0.965 0.005 80);
+
+  /* Ink */
+  --ink:   oklch(0.18 0.015 260);
+  --ink-2: oklch(0.32 0.012 260);
+  --ink-3: oklch(0.50 0.012 260);
+  --ink-4: oklch(0.65 0.010 260);
+  --ink-5: oklch(0.80 0.008 260);
+
+  /* Lines */
+  --line:        oklch(0.93 0.005 260);
+  --line-strong: oklch(0.88 0.006 260);
+
+  /* Accent (single, indigo) */
+  --accent:        oklch(0.55 0.18 280);
+  --accent-hover:  oklch(0.50 0.20 280);
+  --accent-soft:   oklch(0.95 0.04 280);
+  --accent-soft-2: oklch(0.92 0.06 280);
+  --on-accent:     oklch(0.99 0.003 280);
+
+  /* Column tints */
+  --rose:         oklch(0.70 0.13 18);
+  --rose-soft:    oklch(0.96 0.025 18);
+  --amber:        oklch(0.78 0.13 70);
+  --amber-soft:   oklch(0.96 0.04 70);
+  --emerald:      oklch(0.65 0.13 160);
+  --emerald-soft: oklch(0.95 0.04 160);
+  --sky:          oklch(0.70 0.12 230);
+  --sky-soft:     oklch(0.95 0.03 230);
+  --violet:       oklch(0.62 0.15 290);
+  --violet-soft:  oklch(0.95 0.03 290);
+
+  /* Semantic */
+  --danger:  oklch(0.58 0.20 25);
+  --success: oklch(0.55 0.14 155);
+  --warning: oklch(0.78 0.14 75);
+  --info:    oklch(0.60 0.13 230);
+
+  /* Shadows */
+  --shadow-xs:  0 1px 2px  oklch(0.18 0.015 260 / 0.06);
+  --shadow-sm:  0 1px 3px  oklch(0.18 0.015 260 / 0.04),
+                0 1px 2px  oklch(0.18 0.015 260 / 0.06);
+  --shadow-md:  0 4px 12px oklch(0.18 0.015 260 / 0.06),
+                0 2px 4px  oklch(0.18 0.015 260 / 0.04);
+  --shadow-lg:  0 16px 40px oklch(0.18 0.015 260 / 0.10),
+                0 4px 12px oklch(0.18 0.015 260 / 0.06);
+  --shadow-pop: 0 24px 60px oklch(0.30 0.06 280 / 0.18);
+}
+
+/* ===================================================================
+ * DARK
+ * =================================================================== */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg:            oklch(0.155 0.012 260);
+  --bg-elev:       oklch(0.20  0.012 260);
+  --bg-sunken:     oklch(0.13  0.012 260);
+  --surface:       oklch(0.20  0.012 260);
+  --surface-hover: oklch(0.235 0.013 260);
+  --surface-muted: oklch(0.18  0.012 260);
+
+  --ink:   oklch(0.97 0.005 80);
+  --ink-2: oklch(0.88 0.008 80);
+  --ink-3: oklch(0.72 0.008 260);
+  --ink-4: oklch(0.58 0.010 260);
+  --ink-5: oklch(0.42 0.012 260);
+
+  --line:        oklch(0.27 0.012 260);
+  --line-strong: oklch(0.34 0.014 260);
+
+  --accent:        oklch(0.72 0.16 280);
+  --accent-hover:  oklch(0.78 0.17 280);
+  --accent-soft:   oklch(0.30 0.08 280);
+  --accent-soft-2: oklch(0.36 0.10 280);
+  --on-accent:     oklch(0.14 0.02 280);
+
+  --rose:         oklch(0.74 0.13 18);
+  --rose-soft:    oklch(0.32 0.06 18);
+  --amber:        oklch(0.80 0.13 70);
+  --amber-soft:   oklch(0.34 0.06 70);
+  --emerald:      oklch(0.74 0.13 160);
+  --emerald-soft: oklch(0.30 0.06 160);
+  --sky:          oklch(0.75 0.12 230);
+  --sky-soft:     oklch(0.30 0.06 230);
+  --violet:       oklch(0.72 0.14 290);
+  --violet-soft:  oklch(0.32 0.06 290);
+
+  --danger:  oklch(0.68 0.18 25);
+  --success: oklch(0.72 0.14 155);
+  --warning: oklch(0.82 0.13 75);
+  --info:    oklch(0.74 0.12 230);
+
+  --shadow-xs:  0 1px 2px  oklch(0 0 0 / 0.30);
+  --shadow-sm:  0 1px 3px  oklch(0 0 0 / 0.30),
+                0 1px 2px  oklch(0 0 0 / 0.40);
+  --shadow-md:  0 4px 12px oklch(0 0 0 / 0.35),
+                0 2px 4px  oklch(0 0 0 / 0.30);
+  --shadow-lg:  0 16px 40px oklch(0 0 0 / 0.45),
+                0 4px 12px oklch(0 0 0 / 0.30);
+  --shadow-pop: 0 24px 60px oklch(0 0 0 / 0.55);
+}
+
+/* System-preference auto-dark (when [data-theme="system"] is set) */
+@media (prefers-color-scheme: dark) {
+  [data-theme="system"] {
+    color-scheme: dark;
+    --bg:            oklch(0.155 0.012 260);
+    --bg-elev:       oklch(0.20  0.012 260);
+    --bg-sunken:     oklch(0.13  0.012 260);
+    --surface:       oklch(0.20  0.012 260);
+    --surface-hover: oklch(0.235 0.013 260);
+    --surface-muted: oklch(0.18  0.012 260);
+    --ink:   oklch(0.97 0.005 80);
+    --ink-2: oklch(0.88 0.008 80);
+    --ink-3: oklch(0.72 0.008 260);
+    --ink-4: oklch(0.58 0.010 260);
+    --ink-5: oklch(0.42 0.012 260);
+    --line:        oklch(0.27 0.012 260);
+    --line-strong: oklch(0.34 0.014 260);
+    --accent:        oklch(0.72 0.16 280);
+    --accent-hover:  oklch(0.78 0.17 280);
+    --accent-soft:   oklch(0.30 0.08 280);
+    --on-accent:     oklch(0.14 0.02 280);
+    --rose: oklch(0.74 0.13 18);  --rose-soft: oklch(0.32 0.06 18);
+    --amber: oklch(0.80 0.13 70); --amber-soft: oklch(0.34 0.06 70);
+    --emerald: oklch(0.74 0.13 160); --emerald-soft: oklch(0.30 0.06 160);
+    --sky: oklch(0.75 0.12 230);  --sky-soft: oklch(0.30 0.06 230);
+    --violet: oklch(0.72 0.14 290); --violet-soft: oklch(0.32 0.06 290);
+    --danger:  oklch(0.68 0.18 25);
+    --success: oklch(0.72 0.14 155);
+    --shadow-xs:  0 1px 2px  oklch(0 0 0 / 0.30);
+    --shadow-sm:  0 1px 3px  oklch(0 0 0 / 0.30), 0 1px 2px oklch(0 0 0 / 0.40);
+    --shadow-md:  0 4px 12px oklch(0 0 0 / 0.35), 0 2px 4px  oklch(0 0 0 / 0.30);
+    --shadow-lg:  0 16px 40px oklch(0 0 0 / 0.45), 0 4px 12px oklch(0 0 0 / 0.30);
+    --shadow-pop: 0 24px 60px oklch(0 0 0 / 0.55);
+  }
+}
+
+/* ===================================================================
+ * Compatibility mapping
+ * Re-points the existing --color-* names at the new palette so the
+ * majority of components keep working without className changes.
+ * Optional — delete this block if you migrate component classNames
+ * to use --ink, --bg, --line, etc. directly.
+ * =================================================================== */
+:root, [data-theme="light"], [data-theme="dark"] {
+  --color-surface:             var(--surface);
+  --color-surface-translucent: color-mix(in oklab, var(--bg) 90%, transparent);
+  --color-surface-dim:         var(--bg-elev);
+  --color-surface-subtle:      var(--surface-muted);
+
+  /* primary becomes accent indigo (was crimson) */
+  --color-primary:          var(--accent);
+  --color-primary-hover:    var(--accent-hover);
+  --color-primary-pressed:  var(--accent-hover);
+
+  /* navy → ink (used for filled "secondary" buttons) */
+  --color-navy:             var(--ink);
+  --color-navy-hover:       var(--ink-2);
+  --color-navy-pressed:     var(--ink-2);
+
+  --color-warm-white:       var(--bg);
+  --color-warm-gray:        var(--surface-muted);
+
+  --color-gray-1: var(--surface-muted);
+  --color-gray-2: var(--line);
+  --color-gray-3: var(--line-strong);
+  --color-gray-4: var(--ink-5);
+  --color-gray-5: var(--ink-4);
+  --color-gray-6: var(--ink-3);
+  --color-gray-7: var(--ink-2);
+  --color-gray-8: var(--ink);
+
+  --color-error:    var(--danger);
+  --color-success:  var(--success);
+  --color-warning:  var(--warning);
+  --color-info:     var(--info);
+
+  --color-text-default:  var(--ink-3);
+  --color-text-disabled: var(--ink-5);
+  --color-text-primary:  var(--accent);
+  --color-text-secondary:var(--ink-2);
+}
+
+/* ===================================================================
+ * Base
+ * =================================================================== */
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--ink);
+  background-color: var(--bg);
+  letter-spacing: -0.005em;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+h1 { letter-spacing: -0.025em; }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.mono, .tnum {
+  font-variant-numeric: tabular-nums;
+}
+.mono {
+  font-family: var(--font-mono);
+}

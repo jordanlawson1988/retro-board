@@ -71,14 +71,14 @@ export default function LoginPage() {
         <div className="w-full max-w-md">
           <form
             onSubmit={handleSubmit}
-            className="rounded-xl border border-[var(--color-gray-1)] bg-[var(--color-surface)] p-8 shadow-sm"
+            className="rounded-[var(--r-2xl)] border border-[var(--line)] bg-[var(--bg-elev)] p-8 shadow-[var(--shadow-md)]"
           >
             <div className="mb-6 text-center">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--color-navy)]/10 text-[var(--color-navy)]">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-[var(--r-lg)] bg-[var(--accent-soft)] text-[var(--accent)]">
                 <LogIn size={24} />
               </div>
-              <h1 className="text-2xl font-bold text-[var(--color-gray-8)]">Welcome Back</h1>
-              <p className="mt-2 text-sm text-[var(--color-gray-6)]">
+              <h1 className="text-2xl font-bold text-[var(--ink)]">Welcome Back</h1>
+              <p className="mt-2 text-sm text-[var(--ink-3)]">
                 Sign in to access your boards.
               </p>
             </div>
@@ -149,6 +149,8 @@ export default function LoginPage() {
 
               <Button
                 type="submit"
+                variant="accent"
+                size="lg"
                 loading={loading}
                 disabled={success || !captchaToken || verificationUnavailable}
                 className="mt-2 w-full"
@@ -157,9 +159,9 @@ export default function LoginPage() {
               </Button>
             </div>
 
-            <p className="mt-6 text-center text-sm text-[var(--color-gray-6)]">
+            <p className="mt-6 text-center text-sm text-[var(--ink-3)]">
               Don&apos;t have an account?{' '}
-              <Link href="/signup" className="font-medium text-[var(--color-navy)] hover:underline">
+              <Link href="/signup" className="font-medium text-[var(--accent)] hover:underline">
                 Sign up free
               </Link>
             </p>

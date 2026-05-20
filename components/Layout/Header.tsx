@@ -7,6 +7,8 @@ import { LogOut, LayoutDashboard, Settings, Shield, User } from 'lucide-react';
 import { APP_NAME } from '@/utils/constants';
 import { ThemeToggle } from './ThemeToggle';
 import { useAuthStore } from '@/stores/authStore';
+import { Button } from '@/components/common';
+import { avatarBackground } from '@/utils/avatarHue';
 
 interface HeaderProps {
   rightContent?: React.ReactNode;
@@ -40,14 +42,14 @@ export function Header({ rightContent }: HeaderProps) {
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-[var(--color-gray-1)] bg-[var(--color-surface-translucent)] backdrop-blur-sm">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
-        <Link href="/" className="flex items-center gap-2 hover:no-underline">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" className="h-9 w-9">
-            <path d="M6 2h14Q30 5 30 12v14c0 2.2-1.8 4-4 4H6c-2.2 0-4-1.8-4-4V6c0-2.2 1.8-4 4-4z" fill="#DD0031"/>
-            <path d="M20 2v6c0 2.2 1.8 4 4 4h6Q30 5 20 2z" fill="#004F71"/>
-          </svg>
-          <span className="text-xl font-bold text-[var(--color-gray-8)]">
+    <header
+      className="sticky top-0 z-40 h-[60px] border-b border-[var(--line)] backdrop-blur-[8px]"
+      style={{ background: 'color-mix(in oklab, var(--bg) 90%, transparent)' }}
+    >
+      <div className="mx-auto flex h-full max-w-7xl items-center justify-between px-4 sm:px-6">
+        <Link href="/" className="rb-logo flex items-center gap-2.5 hover:no-underline">
+          <span className="rb-logo-mark" aria-hidden>R</span>
+          <span className="text-[16px] font-semibold tracking-tight text-[var(--ink)]">
             {APP_NAME}
           </span>
         </Link>
@@ -58,28 +60,29 @@ export function Header({ rightContent }: HeaderProps) {
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => setDropdownOpen(!dropdownOpen)}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--color-navy)] text-sm font-medium text-white"
+                className="flex w-8 h-8 items-center justify-center rounded-full text-[13px] font-medium text-[var(--bg-elev)]"
+                style={{ background: avatarBackground(user.id) }}
                 title={user.name || user.email}
               >
                 {(user.name || user.email).charAt(0).toUpperCase()}
               </button>
               {dropdownOpen && (
-                <div className="absolute right-0 top-full mt-2 w-56 rounded-lg border border-[var(--color-gray-1)] bg-[var(--color-surface)] py-1 shadow-lg">
-                  <div className="border-b border-[var(--color-gray-1)] px-4 py-2">
-                    <p className="text-sm font-medium text-[var(--color-gray-8)]">{user.name}</p>
-                    <p className="text-xs text-[var(--color-gray-5)]">{user.email}</p>
+                <div className="absolute right-0 top-full mt-2 w-56 rounded-[var(--r-md)] border border-[var(--line)] bg-[var(--surface)] py-1 shadow-[var(--shadow-md)]">
+                  <div className="border-b border-[var(--line)] px-4 py-2">
+                    <p className="text-sm font-medium text-[var(--ink)]">{user.name}</p>
+                    <p className="text-xs text-[var(--ink-4)]">{user.email}</p>
                   </div>
                   <Link
                     href="/dashboard"
                     onClick={() => setDropdownOpen(false)}
-                    className="flex items-center gap-2 px-4 py-2 text-sm text-[var(--color-gray-7)] hover:bg-[var(--color-gray-0)]"
+                    className="flex items-center gap-2 px-4 py-2 text-sm text-[var(--ink-2)] hover:bg-[var(--surface-muted)]"
                   >
                     <LayoutDashboard size={16} /> My Boards
                   </Link>
                   <Link
                     href="/settings"
                     onClick={() => setDropdownOpen(false)}
-                    className="flex items-center gap-2 px-4 py-2 text-sm text-[var(--color-gray-7)] hover:bg-[var(--color-gray-0)]"
+                    className="flex items-center gap-2 px-4 py-2 text-sm text-[var(--ink-2)] hover:bg-[var(--surface-muted)]"
                   >
                     <Settings size={16} /> Settings
                   </Link>
@@ -87,15 +90,15 @@ export function Header({ rightContent }: HeaderProps) {
                     <Link
                       href="/admin"
                       onClick={() => setDropdownOpen(false)}
-                      className="flex items-center gap-2 px-4 py-2 text-sm text-[var(--color-gray-7)] hover:bg-[var(--color-gray-0)]"
+                      className="flex items-center gap-2 px-4 py-2 text-sm text-[var(--ink-2)] hover:bg-[var(--surface-muted)]"
                     >
                       <Shield size={16} /> Admin
                     </Link>
                   )}
-                  <div className="border-t border-[var(--color-gray-1)]">
+                  <div className="border-t border-[var(--line)]">
                     <button
                       onClick={handleSignOut}
-                      className="flex w-full items-center gap-2 px-4 py-2 text-sm text-[var(--color-gray-7)] hover:bg-[var(--color-gray-0)]"
+                      className="flex w-full items-center gap-2 px-4 py-2 text-sm text-[var(--ink-2)] hover:bg-[var(--surface-muted)]"
                     >
                       <LogOut size={16} /> Sign Out
                     </button>
@@ -104,11 +107,10 @@ export function Header({ rightContent }: HeaderProps) {
               )}
             </div>
           ) : (
-            <Link
-              href="/login"
-              className="flex items-center gap-1.5 rounded-md border border-[var(--color-gray-2)] px-3 py-1.5 text-sm font-medium text-[var(--color-gray-7)] hover:bg-[var(--color-gray-0)]"
-            >
-              <User size={16} /> Sign In
+            <Link href="/login">
+              <Button variant="default" size="sm">
+                <User size={14} /> Sign In
+              </Button>
             </Link>
           )}
         </div>

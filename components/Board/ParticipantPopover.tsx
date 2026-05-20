@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Users, Shield, ShieldOff, UserMinus } from 'lucide-react';
+import { avatarBackground } from '@/utils/avatarHue';
 import type { Participant } from '@/types';
 
 interface ParticipantPopoverProps {
@@ -54,7 +55,7 @@ export function ParticipantPopover({
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 px-2.5 py-2 text-xs text-[var(--color-gray-5)] hover:bg-[var(--color-gray-1)] rounded-md transition-colors"
+        className="flex items-center gap-1.5 px-2.5 py-2 text-xs text-[var(--ink-4)] hover:bg-[var(--surface-muted)] rounded-md transition-colors"
         title="View participants"
       >
         <Users size={14} />
@@ -62,9 +63,9 @@ export function ParticipantPopover({
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 bg-[var(--color-surface)] rounded-lg shadow-lg border border-[var(--color-gray-2)] z-50 w-72 max-h-80 overflow-y-auto">
-          <div className="p-3 border-b border-[var(--color-gray-1)]">
-            <p className="text-xs font-semibold text-[var(--color-gray-6)]">
+        <div className="absolute right-0 top-full mt-2 bg-[var(--surface)] rounded-[var(--r-lg)] shadow-[var(--shadow-lg)] border border-[var(--line)] z-50 w-72 max-h-80 overflow-y-auto">
+          <div className="p-3 border-b border-[var(--line)]">
+            <p className="text-xs font-semibold text-[var(--ink-3)]">
               Participants ({participants.length})
             </p>
           </div>
@@ -77,20 +78,28 @@ export function ParticipantPopover({
               return (
                 <li
                   key={p.id}
-                  className="flex items-center justify-between px-3 py-2 hover:bg-[var(--color-gray-0)]"
+                  className="flex items-center justify-between px-3 py-2 hover:bg-[var(--surface-muted)]"
                 >
-                  <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    {/* Per-user hue avatar */}
+                    <div
+                      className="w-7 h-7 rounded-full grid place-items-center text-[12px] font-medium text-[var(--bg-elev)] shrink-0"
+                      style={{ background: avatarBackground(p.id) }}
+                    >
+                      {p.display_name.charAt(0).toUpperCase()}
+                    </div>
+                    {/* Online indicator dot */}
                     <span
-                      className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                        isOnline ? 'bg-green-500' : 'bg-gray-300'
+                      className={`w-1.5 h-1.5 rounded-full flex-shrink-0 -ml-1 ${
+                        isOnline ? 'bg-[var(--success)]' : 'bg-[var(--line-strong)]'
                       }`}
                     />
-                    <span className="text-sm text-[var(--color-gray-7)] truncate">
+                    <span className="text-sm text-[var(--ink-2)] truncate">
                       {p.display_name}
-                      {isSelf && <span className="text-[var(--color-gray-4)]"> (you)</span>}
+                      {isSelf && <span className="text-[var(--ink-4)]"> (you)</span>}
                     </span>
                     {p.is_admin && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--color-navy)] text-white flex-shrink-0">
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--accent-soft)] text-[var(--accent)] flex-shrink-0">
                         Facilitator
                       </span>
                     )}
@@ -101,7 +110,7 @@ export function ParticipantPopover({
                       {p.is_admin ? (
                         <button
                           onClick={() => onDemote(p.id)}
-                          className="p-2 text-[var(--color-gray-3)] hover:text-[var(--color-gray-6)] rounded"
+                          className="p-2 text-[var(--ink-4)] hover:text-[var(--ink-2)] rounded"
                           title="Demote to participant"
                         >
                           <ShieldOff size={16} />
@@ -109,7 +118,7 @@ export function ParticipantPopover({
                       ) : (
                         <button
                           onClick={() => onPromote(p.id)}
-                          className="p-2 text-[var(--color-gray-3)] hover:text-[var(--color-navy)] rounded"
+                          className="p-2 text-[var(--ink-4)] hover:text-[var(--accent)] rounded"
                           title="Promote to facilitator"
                         >
                           <Shield size={16} />
@@ -117,7 +126,7 @@ export function ParticipantPopover({
                       )}
                       <button
                         onClick={() => onRemove(p.id)}
-                        className="p-2 text-[var(--color-gray-3)] hover:text-red-500 rounded"
+                        className="p-2 text-[var(--ink-4)] hover:text-[var(--danger)] rounded"
                         title="Remove participant"
                       >
                         <UserMinus size={16} />

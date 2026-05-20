@@ -816,7 +816,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   // --- Action Items ---
 
   addActionItem: async (description, assignee, dueDate) => {
-    const { board } = get();
+    const { board, currentParticipantId } = get();
     if (!board) return;
 
     // For action items, the server generates the UUID, so we can't do a true
@@ -829,6 +829,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
         description,
         assignee: assignee || null,
         dueDate: dueDate || null,
+        createdBy: currentParticipantId,
       }),
     });
 

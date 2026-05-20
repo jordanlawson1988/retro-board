@@ -16,7 +16,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         {label && (
           <label
             htmlFor={id}
-            className="text-sm font-medium text-[var(--color-gray-7)]"
+            className="text-sm font-medium text-[var(--ink-2)]"
           >
             {label}
           </label>
@@ -25,21 +25,21 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           ref={ref}
           id={id}
           className={cn(
-            'w-full rounded-[var(--radius-md)] border px-3 py-2 text-base',
-            'bg-[var(--color-surface)] text-[var(--color-gray-8)]',
-            'placeholder:text-[var(--color-gray-3)]',
-            'transition-colors duration-150',
-            'focus:outline-none focus:ring-2 focus:ring-offset-1',
+            'w-full px-3 py-2.5 rounded-[var(--r-md)] text-[15px]',
+            'bg-[var(--surface)] border border-[var(--line)] text-[var(--ink)]',
+            'placeholder:text-[var(--ink-4)] outline-none',
+            'focus:border-[var(--accent)] focus:shadow-[0_0_0_3px_var(--accent-soft)]',
+            'transition-[border-color,box-shadow] duration-150',
             error
-              ? 'border-[var(--color-error)] focus:ring-[var(--color-error)]'
-              : 'border-[var(--color-gray-2)] focus:border-[var(--color-navy)] focus:ring-[var(--color-navy)]',
-            'disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-[var(--color-gray-1)]',
+              ? 'border-[var(--danger)] focus:border-[var(--danger)] focus:shadow-[0_0_0_3px_color-mix(in_oklab,var(--danger)_20%,transparent)]'
+              : '',
+            'disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-[var(--surface-muted)]',
             className
           )}
           {...props}
         />
         {error && (
-          <p className="text-sm text-[var(--color-error)]">{error}</p>
+          <p className="text-sm text-[var(--danger)]">{error}</p>
         )}
       </div>
     );

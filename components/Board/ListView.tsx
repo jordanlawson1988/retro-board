@@ -94,22 +94,22 @@ export function ListView({
   const sortIcon = (field: SortField) => {
     if (sortField !== field) return null;
     return sortDir === 'asc' ? (
-      <ArrowUp size={12} className="shrink-0" />
+      <ArrowUp size={12} className="shrink-0 text-[var(--accent)]" />
     ) : (
-      <ArrowDown size={12} className="shrink-0" />
+      <ArrowDown size={12} className="shrink-0 text-[var(--accent)]" />
     );
   };
 
   return (
     <div className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6">
-      <div className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-gray-1)] bg-[var(--color-surface)]">
+      <div className="overflow-hidden rounded-[var(--r-lg)] border border-[var(--line)] bg-[var(--surface)]">
         <table className="w-full">
           <thead>
-            <tr className="border-b border-[var(--color-gray-1)] bg-[var(--color-gray-0)]">
+            <tr className="border-b border-[var(--line)] bg-[var(--bg-elev)]">
               <th className="px-4 py-3 text-left">
                 <button
                   onClick={() => handleSort('column')}
-                  className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-gray-5)] hover:text-[var(--color-gray-8)]"
+                  className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-3)] hover:text-[var(--ink)]"
                 >
                   Column
                   {sortIcon('column')}
@@ -118,7 +118,7 @@ export function ListView({
               <th className="px-4 py-3 text-left">
                 <button
                   onClick={() => handleSort('card')}
-                  className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-gray-5)] hover:text-[var(--color-gray-8)]"
+                  className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-3)] hover:text-[var(--ink)]"
                 >
                   Card
                   {sortIcon('card')}
@@ -127,7 +127,7 @@ export function ListView({
               <th className="px-4 py-3 text-left">
                 <button
                   onClick={() => handleSort('author')}
-                  className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-gray-5)] hover:text-[var(--color-gray-8)]"
+                  className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-3)] hover:text-[var(--ink)]"
                 >
                   Author
                   {sortIcon('author')}
@@ -137,7 +137,7 @@ export function ListView({
                 <th className="px-4 py-3 text-left">
                   <button
                     onClick={() => handleSort('votes')}
-                    className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-gray-5)] hover:text-[var(--color-gray-8)]"
+                    className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-3)] hover:text-[var(--ink)]"
                   >
                     Votes
                     {sortIcon('votes')}
@@ -158,13 +158,15 @@ export function ListView({
               return (
                 <tr
                   key={card.id}
-                  className="border-b border-[var(--color-gray-1)] last:border-b-0 hover:bg-[var(--color-gray-0)]"
-                  style={{ backgroundColor: card.color || undefined }}
+                  className="border-b border-[var(--line)] last:border-b-0 hover:bg-[var(--surface-hover)]"
                 >
-                  <td className="px-4 py-3">
+                  <td
+                    className="px-4 py-3"
+                    style={card.color ? { borderLeft: `3px solid ${card.color}` } : undefined}
+                  >
                     {col && (
                       <span
-                        className="inline-flex items-center gap-1.5 rounded-[var(--radius-full)] px-2.5 py-0.5 text-xs font-medium text-white"
+                        className="inline-flex items-center gap-1.5 rounded-[var(--r-pill)] px-2.5 py-0.5 text-xs font-medium text-white"
                         style={{ backgroundColor: col.color }}
                       >
                         {col.title}
@@ -174,7 +176,7 @@ export function ListView({
                   <td className="px-4 py-3">
                     <span
                       className={cn(
-                        'text-sm text-[var(--color-gray-8)]',
+                        'text-sm text-[var(--ink)]',
                         blurred && 'select-none blur-sm'
                       )}
                     >
@@ -182,7 +184,7 @@ export function ListView({
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className="text-sm text-[var(--color-gray-5)]">{card.author_name}</span>
+                    <span className="text-sm text-[var(--ink-4)]">{card.author_name}</span>
                   </td>
                   {votingEnabled && (
                     <td className="px-4 py-3">
@@ -190,10 +192,10 @@ export function ListView({
                         onClick={() => onToggleVote(card.id)}
                         disabled={!hasVoted && voteLimitReached}
                         className={cn(
-                          'flex items-center gap-1 rounded-[var(--radius-full)] px-2 py-0.5 text-xs transition-colors',
+                          'flex items-center gap-1 rounded-[var(--r-pill)] px-2 py-0.5 text-xs font-mono tabular-nums transition-colors',
                           hasVoted
-                            ? 'bg-[var(--color-navy)]/10 text-[var(--color-navy)] font-medium'
-                            : 'text-[var(--color-gray-4)] hover:bg-[var(--color-gray-1)] hover:text-[var(--color-gray-6)]'
+                            ? 'bg-[var(--accent-soft)] text-[var(--accent)] font-medium'
+                            : 'text-[var(--ink-4)] hover:bg-[var(--surface-muted)] hover:text-[var(--ink-2)]'
                         )}
                       >
                         <ThumbsUp size={12} />
@@ -208,7 +210,7 @@ export function ListView({
               <tr>
                 <td
                   colSpan={votingEnabled ? 4 : 3}
-                  className="px-4 py-12 text-center text-sm text-[var(--color-gray-4)]"
+                  className="px-4 py-12 text-center text-sm text-[var(--ink-4)]"
                 >
                   No cards to display
                 </td>

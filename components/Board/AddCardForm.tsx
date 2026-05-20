@@ -10,19 +10,20 @@ interface AddCardFormProps {
 }
 
 export function AddCardForm({ onSubmit, disabled }: AddCardFormProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [focused, setFocused] = useState(false);
   const [text, setText] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    if (isOpen && textareaRef.current) {
-      textareaRef.current.focus();
-    }
-  }, [isOpen]);
+    if (focused) textareaRef.current?.focus();
+  }, [focused]);
 
   const handleSubmit = () => {
     const trimmed = text.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      setFocused(false);
+      return;
+    }
     onSubmit(trimmed);
     setText('');
     textareaRef.current?.focus();
@@ -32,74 +33,46 @@ export function AddCardForm({ onSubmit, disabled }: AddCardFormProps) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
-    }
-    if (e.key === 'Escape') {
-      setIsOpen(false);
+    } else if (e.key === 'Escape') {
       setText('');
+      setFocused(false);
     }
   };
 
   if (disabled) return null;
 
-  if (!isOpen) {
+  if (!focused) {
     return (
       <button
-        onClick={() => setIsOpen(true)}
+        type="button"
+        onClick={() => setFocused(true)}
         className={cn(
-          'flex w-full items-center gap-2 rounded-[var(--radius-md)] border-2 border-dashed',
-          'border-[var(--color-gray-2)] px-3 py-2.5 text-sm text-[var(--color-gray-4)]',
-          'transition-colors hover:border-[var(--color-gray-3)] hover:text-[var(--color-gray-5)]'
+          'w-full flex items-center gap-2 px-3 py-2.5 rounded-[var(--r-md)]',
+          'bg-[var(--surface-muted)] border border-dashed border-[var(--line-strong)] text-[var(--ink-4)] text-[13px]',
+          'hover:border-[var(--accent)] hover:text-[var(--ink-3)] transition-colors duration-150 cursor-text text-left'
         )}
       >
-        <Plus size={16} />
-        Add a card
+        <Plus size={14} />
+        <span>Add a card</span>
       </button>
     );
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      <textarea
-        ref={textareaRef}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder="Type your thought..."
-        rows={3}
-        className={cn(
-          'w-full resize-none rounded-[var(--radius-md)] border border-[var(--color-gray-2)]',
-          'bg-[var(--color-surface)] px-3 py-2 text-base text-[var(--color-gray-8)]',
-          'placeholder:text-[var(--color-gray-3)]',
-          'focus:border-[var(--color-navy)] focus:outline-none focus:ring-2 focus:ring-[var(--color-navy)] focus:ring-offset-1'
-        )}
-      />
-      <div className="flex items-center justify-end sm:justify-between">
-        <p className="hidden text-xs text-[var(--color-gray-4)] sm:block">
-          Enter to submit, Shift+Enter for new line
-        </p>
-        <div className="flex gap-2">
-          <button
-            onClick={() => {
-              setIsOpen(false);
-              setText('');
-            }}
-            className="rounded-[var(--radius-md)] px-3 py-2 text-sm text-[var(--color-gray-5)] hover:bg-[var(--color-gray-1)]"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={!text.trim()}
-            className={cn(
-              'rounded-[var(--radius-md)] px-3 py-2 text-sm font-medium text-white',
-              'bg-[var(--color-navy)] hover:bg-[var(--color-navy-hover)]',
-              'disabled:opacity-50 disabled:cursor-not-allowed'
-            )}
-          >
-            Add
-          </button>
-        </div>
-      </div>
-    </div>
+    <textarea
+      ref={textareaRef}
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={handleSubmit}
+      onKeyDown={handleKeyDown}
+      rows={2}
+      placeholder="Type your thought…"
+      className={cn(
+        'w-full px-3 py-2.5 rounded-[var(--r-md)] resize-none text-[15px]',
+        'bg-[var(--surface)] border border-[var(--accent)] text-[var(--ink)]',
+        'outline-none shadow-[0_0_0_3px_var(--accent-soft)] transition-colors duration-150',
+        'placeholder:text-[var(--ink-4)]'
+      )}
+    />
   );
 }

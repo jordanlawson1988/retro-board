@@ -66,14 +66,14 @@ export function SignUpPage() {
         <div className="w-full max-w-md">
           <form
             onSubmit={handleSubmit}
-            className="rounded-xl border border-[var(--color-gray-1)] bg-[var(--color-surface)] p-8 shadow-sm"
+            className="rounded-[var(--r-2xl)] border border-[var(--line)] bg-[var(--bg-elev)] p-8 shadow-[var(--shadow-md)]"
           >
             <div className="mb-6 text-center">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--color-navy)]/10 text-[var(--color-navy)]">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-[var(--r-lg)] bg-[var(--accent-soft)] text-[var(--accent)]">
                 <UserPlus size={24} />
               </div>
-              <h1 className="text-2xl font-bold text-[var(--color-gray-8)]">Create Account</h1>
-              <p className="mt-2 text-sm text-[var(--color-gray-6)]">
+              <h1 className="text-2xl font-bold text-[var(--ink)]">Create Account</h1>
+              <p className="mt-2 text-sm text-[var(--ink-3)]">
                 Sign up to save your retros and manage your boards.
               </p>
             </div>
@@ -154,6 +154,8 @@ export function SignUpPage() {
 
               <Button
                 type="submit"
+                variant="accent"
+                size="lg"
                 loading={loading}
                 disabled={success || !captchaToken || verificationUnavailable}
                 className="mt-2 w-full"
@@ -162,9 +164,9 @@ export function SignUpPage() {
               </Button>
             </div>
 
-            <p className="mt-6 text-center text-sm text-[var(--color-gray-6)]">
+            <p className="mt-6 text-center text-sm text-[var(--ink-3)]">
               Already have an account?{' '}
-              <Link href="/login" className="font-medium text-[var(--color-navy)] hover:underline">
+              <Link href="/login" className="font-medium text-[var(--accent)] hover:underline">
                 Sign in
               </Link>
             </p>

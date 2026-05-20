@@ -7,11 +7,11 @@ export async function POST(
   { params }: { params: Promise<{ boardId: string }> }
 ) {
   const { boardId } = await params;
-  const { description, assignee, dueDate } = await request.json();
+  const { description, assignee, dueDate, createdBy } = await request.json();
 
   const [item] = await sql`
-    INSERT INTO action_items (board_id, description, assignee, due_date)
-    VALUES (${boardId}, ${description}, ${assignee ?? null}, ${dueDate ?? null})
+    INSERT INTO action_items (board_id, description, assignee, due_date, created_by)
+    VALUES (${boardId}, ${description}, ${assignee ?? null}, ${dueDate ?? null}, ${createdBy ?? null})
     RETURNING *
   `;
 

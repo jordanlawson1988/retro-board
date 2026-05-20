@@ -24,8 +24,16 @@ interface DashboardBoard {
   user_role: string;
 }
 
+interface UserStats {
+  activeBoards: number;
+  cardsCreated: number;
+  votesCast: number;
+  actionItemsCreated: number | null;
+}
+
 export function DashboardPage() {
   const [boards, setBoards] = useState<DashboardBoard[]>([]);
+  const [stats, setStats] = useState<UserStats | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -51,19 +59,21 @@ export function DashboardPage() {
     fetchBoards();
   }, [filter, isAuthenticated, authLoading, router]);
 
+  // Per-user stats are account-wide — fetched once, independent of the filter.
+  useEffect(() => {
+    if (authLoading || !isAuthenticated) return;
+    fetch('/api/user/stats')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data) setStats(data as UserStats); })
+      .catch(() => {});
+  }, [isAuthenticated, authLoading]);
+
   const filteredBoards = search
     ? boards.filter((b) => b.title.toLowerCase().includes(search.toLowerCase()))
     : boards;
 
   const ownedBoards = filteredBoards.filter((b) => b.user_role === 'owner');
   const sharedBoards = filteredBoards.filter((b) => b.user_role !== 'owner');
-
-  // Derived stats from existing board data
-  const activeCount = boards.filter((b) => !b.archived_at).length;
-  const totalActions = boards.reduce((sum, b) => sum + (b.action_count ?? 0), 0);
-  const totalCards = boards.reduce((sum, b) => sum + (b.card_count ?? 0), 0);
-  // votes cast: not in current API response — show 0 as placeholder
-  const totalVotes = 0;
 
   return (
     <AppShell>
@@ -85,10 +95,10 @@ export function DashboardPage() {
           {/* 4-up stat strip */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {[
-              { label: 'Active boards', value: activeCount, accent: true },
-              { label: 'Action items',  value: totalActions },
-              { label: 'Cards shared',  value: totalCards },
-              { label: 'Votes cast',    value: totalVotes },
+              { label: 'Active boards', value: stats?.activeBoards ?? '—', accent: true },
+              { label: 'Action items',  value: stats?.actionItemsCreated ?? '—' },
+              { label: 'Cards created', value: stats?.cardsCreated ?? '—' },
+              { label: 'Votes cast',    value: stats?.votesCast ?? '—' },
             ].map((s) => (
               <div
                 key={s.label}
@@ -103,7 +113,7 @@ export function DashboardPage() {
                     s.accent ? 'text-[var(--accent)]' : 'text-[var(--ink)]'
                   )}
                 >
-                  {loading ? '—' : s.value}
+                  {s.value}
                 </p>
               </div>
             ))}

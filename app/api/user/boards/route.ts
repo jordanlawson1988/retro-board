@@ -17,9 +17,9 @@ export async function GET(request: NextRequest) {
   if (filter === 'active') {
     boards = await sql`
       SELECT DISTINCT b.*,
-        (SELECT COUNT(*) FROM cards WHERE board_id = b.id) AS card_count,
-        (SELECT COUNT(*) FROM participants WHERE board_id = b.id) AS participant_count,
-        (SELECT COUNT(*) FROM action_items WHERE board_id = b.id) AS action_count,
+        (SELECT COUNT(*)::int FROM cards WHERE board_id = b.id) AS card_count,
+        (SELECT COUNT(*)::int FROM participants WHERE board_id = b.id) AS participant_count,
+        (SELECT COUNT(*)::int FROM action_items WHERE board_id = b.id) AS action_count,
         CASE WHEN b.owner_id = ${userId} THEN 'owner' ELSE bm.role END AS user_role
       FROM boards b
       LEFT JOIN board_members bm ON b.id = bm.board_id AND bm.user_id = ${userId}
@@ -30,9 +30,9 @@ export async function GET(request: NextRequest) {
   } else if (filter === 'completed') {
     boards = await sql`
       SELECT DISTINCT b.*,
-        (SELECT COUNT(*) FROM cards WHERE board_id = b.id) AS card_count,
-        (SELECT COUNT(*) FROM participants WHERE board_id = b.id) AS participant_count,
-        (SELECT COUNT(*) FROM action_items WHERE board_id = b.id) AS action_count,
+        (SELECT COUNT(*)::int FROM cards WHERE board_id = b.id) AS card_count,
+        (SELECT COUNT(*)::int FROM participants WHERE board_id = b.id) AS participant_count,
+        (SELECT COUNT(*)::int FROM action_items WHERE board_id = b.id) AS action_count,
         CASE WHEN b.owner_id = ${userId} THEN 'owner' ELSE bm.role END AS user_role
       FROM boards b
       LEFT JOIN board_members bm ON b.id = bm.board_id AND bm.user_id = ${userId}
@@ -43,9 +43,9 @@ export async function GET(request: NextRequest) {
   } else {
     boards = await sql`
       SELECT DISTINCT b.*,
-        (SELECT COUNT(*) FROM cards WHERE board_id = b.id) AS card_count,
-        (SELECT COUNT(*) FROM participants WHERE board_id = b.id) AS participant_count,
-        (SELECT COUNT(*) FROM action_items WHERE board_id = b.id) AS action_count,
+        (SELECT COUNT(*)::int FROM cards WHERE board_id = b.id) AS card_count,
+        (SELECT COUNT(*)::int FROM participants WHERE board_id = b.id) AS participant_count,
+        (SELECT COUNT(*)::int FROM action_items WHERE board_id = b.id) AS action_count,
         CASE WHEN b.owner_id = ${userId} THEN 'owner' ELSE bm.role END AS user_role
       FROM boards b
       LEFT JOIN board_members bm ON b.id = bm.board_id AND bm.user_id = ${userId}

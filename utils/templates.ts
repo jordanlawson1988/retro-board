@@ -1,14 +1,20 @@
 import type { TemplateDefinition } from '@/types';
 
+const ROSE    = '#DD8C84';
+const AMBER   = '#E0B265';
+const EMERALD = '#2DA37F';
+const SKY     = '#5FA3CC';
+const VIOLET  = '#8270C8';
+
 export const BOARD_TEMPLATES: TemplateDefinition[] = [
   {
     id: 'mad-sad-glad',
     name: 'Mad / Sad / Glad',
     description: 'Classic emotional check-in format for team retrospectives',
     columns: [
-      { title: 'Mad', color: '#B8072F', description: 'What frustrated you?' },
-      { title: 'Sad', color: '#004F71', description: 'What disappointed you?' },
-      { title: 'Glad', color: '#077E4C', description: 'What made you happy?' },
+      { title: 'Mad',  color: ROSE,    description: 'What frustrated you?' },
+      { title: 'Sad',  color: SKY,     description: 'What disappointed you?' },
+      { title: 'Glad', color: EMERALD, description: 'What made you happy?' },
     ],
   },
   {
@@ -16,9 +22,9 @@ export const BOARD_TEMPLATES: TemplateDefinition[] = [
     name: 'Liked / Learned / Lacked',
     description: 'Reflect on positives, growth, and gaps',
     columns: [
-      { title: 'Liked', color: '#249E6B', description: 'What did you enjoy?' },
-      { title: 'Learned', color: '#3EB1C8', description: 'What did you learn?' },
-      { title: 'Lacked', color: '#E33205', description: 'What was missing?' },
+      { title: 'Liked',   color: EMERALD, description: 'What did you enjoy?' },
+      { title: 'Learned', color: SKY,     description: 'What did you learn?' },
+      { title: 'Lacked',  color: AMBER,   description: 'What was missing?' },
     ],
   },
   {
@@ -26,19 +32,19 @@ export const BOARD_TEMPLATES: TemplateDefinition[] = [
     name: 'Start / Stop / Continue',
     description: 'Action-oriented format for process improvement',
     columns: [
-      { title: 'Start', color: '#077E4C', description: 'What should we begin doing?' },
-      { title: 'Stop', color: '#B8072F', description: 'What should we stop doing?' },
-      { title: 'Continue', color: '#004F71', description: 'What should we keep doing?' },
+      { title: 'Start',    color: EMERALD, description: 'What should we begin doing?' },
+      { title: 'Stop',     color: ROSE,    description: 'What should we stop doing?' },
+      { title: 'Continue', color: SKY,     description: 'What should we keep doing?' },
     ],
   },
   {
     id: 'went-well-didnt-action',
-    name: 'Went Well / Didn\'t Go Well / Action Items',
+    name: "Went Well / Didn't Go Well / Action Items",
     description: 'Simple review with built-in action planning',
     columns: [
-      { title: 'What Went Well', color: '#249E6B', description: 'Celebrate successes' },
-      { title: 'What Didn\'t Go Well', color: '#E33205', description: 'Identify challenges' },
-      { title: 'Action Items', color: '#004F71', description: 'Plan improvements' },
+      { title: 'What Went Well',      color: EMERALD, description: 'Celebrate successes' },
+      { title: "What Didn't Go Well", color: ROSE,    description: 'Identify challenges' },
+      { title: 'Action Items',        color: VIOLET,  description: 'Plan improvements' },
     ],
   },
   {
@@ -46,9 +52,9 @@ export const BOARD_TEMPLATES: TemplateDefinition[] = [
     name: 'Custom Board',
     description: 'Start with three columns you can rename and customize',
     columns: [
-      { title: 'Column 1', color: '#004F71' },
-      { title: 'Column 2', color: '#249E6B' },
-      { title: 'Column 3', color: '#E33205' },
+      { title: 'Column 1', color: SKY },
+      { title: 'Column 2', color: EMERALD },
+      { title: 'Column 3', color: ROSE },
     ],
   },
 ];

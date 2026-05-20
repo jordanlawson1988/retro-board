@@ -1,7 +1,7 @@
 'use client';
 
-import { LayoutGrid, Rows3, List, Clock } from 'lucide-react';
 import { cn } from '@/utils/cn';
+import { LayoutGrid, Rows3, List, Clock } from 'lucide-react';
 import type { BoardView } from '@/types';
 
 interface ViewToggleProps {
@@ -9,32 +9,41 @@ interface ViewToggleProps {
   onChangeView: (view: BoardView) => void;
 }
 
-const views: { id: BoardView; icon: React.ComponentType<{ size?: number }>; label: string }[] = [
-  { id: 'grid', icon: LayoutGrid, label: 'Grid' },
-  { id: 'swimlane', icon: Rows3, label: 'Swimlane' },
-  { id: 'list', icon: List, label: 'List' },
-  { id: 'timeline', icon: Clock, label: 'Timeline' },
+const OPTIONS: Array<{ value: BoardView; icon: typeof LayoutGrid; label: string }> = [
+  { value: 'grid', icon: LayoutGrid, label: 'Grid' },
+  { value: 'swimlane', icon: Rows3, label: 'Swimlane' },
+  { value: 'list', icon: List, label: 'List' },
+  { value: 'timeline', icon: Clock, label: 'Timeline' },
 ];
 
 export function ViewToggle({ currentView, onChangeView }: ViewToggleProps) {
   return (
-    <div className="inline-flex rounded-[var(--radius-md)] border border-[var(--color-gray-2)] bg-[var(--color-surface)] p-0.5">
-      {views.map(({ id, icon: Icon, label }) => (
-        <button
-          key={id}
-          onClick={() => onChangeView(id)}
-          className={cn(
-            'flex items-center gap-1.5 rounded-[var(--radius-sm)] px-2.5 py-1.5 text-sm transition-colors',
-            currentView === id
-              ? 'bg-[var(--color-navy)] text-white'
-              : 'text-[var(--color-gray-5)] hover:text-[var(--color-gray-7)]'
-          )}
-          title={label}
-        >
-          <Icon size={14} />
-          <span className="hidden sm:inline">{label}</span>
-        </button>
-      ))}
+    <div
+      className="inline-flex p-[3px] gap-0.5 rounded-[10px] bg-[var(--surface-muted)] border border-[var(--line)]"
+      role="tablist"
+      aria-label="Board view"
+    >
+      {OPTIONS.map(({ value, icon: Icon, label }) => {
+        const active = value === currentView;
+        return (
+          <button
+            key={value}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChangeView(value)}
+            className={cn(
+              'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[7px] text-[12px] font-medium transition-[background-color,color,box-shadow] duration-150',
+              active
+                ? 'bg-[var(--bg-elev)] text-[var(--ink)] shadow-[var(--shadow-xs)]'
+                : 'bg-transparent text-[var(--ink-3)] hover:text-[var(--ink)]'
+            )}
+          >
+            <Icon size={12} />
+            <span className="hidden sm:inline">{label}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }

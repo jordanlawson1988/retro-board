@@ -1,9 +1,17 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Palette, X } from 'lucide-react';
+import { Palette } from 'lucide-react';
 import { cn } from '@/utils/cn';
-import { CARD_COLORS } from '@/utils/constants';
+
+const SWATCHES: Array<{ value: string | null; label: string }> = [
+  { value: '#DD8C84', label: 'Rose' },
+  { value: '#E0B265', label: 'Amber' },
+  { value: '#2DA37F', label: 'Emerald' },
+  { value: '#5FA3CC', label: 'Sky' },
+  { value: '#8270C8', label: 'Violet' },
+  { value: null,       label: 'None' },
+];
 
 interface CardColorPickerProps {
   currentColor: string | null;
@@ -13,7 +21,7 @@ interface CardColorPickerProps {
   iconHoverClassName?: string;
 }
 
-export function CardColorPicker({ currentColor, onSelectColor, onOpenChange, iconClassName, iconHoverClassName }: CardColorPickerProps) {
+export function CardColorPicker({ currentColor, onSelectColor, onOpenChange }: CardColorPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
 
@@ -37,35 +45,31 @@ export function CardColorPicker({ currentColor, onSelectColor, onOpenChange, ico
     <div className="relative" ref={pickerRef}>
       <button
         onClick={() => setOpen(!isOpen)}
-        className={cn('rounded-[var(--radius-sm)] p-1', iconClassName || 'text-[var(--color-gray-4)]', 'hover:bg-[var(--color-gray-1)]', iconHoverClassName || 'hover:text-[var(--color-gray-6)]')}
+        className="inline-flex items-center justify-center w-7 h-7 rounded-[var(--r-sm)] text-[var(--ink-4)] hover:bg-[var(--surface-muted)] hover:text-[var(--ink-3)] transition-[background-color,color] duration-150"
         aria-label="Change card color"
       >
-        <Palette size={12} />
+        <Palette size={14} />
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-full z-30 mt-1 flex gap-1 rounded-[var(--radius-md)] border border-[var(--color-gray-1)] bg-[var(--color-surface)] p-2 shadow-lg">
-          {CARD_COLORS.map((c) => (
+        <div className="absolute right-0 top-full z-30 mt-1 flex gap-1.5 rounded-[var(--r-md)] border border-[var(--line)] bg-[var(--surface)] p-2 shadow-[var(--shadow-md)]">
+          {SWATCHES.map((s) => (
             <button
-              key={c.name}
+              key={s.label}
+              type="button"
               onClick={() => {
-                onSelectColor(c.value);
+                onSelectColor(s.value);
                 setOpen(false);
               }}
+              aria-label={s.label}
               className={cn(
-                'h-6 w-6 rounded-full border-2 transition-transform hover:scale-110',
-                currentColor === c.value
-                  ? 'border-[var(--color-navy)]'
-                  : 'border-[var(--color-gray-2)]'
+                'w-6 h-6 rounded-full border transition-colors duration-150',
+                currentColor === s.value
+                  ? 'border-[var(--ink)] ring-2 ring-[var(--ink)]/20'
+                  : 'border-[var(--line)] hover:border-[var(--line-strong)]'
               )}
-              style={{ backgroundColor: c.value || '#ffffff' }}
-              title={c.name}
-              aria-label={`Set color to ${c.name}`}
-            >
-              {c.value === null && (
-                <X size={14} className="mx-auto text-[var(--color-gray-4)]" />
-              )}
-            </button>
+              style={s.value ? { background: s.value } : { background: 'var(--surface-muted)' }}
+            />
           ))}
         </div>
       )}

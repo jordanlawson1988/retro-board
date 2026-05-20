@@ -4,7 +4,7 @@ import { forwardRef } from 'react';
 import type { ButtonHTMLAttributes } from 'react';
 import { cn } from '@/utils/cn';
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+type ButtonVariant = 'default' | 'primary' | 'accent' | 'ghost' | 'danger';
 type ButtonSize = 'sm' | 'md' | 'lg';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -14,30 +14,32 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantStyles: Record<ButtonVariant, string> = {
+  default:
+    'bg-[var(--surface)] text-[var(--ink)] border border-[var(--line)] hover:bg-[var(--surface-hover)] hover:border-[var(--line-strong)]',
   primary:
-    'bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] active:bg-[var(--color-primary-pressed)] focus-visible:ring-[var(--color-primary)]',
-  secondary:
-    'bg-[var(--color-navy)] text-white hover:bg-[var(--color-navy-hover)] active:bg-[var(--color-navy-pressed)] focus-visible:ring-[var(--color-navy)]',
+    'bg-[var(--ink)] text-[var(--bg-elev)] border border-transparent hover:bg-[var(--ink-2)]',
+  accent:
+    'bg-[var(--accent)] text-[var(--on-accent)] border border-transparent hover:bg-[var(--accent-hover)]',
   ghost:
-    'bg-transparent text-[var(--color-gray-7)] hover:bg-[var(--color-gray-1)] active:bg-[var(--color-gray-2)]',
+    'bg-transparent text-[var(--ink-3)] border border-transparent hover:bg-[var(--surface-muted)] hover:text-[var(--ink)]',
   danger:
-    'bg-[var(--color-error)] text-white hover:bg-[var(--color-dark-red)] active:bg-[var(--color-primary-pressed)]',
+    'bg-[var(--danger)] text-white border border-transparent hover:opacity-90',
 };
 
 const sizeStyles: Record<ButtonSize, string> = {
-  sm: 'px-3 py-1.5 text-sm',
-  md: 'px-4 py-2 text-base',
-  lg: 'px-6 py-3 text-lg',
+  sm: 'px-2.5 py-[7px] text-[11px] rounded-[var(--r-sm)] gap-1.5',
+  md: 'px-3.5 py-2.5 text-[13px] rounded-[var(--r-md)] gap-2',
+  lg: 'px-[22px] py-3.5 text-[15px] rounded-[var(--r-lg)] gap-2',
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = 'primary', size = 'md', loading, disabled, children, ...props }, ref) => {
+  ({ className, variant = 'default', size = 'md', loading, disabled, children, ...props }, ref) => {
     return (
       <button
         ref={ref}
         className={cn(
-          'inline-flex items-center justify-center gap-2 rounded-[var(--radius-md)] font-medium transition-colors duration-150',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
+          'inline-flex items-center justify-center font-medium leading-none whitespace-nowrap',
+          'transition-[background-color,border-color,color,transform] duration-150 active:translate-y-px',
           'disabled:opacity-50 disabled:cursor-not-allowed',
           variantStyles[variant],
           sizeStyles[size],
@@ -47,7 +49,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         {...props}
       >
         {loading && (
-          <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+          <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
           </svg>

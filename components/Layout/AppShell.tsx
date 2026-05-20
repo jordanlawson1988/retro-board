@@ -10,7 +10,7 @@ interface AppShellProps {
 
 export function AppShell({ children, headerRight }: AppShellProps) {
   return (
-    <div className="flex min-h-screen flex-col bg-[var(--color-warm-white)]">
+    <div className="flex min-h-screen flex-col bg-[var(--bg)]">
       <Header rightContent={headerRight} />
       <main className="flex-1">{children}</main>
     </div>

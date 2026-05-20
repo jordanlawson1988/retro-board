@@ -3,8 +3,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { Pencil, Trash2, ThumbsUp, Check, X, Merge, ChevronDown, ChevronRight, SmilePlus } from 'lucide-react';
 import { cn } from '@/utils/cn';
-import { getCardTextColor, CARD_TEXT_CLASSES } from '../../utils/cardColors';
 import { CardColorPicker } from './CardColorPicker';
+import { IconButton } from '@/components/common/IconButton';
+import { Pill } from '@/components/common/Pill';
 import type { Card, CardReactions, Vote } from '@/types';
 
 const EMOJI_PALETTE = ['👍', '👎', '❤️', '😂', '🎉', '🤔', '🔥', '👏'];
@@ -72,7 +73,6 @@ export function RetroCard({
   expanded = false,
   onToggleExpand,
 }: RetroCardProps) {
-  const contrast = CARD_TEXT_CLASSES[getCardTextColor(color)];
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(text);
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
@@ -118,21 +118,29 @@ export function RetroCard({
     }
   };
 
+  // Determine left border style
+  const borderLeftStyle: React.CSSProperties = hasChildren
+    ? { borderLeftWidth: 3, borderLeftColor: 'var(--accent)' }
+    : color
+    ? { borderLeftWidth: 3, borderLeftColor: color }
+    : {};
+
   return (
     <div>
       <div
         onClick={isMergeTarget ? handleCardClick : undefined}
         className={cn(
-          'group relative rounded-[var(--radius-md)] border border-[var(--color-gray-1)] bg-[var(--color-surface)] p-3 shadow-sm',
-          'transition-all duration-200',
+          'group relative rounded-[var(--r-lg)] border border-[var(--line)]',
+          'bg-[var(--surface)] p-3',
+          'shadow-[var(--shadow-xs)] hover:border-[var(--line-strong)] hover:shadow-[var(--shadow-sm)]',
+          'transition-[border-color,box-shadow] duration-150',
           isObscured && !isAuthor && 'select-none',
           colorPickerOpen && 'z-20',
-          isMergeSource && 'ring-2 ring-[var(--color-navy)] opacity-60',
-          isMergeTarget && 'cursor-pointer ring-2 ring-dashed ring-[var(--color-navy)]/50 hover:ring-[var(--color-navy)] hover:bg-[var(--color-navy)]/5',
-          hasChildren && 'border-l-4 border-l-[var(--color-navy)]'
+          isMergeSource && 'ring-2 ring-[var(--ink)] opacity-60',
+          isMergeTarget && 'cursor-pointer ring-2 ring-dashed ring-[var(--accent)]/50 hover:ring-[var(--accent)] hover:bg-[var(--accent-soft)]'
         )}
         style={{
-          backgroundColor: isMergeTarget ? undefined : (color || undefined),
+          ...borderLeftStyle,
           filter: isObscured && !isAuthor ? 'blur(6px)' : 'blur(0px)',
         }}
       >
@@ -145,9 +153,9 @@ export function RetroCard({
               rows={3}
               autoFocus
               className={cn(
-                'w-full resize-none rounded-[var(--radius-sm)] border border-[var(--color-gray-2)]',
-                'bg-[var(--color-surface)] px-2 py-1.5 text-base text-[var(--color-gray-8)]',
-                'focus:border-[var(--color-navy)] focus:outline-none focus:ring-1 focus:ring-[var(--color-navy)]'
+                'w-full resize-none rounded-[var(--r-sm)] border border-[var(--line)]',
+                'bg-[var(--surface)] px-2 py-1.5 text-[var(--ink)]',
+                'focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]'
               )}
             />
             <div className="flex justify-end gap-1">
@@ -156,14 +164,14 @@ export function RetroCard({
                   setEditText(text);
                   setIsEditing(false);
                 }}
-                className="rounded-[var(--radius-sm)] p-2 text-[var(--color-gray-5)] hover:bg-[var(--color-gray-1)]"
+                className="rounded-[var(--r-sm)] p-2 text-[var(--ink-4)] hover:bg-[var(--surface-muted)]"
                 aria-label="Cancel edit"
               >
                 <X size={16} />
               </button>
               <button
                 onClick={handleSave}
-                className="rounded-[var(--radius-sm)] p-2 text-[var(--color-success)] hover:bg-[var(--color-success)]/10"
+                className="rounded-[var(--r-sm)] p-2 text-[var(--success)] hover:bg-[color-mix(in_oklab,var(--success)_12%,transparent)]"
                 aria-label="Save edit"
               >
                 <Check size={16} />
@@ -172,22 +180,24 @@ export function RetroCard({
           </div>
         ) : (
           <>
-            <p className={cn('whitespace-pre-wrap text-sm', contrast.text)}>{text}</p>
+            <p className="whitespace-pre-wrap text-[15px] leading-[1.45] text-[var(--ink)]">{text}</p>
 
             <div className="mt-2 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className={cn('text-xs', contrast.subtext)}>{authorName}</span>
+                <span className="text-[11px] text-[var(--ink-4)]">{authorName}</span>
 
                 {/* Combined count badge */}
                 {hasChildren && (
                   <button
                     onClick={(e) => { e.stopPropagation(); onToggleExpand?.(); }}
-                    className="flex items-center gap-0.5 rounded-[var(--radius-full)] bg-[var(--color-navy)]/10 px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-navy)] hover:bg-[var(--color-navy)]/20 transition-colors"
+                    className="flex items-center"
                     title={`${childCards.length} combined card${childCards.length === 1 ? '' : 's'}`}
                   >
-                    <Merge size={10} />
-                    <span>+{childCards.length}</span>
-                    {expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+                    <Pill variant="tinted">
+                      <Merge size={10} />
+                      merged · +{childCards.length}
+                      {expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+                    </Pill>
                   </button>
                 )}
               </div>
@@ -198,13 +208,14 @@ export function RetroCard({
                   <button
                     onClick={(e) => { e.stopPropagation(); onToggleVote(id); }}
                     disabled={!hasVoted && voteLimitReached}
+                    aria-pressed={hasVoted}
                     className={cn(
-                      'flex items-center gap-1 rounded-[var(--radius-full)] px-2 py-0.5 text-xs transition-colors',
+                      'inline-flex items-center gap-1.5 rounded-full pl-2 pr-2.5 py-1 font-mono tabular-nums text-[11px] border transition-[background-color,color,border-color] duration-150',
                       hasVoted
-                        ? `bg-[var(--color-navy)]/10 ${contrast.text} font-medium`
+                        ? 'bg-[var(--accent-soft)] text-[var(--accent)] border-transparent'
                         : voteLimitReached
-                          ? `cursor-not-allowed ${contrast.icon}`
-                          : `${contrast.subtext} hover:bg-[var(--color-gray-1)] ${contrast.iconHover}`
+                        ? 'cursor-not-allowed bg-[var(--bg-elev)] text-[var(--ink-5)] border-[var(--line)] opacity-50'
+                        : 'bg-[var(--bg-elev)] text-[var(--ink-3)] border-[var(--line)] hover:text-[var(--ink)] hover:border-[var(--line-strong)]'
                     )}
                     aria-label={hasVoted ? 'Remove vote' : voteLimitReached ? 'Vote limit reached' : 'Vote for this card'}
                     title={voteLimitReached && !hasVoted ? 'No votes remaining' : undefined}
@@ -218,7 +229,7 @@ export function RetroCard({
                 )}
                 {/* Vote count (read-only — voting disabled or board completed) */}
                 {(!votingEnabled || isCompleted) && !secretVoting && voteCount > 0 && (
-                  <span className={cn('flex items-center gap-1 rounded-[var(--radius-full)] bg-[var(--color-navy)]/10 px-2 py-0.5 text-xs font-medium', contrast.subtext)}>
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[11px] font-mono tabular-nums text-[var(--ink-4)]">
                     <ThumbsUp size={12} />
                     <span>{voteCount}</span>
                   </span>
@@ -226,68 +237,67 @@ export function RetroCard({
 
                 {/* Author actions (visible on hover) */}
                 {isAuthor && !isCompleted && !isMergeSource && !isMergeTarget && (
-                  <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
+                  <div className="flex items-center gap-0.5 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
                     {canMerge && onStartMerge && (
-                      <button
+                      <IconButton
+                        size="sm"
                         onClick={(e) => { e.stopPropagation(); onStartMerge(); }}
-                        className={cn('rounded-[var(--radius-sm)] p-2', contrast.icon, 'hover:bg-[var(--color-gray-1)]', contrast.iconHover)}
                         aria-label="Combine with another card"
                         title="Combine cards"
                       >
                         <Merge size={14} />
-                      </button>
+                      </IconButton>
                     )}
                     <CardColorPicker
                       currentColor={color}
                       onSelectColor={(newColor) => onUpdate(id, { color: newColor })}
                       onOpenChange={setColorPickerOpen}
-                      iconClassName={contrast.icon}
-                      iconHoverClassName={contrast.iconHover}
                     />
-                    <button
+                    <IconButton
+                      size="sm"
                       onClick={(e) => {
                         e.stopPropagation();
                         setEditText(text);
                         setIsEditing(true);
                       }}
-                      className={cn('rounded-[var(--radius-sm)] p-2', contrast.icon, 'hover:bg-[var(--color-gray-1)]', contrast.iconHover)}
                       aria-label="Edit card"
                     >
                       <Pencil size={14} />
-                    </button>
-                    <button
+                    </IconButton>
+                    <IconButton
+                      size="sm"
                       onClick={(e) => { e.stopPropagation(); onDelete(id); }}
-                      className={cn('rounded-[var(--radius-sm)] p-2', contrast.icon, 'hover:bg-[var(--color-error)]/10 hover:text-[var(--color-error)]')}
                       aria-label="Delete card"
+                      className="hover:bg-[color-mix(in_oklab,var(--danger)_12%,transparent)] hover:text-[var(--danger)]"
                     >
                       <Trash2 size={14} />
-                    </button>
+                    </IconButton>
                   </div>
                 )}
 
                 {/* Non-author merge button */}
                 {!isAuthor && !isCompleted && !isMergeSource && !isMergeTarget && canMerge && onStartMerge && (
-                  <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
-                    <button
+                  <div className="flex items-center gap-0.5 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
+                    <IconButton
+                      size="sm"
                       onClick={(e) => { e.stopPropagation(); onStartMerge(); }}
-                      className={cn('rounded-[var(--radius-sm)] p-2', contrast.icon, 'hover:bg-[var(--color-gray-1)]', contrast.iconHover)}
                       aria-label="Combine with another card"
                       title="Combine cards"
                     >
                       <Merge size={14} />
-                    </button>
+                    </IconButton>
                   </div>
                 )}
 
                 {/* Cancel merge source */}
                 {isMergeSource && onCancelMerge && (
-                  <button
+                  <IconButton
+                    size="sm"
                     onClick={(e) => { e.stopPropagation(); onCancelMerge(); }}
-                    className="rounded-[var(--radius-sm)] p-2 text-[var(--color-gray-5)] hover:bg-[var(--color-gray-1)]"
                     aria-label="Cancel merge"
                   >
                     <X size={14} />
-                  </button>
+                  </IconButton>
                 )}
               </div>
             </div>
@@ -300,27 +310,27 @@ export function RetroCard({
                     key={emoji}
                     onClick={(e) => { e.stopPropagation(); onToggleReaction(id, emoji); }}
                     className={cn(
-                      'flex items-center gap-0.5 rounded-[var(--radius-full)] border px-1.5 py-0.5 text-xs transition-colors',
+                      'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-mono cursor-pointer border transition-[background-color,border-color] duration-150',
                       users.includes(String(currentParticipantId || ''))
-                        ? 'border-[var(--color-navy)] bg-[var(--color-navy)]/10'
-                        : 'border-[var(--color-gray-2)] hover:border-[var(--color-gray-3)]'
+                        ? 'bg-[var(--accent-soft)] text-[var(--accent)] border-transparent'
+                        : 'bg-[var(--surface-muted)] text-[var(--ink-3)] border-transparent hover:bg-[var(--bg-elev)] hover:border-[var(--line)]'
                     )}
                   >
                     <span>{emoji}</span>
-                    <span className={cn('text-[10px]', contrast.subtext)}>{users.length}</span>
+                    <span className="text-[10px]">{users.length}</span>
                   </button>
                 ))}
                 {!isCompleted && (
                   <div className="relative" ref={emojiPickerRef}>
                     <button
                       onClick={(e) => { e.stopPropagation(); setEmojiPickerOpen(!emojiPickerOpen); }}
-                      className={cn('rounded-[var(--radius-full)] p-1 transition-colors', contrast.icon, 'hover:bg-[var(--color-gray-1)]', contrast.iconHover)}
+                      className="rounded-full p-1 text-[var(--ink-4)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--ink-3)]"
                       title="Add reaction"
                     >
                       <SmilePlus size={14} />
                     </button>
                     {emojiPickerOpen && (
-                      <div className="absolute bottom-full left-0 z-30 mb-1 flex gap-0.5 rounded-[var(--radius-md)] border border-[var(--color-gray-2)] bg-[var(--color-surface)] p-1 shadow-md">
+                      <div className="absolute bottom-full left-0 z-30 mb-1 flex gap-0.5 rounded-[var(--r-md)] border border-[var(--line)] bg-[var(--surface)] p-1 shadow-md">
                         {EMOJI_PALETTE.map((emoji) => (
                           <button
                             key={emoji}
@@ -329,7 +339,7 @@ export function RetroCard({
                               onToggleReaction(id, emoji);
                               setEmojiPickerOpen(false);
                             }}
-                            className="rounded p-1 text-sm hover:bg-[var(--color-gray-1)] transition-colors"
+                            className="rounded p-1 text-sm hover:bg-[var(--surface-muted)] transition-colors"
                           >
                             {emoji}
                           </button>

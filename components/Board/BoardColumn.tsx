@@ -3,12 +3,13 @@
 import { useState, useRef, useEffect, useMemo, type ReactNode } from 'react';
 import { useDroppable, useDraggable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { ThumbsUp, Trash2, Palette, Unlink, Merge } from 'lucide-react';
+import { ThumbsUp, Trash2, Palette, Unlink, Merge, MoreHorizontal } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { COLUMN_COLORS } from '@/utils/constants';
 import { RetroCard } from './RetroCard';
 import { SortableCard } from './SortableCard';
 import { AddCardForm } from './AddCardForm';
+import { IconButton } from '@/components/common/IconButton';
 import type { Column, Card, Vote } from '@/types';
 
 interface BoardColumnProps {
@@ -45,10 +46,10 @@ function CombineDropZone({ cardId }: { cardId: string }) {
     <div
       ref={setNodeRef}
       className={cn(
-        'absolute inset-0 z-10 rounded-[var(--radius-md)] border-2 border-dashed transition-all duration-200',
+        'absolute inset-0 z-10 rounded-[var(--r-lg)] border-2 border-dashed transition-all duration-200',
         isOver
-          ? 'border-[var(--color-navy)] bg-[var(--color-navy)]/10'
-          : 'border-[var(--color-navy)]/30 bg-[var(--color-navy)]/3'
+          ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
+          : 'border-[var(--accent)]/40 bg-[var(--accent-soft)]/40'
       )}
     >
       <div className={cn(
@@ -56,10 +57,10 @@ function CombineDropZone({ cardId }: { cardId: string }) {
         isOver ? 'opacity-100' : 'opacity-60'
       )}>
         <span className={cn(
-          'flex items-center gap-1 rounded-[var(--radius-full)] px-2.5 py-0.5 text-[10px] font-medium shadow-sm',
+          'flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-medium shadow-sm',
           isOver
-            ? 'bg-[var(--color-navy)] text-white'
-            : 'bg-[var(--color-navy)]/10 text-[var(--color-navy)]'
+            ? 'bg-[var(--accent)] text-[var(--on-accent)]'
+            : 'bg-[var(--accent-soft)] text-[var(--accent)]'
         )}>
           <Merge size={10} />
           {isOver ? 'Drop to combine' : 'Combine'}
@@ -116,6 +117,7 @@ export function BoardColumn({
   const [editTitle, setEditTitle] = useState(column.title);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [showOverflowMenu, setShowOverflowMenu] = useState(false);
   const [mergeSourceId, setMergeSourceId] = useState<string | null>(null);
   const parentIds = useMemo(() => {
     const ids = new Set<string>();
@@ -144,6 +146,7 @@ export function BoardColumn({
   }, [parentIds]);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const colorPickerRef = useRef<HTMLDivElement>(null);
+  const overflowMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isEditingTitle && titleInputRef.current) {
@@ -164,11 +167,24 @@ export function BoardColumn({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showColorPicker]);
 
+  // Close overflow menu on outside click
+  useEffect(() => {
+    if (!showOverflowMenu) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (overflowMenuRef.current && !overflowMenuRef.current.contains(e.target as Node)) {
+        setShowOverflowMenu(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showOverflowMenu]);
+
   const handleColorSelect = (color: string) => {
     if (onUpdateColumn) {
       onUpdateColumn(column.id, { color });
     }
     setShowColorPicker(false);
+    setShowOverflowMenu(false);
   };
 
   const handleSaveTitle = () => {
@@ -285,16 +301,28 @@ export function BoardColumn({
   return (
     <div
       ref={setNodeRef}
-      className={`flex min-h-[300px] w-[85vw] shrink-0 snap-start flex-col rounded-[var(--radius-lg)] border bg-[var(--color-surface-dim)] sm:w-auto sm:shrink ${
-        isOver ? 'border-[var(--color-navy)] bg-[var(--color-navy)]/5' : 'border-[var(--color-gray-1)]'
-      }`}
+      className={cn(
+        'flex min-h-[300px] w-[85vw] shrink-0 snap-start flex-col sm:w-auto sm:shrink',
+        'bg-[var(--bg-elev)] border rounded-[var(--r-2xl)] overflow-hidden',
+        'transition-[border-color] duration-150',
+        isOver ? 'border-[var(--accent)]' : 'border-[var(--line)]'
+      )}
     >
+      {/* 3px top tint stripe */}
+      <div
+        aria-hidden
+        className="h-[3px] opacity-85 shrink-0"
+        style={{ background: column.color || 'var(--accent)' }}
+      />
+
       {/* Column header */}
-      <div className="flex flex-col border-b border-[var(--color-gray-1)]">
-        <div className="flex items-center gap-2 px-4 py-3">
-          <div
-            className="h-3 w-3 shrink-0 rounded-full"
-            style={{ backgroundColor: column.color }}
+      <div className="flex flex-col">
+        <div className="flex items-center gap-2.5 px-[18px] pt-4 pb-3">
+          {/* 8×8 tint dot */}
+          <span
+            aria-hidden
+            className="w-2 h-2 rounded-[3px] shrink-0"
+            style={{ background: column.color || 'var(--accent)' }}
           />
 
           {isEditingTitle ? (
@@ -305,13 +333,13 @@ export function BoardColumn({
               onKeyDown={handleTitleKeyDown}
               onBlur={handleSaveTitle}
               maxLength={40}
-              className="flex-1 rounded-[var(--radius-sm)] border border-[var(--color-gray-2)] bg-transparent px-1.5 py-0.5 text-base font-semibold text-[var(--color-gray-8)] focus:border-[var(--color-navy)] focus:outline-none focus:ring-1 focus:ring-[var(--color-navy)]"
+              className="flex-1 rounded-[var(--r-sm)] border border-[var(--line)] bg-transparent px-1.5 py-0.5 text-[15px] font-semibold tracking-tight text-[var(--ink)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
             />
           ) : (
             <h3
               className={cn(
-                'flex-1 text-base font-semibold text-[var(--color-gray-8)]',
-                isAdmin && !isCompleted && 'cursor-text rounded-[var(--radius-sm)] px-1.5 py-0.5 hover:bg-[var(--color-gray-1)] transition-colors'
+                'flex-1 text-[15px] font-semibold tracking-tight text-[var(--ink)]',
+                isAdmin && !isCompleted && 'cursor-text rounded-[var(--r-sm)] px-1.5 py-0.5 hover:bg-[var(--surface-muted)] transition-colors'
               )}
               onClick={isAdmin && !isCompleted ? () => {
                 setEditTitle(column.title);
@@ -322,83 +350,106 @@ export function BoardColumn({
             </h3>
           )}
 
-          <span className="rounded-[var(--radius-full)] bg-[var(--color-gray-1)] px-2 py-0.5 text-xs font-medium text-[var(--color-gray-5)]">
+          <span className="font-mono tabular-nums text-[12px] text-[var(--ink-4)]">
             {cards.length}
           </span>
           {votingEnabled && !secretVoting && columnVoteCount > 0 && (
-            <span className="flex items-center gap-1 rounded-[var(--radius-full)] bg-[var(--color-navy)]/10 px-2 py-0.5 text-xs font-medium text-[var(--color-navy)]">
+            <span className="flex items-center gap-1 rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[11px] font-mono tabular-nums text-[var(--accent)]">
               <ThumbsUp size={10} />
               {columnVoteCount}
             </span>
           )}
+
+          {/* Admin overflow menu */}
+          {isAdmin && !isCompleted && !isEditingTitle && (
+            <div className="relative" ref={overflowMenuRef}>
+              <IconButton
+                size="sm"
+                onClick={() => setShowOverflowMenu(!showOverflowMenu)}
+                aria-label="Column actions"
+              >
+                <MoreHorizontal size={16} />
+              </IconButton>
+
+              {showOverflowMenu && (
+                <div className="absolute right-0 top-full z-30 mt-1 min-w-[140px] rounded-[var(--r-md)] border border-[var(--line)] bg-[var(--surface)] py-1 shadow-[var(--shadow-md)]">
+                  <button
+                    onClick={() => {
+                      setShowColorPicker(!showColorPicker);
+                      setShowOverflowMenu(false);
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-[13px] text-[var(--ink-3)] hover:bg-[var(--surface-muted)] hover:text-[var(--ink)] transition-colors"
+                  >
+                    <Palette size={14} />
+                    <span>Column color</span>
+                  </button>
+                  {canDeleteColumn && (
+                    <button
+                      onClick={() => {
+                        setShowDeleteConfirm(true);
+                        setShowOverflowMenu(false);
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-[13px] text-[var(--danger)] hover:bg-[color-mix(in_oklab,var(--danger)_8%,transparent)] transition-colors"
+                    >
+                      <Trash2 size={14} />
+                      <span>Delete column</span>
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Color picker popover (shown after clicking Color in menu) */}
+              {showColorPicker && (
+                <div
+                  ref={colorPickerRef}
+                  className="absolute right-0 top-full z-30 mt-1 rounded-[var(--r-md)] border border-[var(--line)] bg-[var(--surface)] p-2 shadow-[var(--shadow-md)]"
+                >
+                  <div className="grid grid-cols-6 gap-1.5">
+                    {COLUMN_COLORS.map((color) => (
+                      <button
+                        key={color}
+                        onClick={() => handleColorSelect(color)}
+                        className={cn(
+                          'h-7 w-7 rounded-full border-2 transition-transform hover:scale-110',
+                          column.color === color
+                            ? 'border-[var(--ink)] ring-2 ring-[var(--ink)]/20'
+                            : 'border-transparent'
+                        )}
+                        style={{ backgroundColor: color }}
+                        aria-label={`Select color ${color}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Admin action bar */}
-        {isAdmin && !isCompleted && !isEditingTitle && (
-          <div className="relative flex items-center gap-1 border-t border-[var(--color-gray-1)] px-3 py-1.5">
-            <button
-              onClick={() => setShowColorPicker(!showColorPicker)}
-              className="flex items-center gap-1.5 rounded-[var(--radius-md)] px-2.5 py-1.5 text-xs text-[var(--color-gray-5)] hover:bg-[var(--color-gray-1)] hover:text-[var(--color-gray-7)] transition-colors"
-              aria-label="Change column color"
-            >
-              <Palette size={14} />
-              <span>Color</span>
-            </button>
-            {canDeleteColumn && (
-              <button
-                onClick={() => setShowDeleteConfirm(true)}
-                className="flex items-center gap-1.5 rounded-[var(--radius-md)] px-2.5 py-1.5 text-xs text-[var(--color-gray-5)] hover:bg-[var(--color-error)]/10 hover:text-[var(--color-error)] transition-colors"
-                aria-label="Delete column"
-              >
-                <Trash2 size={14} />
-                <span>Delete</span>
-              </button>
-            )}
-
-            {/* Color picker popover */}
-            {showColorPicker && (
-              <div
-                ref={colorPickerRef}
-                className="absolute left-2 top-full z-30 mt-1 rounded-[var(--radius-md)] border border-[var(--color-gray-2)] bg-[var(--color-surface)] p-2 shadow-lg"
-              >
-                <div className="grid grid-cols-6 gap-1.5">
-                  {COLUMN_COLORS.map((color) => (
-                    <button
-                      key={color}
-                      onClick={() => handleColorSelect(color)}
-                      className={cn(
-                        'h-7 w-7 rounded-full border-2 transition-transform hover:scale-110',
-                        column.color === color
-                          ? 'border-[var(--color-gray-8)] ring-2 ring-[var(--color-gray-8)]/20'
-                          : 'border-transparent'
-                      )}
-                      style={{ backgroundColor: color }}
-                      aria-label={`Select color ${color}`}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+        {/* Column description */}
+        {column.description && (
+          <p className="px-[18px] pb-1 text-[13px] text-[var(--ink-4)]">
+            {column.description}
+          </p>
         )}
       </div>
 
       {/* Delete confirmation */}
       {showDeleteConfirm && (
-        <div className="flex items-center justify-between bg-[var(--color-error)]/5 px-4 py-2.5 text-sm">
-          <span className="text-[var(--color-error)]">
+        <div className="flex items-center justify-between bg-[color-mix(in_oklab,var(--danger)_8%,transparent)] px-4 py-2.5 text-sm">
+          <span className="text-[var(--danger)]">
             Delete column{cards.length > 0 ? ` and ${cards.length} card${cards.length === 1 ? '' : 's'}` : ''}?
           </span>
           <div className="flex gap-2">
             <button
               onClick={() => setShowDeleteConfirm(false)}
-              className="rounded-[var(--radius-sm)] px-3 py-1.5 text-xs text-[var(--color-gray-5)] hover:bg-[var(--color-gray-1)]"
+              className="rounded-[var(--r-sm)] px-3 py-1.5 text-xs text-[var(--ink-4)] hover:bg-[var(--surface-muted)]"
             >
               Cancel
             </button>
             <button
               onClick={handleDeleteColumn}
-              className="rounded-[var(--radius-sm)] bg-[var(--color-error)] px-3 py-1.5 text-xs text-white hover:opacity-90"
+              className="rounded-[var(--r-sm)] bg-[var(--danger)] px-3 py-1.5 text-xs text-[var(--on-accent)] hover:opacity-90"
             >
               Delete
             </button>
@@ -406,20 +457,13 @@ export function BoardColumn({
         </div>
       )}
 
-      {/* Column description */}
-      {column.description && (
-        <p className="border-b border-[var(--color-gray-1)] px-4 py-2 text-sm text-[var(--color-gray-4)]">
-          {column.description}
-        </p>
-      )}
-
       {/* Merge mode cancel overlay (button-based merge fallback) */}
       {mergeSourceId && (
-        <div className="flex items-center justify-between bg-[var(--color-navy)]/5 px-4 py-2 text-sm">
-          <span className="text-[var(--color-navy)] font-medium">Select a card to merge into</span>
+        <div className="flex items-center justify-between bg-[var(--accent-soft)] px-4 py-2 text-sm">
+          <span className="text-[var(--accent)] font-medium">Select a card to merge into</span>
           <button
             onClick={() => setMergeSourceId(null)}
-            className="rounded-[var(--radius-sm)] px-3 py-1 text-xs text-[var(--color-gray-5)] hover:bg-[var(--color-gray-1)]"
+            className="rounded-[var(--r-sm)] px-3 py-1 text-xs text-[var(--ink-4)] hover:bg-[var(--surface-muted)]"
           >
             Cancel
           </button>
@@ -492,7 +536,7 @@ export function BoardColumn({
 
                 {/* Expanded child cards (outside SortableCard for independent drag) */}
                 {isExpanded && children.length > 0 && (
-                  <div className="ml-3 mt-1 flex flex-col gap-1.5 border-l-2 border-[var(--color-navy)]/20 pl-2">
+                  <div className="ml-3 mt-1 flex flex-col gap-1.5 border-l-2 border-[var(--accent)]/20 pl-2">
                     {children.map((child) => {
                       const childVoteCount = voteCountByCard.get(child.id) || 0;
                       const childHasVoted = votes.some(
@@ -507,7 +551,7 @@ export function BoardColumn({
                             <div className="absolute -top-1 right-1 z-10 opacity-0 transition-opacity [div:hover>&]:opacity-100">
                               <button
                                 onClick={(e) => { e.stopPropagation(); onUncombineCard(child.id); }}
-                                className="flex items-center gap-0.5 rounded-[var(--radius-full)] bg-[var(--color-surface)] px-1.5 py-0.5 text-[10px] text-[var(--color-gray-5)] shadow-sm border border-[var(--color-gray-2)] hover:text-[var(--color-navy)] hover:border-[var(--color-navy)]/30 transition-colors"
+                                className="flex items-center gap-0.5 rounded-full bg-[var(--surface)] px-1.5 py-0.5 text-[10px] text-[var(--ink-4)] shadow-sm border border-[var(--line)] hover:text-[var(--accent)] hover:border-[var(--accent)]/30 transition-colors"
                                 title="Uncombine card"
                                 aria-label="Uncombine card"
                               >

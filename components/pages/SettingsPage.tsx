@@ -178,6 +178,88 @@ function ChangePasswordBlock() {
   );
 }
 
+interface SessionRow { token: string; createdAt?: Date | string; userAgent?: string | null; }
+
+function SecuritySessionsBlock() {
+  const signOut = useAuthStore((s) => s.signOut);
+  const router = useRouter();
+  const [sessions, setSessions] = useState<SessionRow[]>([]);
+  const [currentToken, setCurrentToken] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    const [list, current] = await Promise.all([
+      authClient.listSessions(),
+      authClient.getSession(),
+    ]);
+    setSessions((list.data as SessionRow[] | undefined) ?? []);
+    setCurrentToken((current.data?.session as { token?: string } | undefined)?.token ?? null);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const revokeOthers = async () => {
+    setBusy(true);
+    await authClient.revokeOtherSessions();
+    setBusy(false);
+    await load();
+  };
+
+  const doSignOut = async () => {
+    await signOut();
+    router.push('/');
+  };
+
+  return (
+    <div className="mt-6">
+      <h3 className="text-[14px] font-semibold mb-3">Active sessions</h3>
+      {loading ? (
+        <p className="text-[13px] text-[var(--ink-4)]">Loading sessions…</p>
+      ) : (
+        <ul className="flex flex-col gap-2 mb-3">
+          {sessions.map((s) => (
+            <li key={s.token} className="flex items-center justify-between px-3 py-2 rounded-[var(--r-md)] bg-[var(--surface-muted)] border border-[var(--line)] text-[13px]">
+              <span className="text-[var(--ink-2)] truncate">{s.userAgent || 'Unknown device'}</span>
+              {s.token === currentToken && (
+                <span className="ml-2 shrink-0 text-[11px] px-2 py-0.5 rounded-full bg-[var(--accent-soft)] text-[var(--accent)]">This device</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={revokeOthers}
+          disabled={busy || sessions.length <= 1}
+          className="px-3.5 py-2.5 rounded-[var(--r-md)] text-[13px] font-medium bg-[var(--surface)] border border-[var(--line)] text-[var(--ink)] hover:bg-[var(--surface-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {busy ? 'Working…' : 'Sign out all other devices'}
+        </button>
+        <button
+          type="button"
+          onClick={doSignOut}
+          className="px-3.5 py-2.5 rounded-[var(--r-md)] text-[13px] font-medium bg-[var(--surface)] border border-[var(--line)] text-[var(--ink)] hover:bg-[var(--surface-hover)]"
+        >
+          Sign out
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SecuritySection() {
+  return (
+    <Section title="Security">
+      <ChangePasswordBlock />
+      <SecuritySessionsBlock />
+    </Section>
+  );
+}
+
 export function SettingsPage() {
   const router = useRouter();
   const { user, isAuthenticated, loading: authLoading } = useAuthStore();
@@ -207,6 +289,7 @@ export function SettingsPage() {
         <div className="flex flex-col gap-4">
           <AppearanceSection />
           <ProfileSection user={user} />
+          <SecuritySection />
         </div>
       </div>
     </AppShell>

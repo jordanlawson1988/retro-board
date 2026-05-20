@@ -81,30 +81,30 @@ export function SwimlaneView({
           return (
             <div
               key={col.id}
-              className="rounded-[var(--radius-lg)] border border-[var(--color-gray-1)] bg-[var(--color-surface-dim)]"
+              className="rounded-[var(--r-lg)] border border-[var(--line)] bg-[var(--surface-muted)]"
             >
               {/* Column swimlane header */}
               <button
                 onClick={() => toggleRow(col.id)}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--color-gray-0)]"
+                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--surface-hover)]"
               >
                 {isCollapsed ? (
-                  <ChevronRight size={16} className="shrink-0 text-[var(--color-gray-4)]" />
+                  <ChevronRight size={16} className="shrink-0 text-[var(--ink-4)]" />
                 ) : (
-                  <ChevronDown size={16} className="shrink-0 text-[var(--color-gray-4)]" />
+                  <ChevronDown size={16} className="shrink-0 text-[var(--ink-4)]" />
                 )}
                 <div
                   className="h-3 w-3 shrink-0 rounded-full"
                   style={{ backgroundColor: col.color }}
                 />
-                <span className="text-sm font-semibold text-[var(--color-gray-8)]">
+                <span className="text-sm font-semibold text-[var(--ink)]">
                   {col.title}
                 </span>
-                <span className="rounded-[var(--radius-full)] bg-[var(--color-gray-1)] px-2 py-0.5 text-xs font-medium text-[var(--color-gray-5)]">
+                <span className="rounded-[var(--r-pill)] bg-[var(--bg-elev)] px-2 py-0.5 text-xs font-medium text-[var(--ink-4)]">
                   {colCards.length}
                 </span>
                 {votingEnabled && !secretVoting && colVoteCount > 0 && (
-                  <span className="flex items-center gap-1 rounded-[var(--radius-full)] bg-[var(--color-navy)]/10 px-2 py-0.5 text-xs font-medium text-[var(--color-navy)]">
+                  <span className="flex items-center gap-1 rounded-[var(--r-pill)] bg-[var(--accent-soft)] px-2 py-0.5 text-xs font-medium text-[var(--accent)]">
                     {colVoteCount} vote{colVoteCount === 1 ? '' : 's'}
                   </span>
                 )}
@@ -112,7 +112,7 @@ export function SwimlaneView({
 
               {/* Column cards */}
               {!isCollapsed && (
-                <div className="border-t border-[var(--color-gray-1)] p-3">
+                <div className="border-t border-[var(--line)] p-3">
                   {colCards.length > 0 ? (
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                       {colCards.map((card) => {
@@ -145,7 +145,7 @@ export function SwimlaneView({
                       })}
                     </div>
                   ) : (
-                    <div className="rounded-[var(--radius-sm)] border border-dashed border-[var(--color-gray-1)] p-6 text-center text-sm text-[var(--color-gray-3)]">
+                    <div className="rounded-[var(--r-sm)] border border-dashed border-[var(--line)] p-6 text-center text-sm text-[var(--ink-3)]">
                       No cards in this column
                     </div>
                   )}
@@ -156,8 +156,8 @@ export function SwimlaneView({
         })}
 
         {sortedColumns.length === 0 && (
-          <div className="rounded-[var(--radius-lg)] border-2 border-dashed border-[var(--color-gray-2)] bg-[var(--color-surface-subtle)] p-12 text-center">
-            <p className="text-sm text-[var(--color-gray-4)]">No columns to display</p>
+          <div className="rounded-[var(--r-lg)] border-2 border-dashed border-[var(--line)] bg-[var(--surface-muted)] p-12 text-center">
+            <p className="text-sm text-[var(--ink-4)]">No columns to display</p>
           </div>
         )}
       </div>

@@ -2,6 +2,7 @@
 
 import { Monitor, Sun, Moon } from 'lucide-react';
 import { useTheme, type Theme } from '@/hooks/useTheme';
+import { IconButton } from '@/components/common';
 
 const THEME_META: Record<Theme, { icon: typeof Monitor; label: string }> = {
   system: { icon: Monitor, label: 'System theme' },
@@ -14,14 +15,8 @@ export function ThemeToggle() {
   const { icon: Icon, label } = THEME_META[theme];
 
   return (
-    <button
-      type="button"
-      onClick={cycleTheme}
-      aria-label={label}
-      title={label}
-      className="rounded-[var(--radius-md)] p-2 text-[var(--color-gray-5)] transition-colors hover:bg-[var(--color-gray-1)] hover:text-[var(--color-gray-7)]"
-    >
-      <Icon size={18} />
-    </button>
+    <IconButton onClick={cycleTheme} aria-label={label} title={label}>
+      <Icon size={16} />
+    </IconButton>
   );
 }

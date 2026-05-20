@@ -260,6 +260,51 @@ function SecuritySection() {
   );
 }
 
+function DangerZoneSection() {
+  const router = useRouter();
+  const [confirmText, setConfirmText] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const canDelete = confirmText === 'DELETE' && password.length > 0 && !busy;
+
+  const inputCls =
+    'w-full px-3 py-2.5 rounded-[var(--r-md)] text-[15px] bg-[var(--surface)] border border-[var(--line)] text-[var(--ink)] outline-none focus:border-[var(--danger)] focus:shadow-[0_0_0_3px_color-mix(in_oklab,var(--danger)_20%,transparent)] transition-[border-color,box-shadow] duration-150';
+
+  const doDelete = async () => {
+    setBusy(true);
+    setErr(null);
+    const { error } = await authClient.deleteUser({ password });
+    if (error) { setBusy(false); setErr(error.message ?? 'Could not delete account.'); return; }
+    router.push('/');
+  };
+
+  return (
+    <section className="bg-[var(--surface)] border border-[var(--danger)] rounded-[var(--r-xl)] p-6">
+      <h2 className="text-[var(--t-h3)] font-semibold mb-1 text-[var(--danger)]">Delete account</h2>
+      <p className="text-[13px] text-[var(--ink-3)] mb-4">
+        This permanently deletes your account. Boards you created will remain accessible to their
+        members but will no longer be owned by you. This cannot be undone.
+      </p>
+      <div className="flex flex-col gap-2.5 max-w-sm">
+        <label className="text-[12px] text-[var(--ink-3)]">Type <span className="font-mono font-semibold text-[var(--ink)]">DELETE</span> to confirm</label>
+        <input value={confirmText} onChange={(e) => setConfirmText(e.target.value)} className={inputCls} placeholder="DELETE" />
+        <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className={inputCls} placeholder="Your password" />
+        <button
+          type="button"
+          onClick={doDelete}
+          disabled={!canDelete}
+          className="self-start px-3.5 py-2.5 rounded-[var(--r-md)] text-[13px] font-medium bg-[var(--danger)] text-white disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {busy ? 'Deleting…' : 'Delete my account'}
+        </button>
+        {err && <p className="text-[12px] text-[var(--danger)]">{err}</p>}
+      </div>
+    </section>
+  );
+}
+
 export function SettingsPage() {
   const router = useRouter();
   const { user, isAuthenticated, loading: authLoading } = useAuthStore();
@@ -290,6 +335,7 @@ export function SettingsPage() {
           <AppearanceSection />
           <ProfileSection user={user} />
           <SecuritySection />
+          <DangerZoneSection />
         </div>
       </div>
     </AppShell>

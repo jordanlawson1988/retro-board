@@ -83,7 +83,7 @@ assertBoardOwner(boardId): Promise<{ userId: string }>     // strict owner (or a
 | Rename | `PATCH /api/boards/[id]` (extend) | owner | `{ title?, description? }` → `{ ok }` + Ably `board-updated` |
 | Soft-delete | `DELETE /api/boards/[id]` | owner | — → sets `deleted_at`, `{ ok }` |
 | Restore | `POST /api/boards/[id]` `{action:'restore'}` | owner | clears `deleted_at` |
-| Reopen | `POST /api/boards/[id]` `{action:'reopen'}` | owner | clears `archived_at`, sets `settings.board_locked=false`; Ably `board-reopened` |
+| Reopen | `POST /api/boards/[id]` `{action:'reopen'}` | owner | clears `archived_at`, sets `settings.board_locked=false`; **leaves `card_visibility` as-is** (Complete had set it `visible`; facilitator can re-hide); Ably `board-reopened` |
 | Delete forever | `POST /api/boards/[id]` `{action:'purge'}` | owner | hard delete (cascades) — from Trash only |
 | Regenerate code | `POST /api/boards/[id]/regenerate-code` | owner | → `{ joinCode }` (new unique 5-digit) |
 | Role change | members `POST` (existing upsert) | owner | `{ userId, role }` |

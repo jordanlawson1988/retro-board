@@ -11,7 +11,7 @@ export async function POST(request: Request) {
     }
 
     const [board] = await sql`
-      SELECT id, title, owner_id, archived_at FROM boards WHERE join_code = ${joinCode}
+      SELECT id, title, owner_id, archived_at FROM boards WHERE join_code = ${joinCode} AND deleted_at IS NULL
     `;
 
     if (!board) {

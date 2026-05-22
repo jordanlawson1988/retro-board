@@ -21,6 +21,7 @@ export async function GET() {
       (
         SELECT COUNT(*)::int FROM boards b
         WHERE b.archived_at IS NULL
+          AND b.deleted_at IS NULL
           AND (
             b.owner_id = ${userId}
             OR EXISTS (SELECT 1 FROM participants p WHERE p.board_id = b.id AND p.user_id = ${userId})

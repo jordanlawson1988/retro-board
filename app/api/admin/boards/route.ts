@@ -8,11 +8,11 @@ export async function GET(request: Request) {
   const pageSize = Number(url.searchParams.get('pageSize') || '10');
   const offset = page * pageSize;
 
-  // Get counts for filter tabs
+  // Get counts for filter tabs (soft-deleted boards excluded everywhere)
   const [allCount, activeCount, completedCount] = await Promise.all([
-    sql`SELECT count(*) as count FROM boards`,
-    sql`SELECT count(*) as count FROM boards WHERE archived_at IS NULL`,
-    sql`SELECT count(*) as count FROM boards WHERE archived_at IS NOT NULL`,
+    sql`SELECT count(*) as count FROM boards WHERE deleted_at IS NULL`,
+    sql`SELECT count(*) as count FROM boards WHERE archived_at IS NULL AND deleted_at IS NULL`,
+    sql`SELECT count(*) as count FROM boards WHERE archived_at IS NOT NULL AND deleted_at IS NULL`,
   ]);
 
   // Build main query based on filter and search
@@ -20,25 +20,25 @@ export async function GET(request: Request) {
   let totalCount;
 
   if (search && filter === 'active') {
-    boards = await sql`SELECT * FROM boards WHERE title ILIKE ${'%' + search + '%'} AND archived_at IS NULL ORDER BY created_at DESC LIMIT ${pageSize} OFFSET ${offset}`;
-    const [tc] = await sql`SELECT count(*) as count FROM boards WHERE title ILIKE ${'%' + search + '%'} AND archived_at IS NULL`;
+    boards = await sql`SELECT * FROM boards WHERE title ILIKE ${'%' + search + '%'} AND archived_at IS NULL AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ${pageSize} OFFSET ${offset}`;
+    const [tc] = await sql`SELECT count(*) as count FROM boards WHERE title ILIKE ${'%' + search + '%'} AND archived_at IS NULL AND deleted_at IS NULL`;
     totalCount = Number(tc.count);
   } else if (search && filter === 'completed') {
-    boards = await sql`SELECT * FROM boards WHERE title ILIKE ${'%' + search + '%'} AND archived_at IS NOT NULL ORDER BY created_at DESC LIMIT ${pageSize} OFFSET ${offset}`;
-    const [tc] = await sql`SELECT count(*) as count FROM boards WHERE title ILIKE ${'%' + search + '%'} AND archived_at IS NOT NULL`;
+    boards = await sql`SELECT * FROM boards WHERE title ILIKE ${'%' + search + '%'} AND archived_at IS NOT NULL AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ${pageSize} OFFSET ${offset}`;
+    const [tc] = await sql`SELECT count(*) as count FROM boards WHERE title ILIKE ${'%' + search + '%'} AND archived_at IS NOT NULL AND deleted_at IS NULL`;
     totalCount = Number(tc.count);
   } else if (search) {
-    boards = await sql`SELECT * FROM boards WHERE title ILIKE ${'%' + search + '%'} ORDER BY created_at DESC LIMIT ${pageSize} OFFSET ${offset}`;
-    const [tc] = await sql`SELECT count(*) as count FROM boards WHERE title ILIKE ${'%' + search + '%'}`;
+    boards = await sql`SELECT * FROM boards WHERE title ILIKE ${'%' + search + '%'} AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ${pageSize} OFFSET ${offset}`;
+    const [tc] = await sql`SELECT count(*) as count FROM boards WHERE title ILIKE ${'%' + search + '%'} AND deleted_at IS NULL`;
     totalCount = Number(tc.count);
   } else if (filter === 'active') {
-    boards = await sql`SELECT * FROM boards WHERE archived_at IS NULL ORDER BY created_at DESC LIMIT ${pageSize} OFFSET ${offset}`;
+    boards = await sql`SELECT * FROM boards WHERE archived_at IS NULL AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ${pageSize} OFFSET ${offset}`;
     totalCount = Number(activeCount[0].count);
   } else if (filter === 'completed') {
-    boards = await sql`SELECT * FROM boards WHERE archived_at IS NOT NULL ORDER BY created_at DESC LIMIT ${pageSize} OFFSET ${offset}`;
+    boards = await sql`SELECT * FROM boards WHERE archived_at IS NOT NULL AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ${pageSize} OFFSET ${offset}`;
     totalCount = Number(completedCount[0].count);
   } else {
-    boards = await sql`SELECT * FROM boards ORDER BY created_at DESC LIMIT ${pageSize} OFFSET ${offset}`;
+    boards = await sql`SELECT * FROM boards WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT ${pageSize} OFFSET ${offset}`;
     totalCount = Number(allCount[0].count);
   }
 

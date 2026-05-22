@@ -11,6 +11,23 @@ export interface Board {
   settings: BoardSettings;
   created_at: string;
   archived_at: string | null;
+  deleted_at: string | null;     // null = live; set when soft-deleted (in Trash)
+}
+
+/** Board view-model from /api/user/boards: board fields + activity counts + this user's role. */
+export interface DashboardBoard {
+  id: string;
+  title: string;
+  description: string | null;
+  template: string;
+  created_at: string;
+  archived_at: string | null;
+  deleted_at: string | null;
+  join_code?: string;
+  card_count: number;
+  participant_count: number;
+  action_count: number;
+  user_role: string;
 }
 
 export type BoardTemplate =
@@ -161,7 +178,11 @@ export interface User {
 }
 
 // Board membership
-export type BoardMemberRole = 'owner' | 'facilitator' | 'participant' | 'viewer';
+export const BOARD_MEMBER_ROLES = ['owner', 'facilitator', 'participant', 'viewer'] as const;
+export type BoardMemberRole = (typeof BOARD_MEMBER_ROLES)[number];
+export function isBoardMemberRole(v: unknown): v is BoardMemberRole {
+  return typeof v === 'string' && (BOARD_MEMBER_ROLES as readonly string[]).includes(v);
+}
 
 export interface BoardMember {
   id: string;

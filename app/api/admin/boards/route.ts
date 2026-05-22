@@ -8,11 +8,11 @@ export async function GET(request: Request) {
   const pageSize = Number(url.searchParams.get('pageSize') || '10');
   const offset = page * pageSize;
 
-  // Get counts for filter tabs
+  // Get counts for filter tabs (soft-deleted boards excluded everywhere)
   const [allCount, activeCount, completedCount] = await Promise.all([
-    sql`SELECT count(*) as count FROM boards`,
-    sql`SELECT count(*) as count FROM boards WHERE archived_at IS NULL`,
-    sql`SELECT count(*) as count FROM boards WHERE archived_at IS NOT NULL`,
+    sql`SELECT count(*) as count FROM boards WHERE deleted_at IS NULL`,
+    sql`SELECT count(*) as count FROM boards WHERE archived_at IS NULL AND deleted_at IS NULL`,
+    sql`SELECT count(*) as count FROM boards WHERE archived_at IS NOT NULL AND deleted_at IS NULL`,
   ]);
 
   // Build main query based on filter and search
@@ -20,32 +20,32 @@ export async function GET(request: Request) {
   let totalCount;
 
   if (search && filter === 'active') {
-    boards = await sql`SELECT * FROM boards WHERE title ILIKE ${'%' + search + '%'} AND archived_at IS NULL ORDER BY created_at DESC LIMIT ${pageSize} OFFSET ${offset}`;
-    const [tc] = await sql`SELECT count(*) as count FROM boards WHERE title ILIKE ${'%' + search + '%'} AND archived_at IS NULL`;
+    boards = await sql`SELECT * FROM boards WHERE title ILIKE ${'%' + search + '%'} AND archived_at IS NULL AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ${pageSize} OFFSET ${offset}`;
+    const [tc] = await sql`SELECT count(*) as count FROM boards WHERE title ILIKE ${'%' + search + '%'} AND archived_at IS NULL AND deleted_at IS NULL`;
     totalCount = Number(tc.count);
   } else if (search && filter === 'completed') {
-    boards = await sql`SELECT * FROM boards WHERE title ILIKE ${'%' + search + '%'} AND archived_at IS NOT NULL ORDER BY created_at DESC LIMIT ${pageSize} OFFSET ${offset}`;
-    const [tc] = await sql`SELECT count(*) as count FROM boards WHERE title ILIKE ${'%' + search + '%'} AND archived_at IS NOT NULL`;
+    boards = await sql`SELECT * FROM boards WHERE title ILIKE ${'%' + search + '%'} AND archived_at IS NOT NULL AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ${pageSize} OFFSET ${offset}`;
+    const [tc] = await sql`SELECT count(*) as count FROM boards WHERE title ILIKE ${'%' + search + '%'} AND archived_at IS NOT NULL AND deleted_at IS NULL`;
     totalCount = Number(tc.count);
   } else if (search) {
-    boards = await sql`SELECT * FROM boards WHERE title ILIKE ${'%' + search + '%'} ORDER BY created_at DESC LIMIT ${pageSize} OFFSET ${offset}`;
-    const [tc] = await sql`SELECT count(*) as count FROM boards WHERE title ILIKE ${'%' + search + '%'}`;
+    boards = await sql`SELECT * FROM boards WHERE title ILIKE ${'%' + search + '%'} AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ${pageSize} OFFSET ${offset}`;
+    const [tc] = await sql`SELECT count(*) as count FROM boards WHERE title ILIKE ${'%' + search + '%'} AND deleted_at IS NULL`;
     totalCount = Number(tc.count);
   } else if (filter === 'active') {
-    boards = await sql`SELECT * FROM boards WHERE archived_at IS NULL ORDER BY created_at DESC LIMIT ${pageSize} OFFSET ${offset}`;
+    boards = await sql`SELECT * FROM boards WHERE archived_at IS NULL AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ${pageSize} OFFSET ${offset}`;
     totalCount = Number(activeCount[0].count);
   } else if (filter === 'completed') {
-    boards = await sql`SELECT * FROM boards WHERE archived_at IS NOT NULL ORDER BY created_at DESC LIMIT ${pageSize} OFFSET ${offset}`;
+    boards = await sql`SELECT * FROM boards WHERE archived_at IS NOT NULL AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ${pageSize} OFFSET ${offset}`;
     totalCount = Number(completedCount[0].count);
   } else {
-    boards = await sql`SELECT * FROM boards ORDER BY created_at DESC LIMIT ${pageSize} OFFSET ${offset}`;
+    boards = await sql`SELECT * FROM boards WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT ${pageSize} OFFSET ${offset}`;
     totalCount = Number(allCount[0].count);
   }
 
   // Get participant and card counts
-  const boardIds = boards.map((b: any) => b.id);
-  let participantCounts: any[] = [];
-  let cardCounts: any[] = [];
+  const boardIds = boards.map((b) => b.id);
+  let participantCounts: Record<string, unknown>[] = [];
+  let cardCounts: Record<string, unknown>[] = [];
   if (boardIds.length > 0) {
     [participantCounts, cardCounts] = await Promise.all([
       sql`SELECT board_id, count(*) as count FROM participants WHERE board_id = ANY(${boardIds}) GROUP BY board_id`,
@@ -54,10 +54,10 @@ export async function GET(request: Request) {
   }
 
   return Response.json({
-    boards: boards.map((b: any) => ({
+    boards: boards.map((b) => ({
       ...b,
-      participant_count: Number(participantCounts.find((p: any) => p.board_id === b.id)?.count ?? 0),
-      card_count: Number(cardCounts.find((c: any) => c.board_id === b.id)?.count ?? 0),
+      participant_count: Number(participantCounts.find((p) => p.board_id === b.id)?.count ?? 0),
+      card_count: Number(cardCounts.find((c) => c.board_id === b.id)?.count ?? 0),
     })),
     totalCount,
     counts: {

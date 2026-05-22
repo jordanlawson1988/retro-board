@@ -5,24 +5,18 @@ import { useRouter } from 'next/navigation';
 import { Plus, Search } from 'lucide-react';
 import { AppShell } from '@/components/Layout';
 import { Button, Chip } from '@/components/common';
-import { BoardCard } from '@/components/Dashboard';
+import {
+  BoardCard,
+  RenameBoardModal,
+  DeleteBoardDialog,
+  ManageMembersModal,
+  RegenerateCodeModal,
+} from '@/components/Dashboard';
 import { useAuthStore } from '@/stores/authStore';
 import { cn } from '@/utils/cn';
+import type { DashboardBoard } from '@/types';
 
-type Filter = 'all' | 'active' | 'completed';
-
-interface DashboardBoard {
-  id: string;
-  title: string;
-  description: string | null;
-  template: string;
-  created_at: string;
-  archived_at: string | null;
-  card_count: number;
-  participant_count: number;
-  action_count: number;
-  user_role: string;
-}
+type Filter = 'all' | 'active' | 'completed' | 'trash';
 
 interface UserStats {
   activeBoards: number;
@@ -39,6 +33,15 @@ export function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const { user, isAuthenticated, loading: authLoading } = useAuthStore();
+
+  // Which board (if any) each modal is acting on.
+  const [renameTarget, setRenameTarget] = useState<DashboardBoard | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    board: DashboardBoard;
+    mode: 'trash' | 'forever';
+  } | null>(null);
+  const [membersTarget, setMembersTarget] = useState<DashboardBoard | null>(null);
+  const [codeTarget, setCodeTarget] = useState<DashboardBoard | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -64,14 +67,63 @@ export function DashboardPage() {
     if (authLoading || !isAuthenticated) return;
     fetch('/api/user/stats')
       .then((r) => (r.ok ? r.json() : null))
-      .then((data) => { if (data) setStats(data as UserStats); })
+      .then((data) => {
+        if (data) setStats(data as UserStats);
+      })
       .catch(() => {});
   }, [isAuthenticated, authLoading]);
+
+  // --- optimistic list helpers ---
+  const removeBoard = (id: string) => setBoards((bs) => bs.filter((b) => b.id !== id));
+  const patchBoard = (id: string, patch: Partial<DashboardBoard>) =>
+    setBoards((bs) => bs.map((b) => (b.id === id ? { ...b, ...patch } : b)));
+
+  // --- action handlers (direct fetch + optimistic update, matching dashboard style) ---
+  async function handleReopen(board: DashboardBoard) {
+    if (filter === 'completed') removeBoard(board.id);
+    else patchBoard(board.id, { archived_at: null });
+    await fetch(`/api/boards/${board.id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'reopen' }),
+    });
+  }
+
+  async function handleLeave(board: DashboardBoard) {
+    if (!user) return;
+    removeBoard(board.id);
+    await fetch(`/api/boards/${board.id}/members`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: user.id }),
+    });
+  }
+
+  async function handleRestore(board: DashboardBoard) {
+    removeBoard(board.id);
+    await fetch(`/api/boards/${board.id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'restore' }),
+    });
+  }
+
+  const cardHandlers = {
+    onRename: (b: DashboardBoard) => setRenameTarget(b),
+    onTrash: (b: DashboardBoard) => setDeleteTarget({ board: b, mode: 'trash' as const }),
+    onReopen: handleReopen,
+    onManageMembers: (b: DashboardBoard) => setMembersTarget(b),
+    onRegenerateCode: (b: DashboardBoard) => setCodeTarget(b),
+    onLeave: handleLeave,
+    onRestore: handleRestore,
+    onDeleteForever: (b: DashboardBoard) => setDeleteTarget({ board: b, mode: 'forever' as const }),
+  };
 
   const filteredBoards = search
     ? boards.filter((b) => b.title.toLowerCase().includes(search.toLowerCase()))
     : boards;
 
+  const isTrash = filter === 'trash';
   const ownedBoards = filteredBoards.filter((b) => b.user_role === 'owner');
   const sharedBoards = filteredBoards.filter((b) => b.user_role !== 'owner');
 
@@ -96,9 +148,9 @@ export function DashboardPage() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {[
               { label: 'Active boards', value: stats?.activeBoards ?? '—', accent: true },
-              { label: 'Action items',  value: stats?.actionItemsCreated ?? '—' },
+              { label: 'Action items', value: stats?.actionItemsCreated ?? '—' },
               { label: 'Cards created', value: stats?.cardsCreated ?? '—' },
-              { label: 'Votes cast',    value: stats?.votesCast ?? '—' },
+              { label: 'Votes cast', value: stats?.votesCast ?? '—' },
             ].map((s) => (
               <div
                 key={s.label}
@@ -122,12 +174,8 @@ export function DashboardPage() {
           {/* Filters + Search */}
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex gap-2">
-              {(['all', 'active', 'completed'] as Filter[]).map((f) => (
-                <Chip
-                  key={f}
-                  active={filter === f}
-                  onClick={() => setFilter(f)}
-                >
+              {(['all', 'active', 'completed', 'trash'] as Filter[]).map((f) => (
+                <Chip key={f} active={filter === f} onClick={() => setFilter(f)}>
                   {f.charAt(0).toUpperCase() + f.slice(1)}
                 </Chip>
               ))}
@@ -162,6 +210,29 @@ export function DashboardPage() {
                 />
               ))}
             </div>
+          ) : isTrash ? (
+            filteredBoards.length > 0 ? (
+              <section>
+                <h2 className="mb-1 text-sm font-medium uppercase tracking-wide text-[var(--ink-4)]">
+                  Trash ({filteredBoards.length})
+                </h2>
+                <p className="mb-3 text-xs text-[var(--ink-4)]">
+                  Boards are permanently deleted 30 days after they&apos;re moved to Trash.
+                </p>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {filteredBoards.map((board) => (
+                    <BoardCard key={board.id} board={board} {...cardHandlers} />
+                  ))}
+                </div>
+              </section>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <p className="text-lg text-[var(--ink-3)]">Trash is empty</p>
+                <p className="mt-1 text-sm text-[var(--ink-4)]">
+                  Boards you delete will appear here for 30 days.
+                </p>
+              </div>
+            )
           ) : (
             <>
               {ownedBoards.length > 0 && (
@@ -171,7 +242,7 @@ export function DashboardPage() {
                   </h2>
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     {ownedBoards.map((board) => (
-                      <BoardCard key={board.id} board={board} />
+                      <BoardCard key={board.id} board={board} {...cardHandlers} />
                     ))}
                   </div>
                 </section>
@@ -184,7 +255,7 @@ export function DashboardPage() {
                   </h2>
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     {sharedBoards.map((board) => (
-                      <BoardCard key={board.id} board={board} />
+                      <BoardCard key={board.id} board={board} {...cardHandlers} />
                     ))}
                   </div>
                 </section>
@@ -205,6 +276,41 @@ export function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* Management modals */}
+      {renameTarget && (
+        <RenameBoardModal
+          key={renameTarget.id}
+          board={renameTarget}
+          onClose={() => setRenameTarget(null)}
+          onRenamed={(id, title, description) => patchBoard(id, { title, description })}
+        />
+      )}
+      {deleteTarget && (
+        <DeleteBoardDialog
+          key={deleteTarget.board.id + deleteTarget.mode}
+          board={deleteTarget.board}
+          mode={deleteTarget.mode}
+          onClose={() => setDeleteTarget(null)}
+          onTrashed={removeBoard}
+          onPurged={removeBoard}
+        />
+      )}
+      {membersTarget && (
+        <ManageMembersModal
+          key={membersTarget.id}
+          board={membersTarget}
+          onClose={() => setMembersTarget(null)}
+        />
+      )}
+      {codeTarget && (
+        <RegenerateCodeModal
+          key={codeTarget.id}
+          board={codeTarget}
+          onClose={() => setCodeTarget(null)}
+          onRegenerated={(id, code) => patchBoard(id, { join_code: code })}
+        />
+      )}
     </AppShell>
   );
 }

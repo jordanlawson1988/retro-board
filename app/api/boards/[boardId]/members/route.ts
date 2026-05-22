@@ -1,7 +1,12 @@
 import { sql } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
-import { headers } from 'next/headers';
+import { getSessionOrNull, assertBoardOwner, authzErrorResponse } from '@/lib/auth-helpers';
+import { isBoardMemberRole } from '@/types';
+
+function authFail(e: unknown): NextResponse | null {
+  const r = authzErrorResponse(e);
+  return r ? NextResponse.json(r.body, { status: r.status }) : null;
+}
 
 export async function GET(
   request: NextRequest,
@@ -20,59 +25,77 @@ export async function GET(
   return NextResponse.json({ members });
 }
 
+// Add a member or change a member's role. Owner only.
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ boardId: string }> }
 ) {
   const { boardId } = await params;
-  const headersList = await headers();
-  const session = await auth.api.getSession({ headers: headersList });
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  // Verify requester is board owner
-  const [board] = await sql`SELECT owner_id FROM boards WHERE id = ${boardId}`;
-  if (!board || board.owner_id !== session.user.id) {
-    return NextResponse.json({ error: 'Only the board owner can add members' }, { status: 403 });
+  let requesterId: string;
+  try {
+    ({ userId: requesterId } = await assertBoardOwner(boardId));
+  } catch (e) {
+    const r = authFail(e);
+    if (r) return r;
+    throw e;
   }
 
   const { userId, role } = await request.json();
+  if (typeof userId !== 'string' || !userId) {
+    return NextResponse.json({ error: 'userId is required' }, { status: 400 });
+  }
+  const finalRole = role ?? 'participant';
+  if (!isBoardMemberRole(finalRole)) {
+    return NextResponse.json({ error: 'Invalid role' }, { status: 400 });
+  }
 
   await sql`
     INSERT INTO board_members (board_id, user_id, role, invited_by)
-    VALUES (${boardId}, ${userId}, ${role || 'participant'}, ${session.user.id})
-    ON CONFLICT (board_id, user_id) DO UPDATE SET role = ${role || 'participant'}
+    VALUES (${boardId}, ${userId}, ${finalRole}, ${requesterId})
+    ON CONFLICT (board_id, user_id) DO UPDATE SET role = ${finalRole}
   `;
 
   return NextResponse.json({ ok: true });
 }
 
+// Remove a member. The board owner may remove anyone (except the owner); any
+// member may remove themselves (Leave). The owner cannot leave.
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ boardId: string }> }
 ) {
   const { boardId } = await params;
-  const headersList = await headers();
-  const session = await auth.api.getSession({ headers: headersList });
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  // Verify requester is board owner
-  const [board] = await sql`SELECT owner_id FROM boards WHERE id = ${boardId}`;
-  if (!board || board.owner_id !== session.user.id) {
-    return NextResponse.json({ error: 'Only the board owner can remove members' }, { status: 403 });
-  }
-
   const { userId } = await request.json();
+  if (typeof userId !== 'string' || !userId) {
+    return NextResponse.json({ error: 'userId is required' }, { status: 400 });
+  }
 
-  // Can't remove the owner
-  if (userId === session.user.id) {
-    return NextResponse.json({ error: 'Cannot remove board owner' }, { status: 400 });
+  const session = await getSessionOrNull();
+  const requesterId = session?.user?.id ?? null;
+  if (!requesterId) {
+    return NextResponse.json({ error: 'Sign in required' }, { status: 401 });
+  }
+
+  // Removing someone else requires board ownership; removing yourself is always allowed.
+  if (userId !== requesterId) {
+    try {
+      await assertBoardOwner(boardId);
+    } catch (e) {
+      const r = authFail(e);
+      if (r) return r;
+      throw e;
+    }
+  }
+
+  // The owner cannot be removed / cannot leave (must delete or transfer the board).
+  const [board] = await sql`SELECT owner_id FROM boards WHERE id = ${boardId}`;
+  if (board?.owner_id === userId) {
+    return NextResponse.json(
+      { error: 'The board owner cannot leave; delete or transfer the board instead.' },
+      { status: 400 }
+    );
   }
 
   await sql`DELETE FROM board_members WHERE board_id = ${boardId} AND user_id = ${userId}`;
-
   return NextResponse.json({ ok: true });
 }

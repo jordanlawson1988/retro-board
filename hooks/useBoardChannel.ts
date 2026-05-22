@@ -85,7 +85,21 @@ export function useBoardChannel(boardId: string) {
       // Board state
       case 'board-updated':
         store.setState((state) => ({
-          board: state.board ? { ...state.board, settings: data.settings } : null,
+          board: state.board
+            ? {
+                ...state.board,
+                ...(data.title !== undefined ? { title: data.title } : {}),
+                ...(data.description !== undefined ? { description: data.description } : {}),
+                ...(data.settings !== undefined ? { settings: data.settings } : {}),
+              }
+            : null,
+        }));
+        break;
+      case 'board-reopened':
+        store.setState((state) => ({
+          board: state.board
+            ? { ...state.board, archived_at: null, settings: data.settings }
+            : null,
         }));
         break;
       case 'board-completed':

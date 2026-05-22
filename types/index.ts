@@ -11,6 +11,7 @@ export interface Board {
   settings: BoardSettings;
   created_at: string;
   archived_at: string | null;
+  deleted_at: string | null;     // null = live; set when soft-deleted (in Trash)
 }
 
 export type BoardTemplate =
@@ -161,7 +162,11 @@ export interface User {
 }
 
 // Board membership
-export type BoardMemberRole = 'owner' | 'facilitator' | 'participant' | 'viewer';
+export const BOARD_MEMBER_ROLES = ['owner', 'facilitator', 'participant', 'viewer'] as const;
+export type BoardMemberRole = (typeof BOARD_MEMBER_ROLES)[number];
+export function isBoardMemberRole(v: unknown): v is BoardMemberRole {
+  return typeof v === 'string' && (BOARD_MEMBER_ROLES as readonly string[]).includes(v);
+}
 
 export interface BoardMember {
   id: string;

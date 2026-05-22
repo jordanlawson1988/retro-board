@@ -14,6 +14,22 @@ export interface Board {
   deleted_at: string | null;     // null = live; set when soft-deleted (in Trash)
 }
 
+/** Board view-model from /api/user/boards: board fields + activity counts + this user's role. */
+export interface DashboardBoard {
+  id: string;
+  title: string;
+  description: string | null;
+  template: string;
+  created_at: string;
+  archived_at: string | null;
+  deleted_at: string | null;
+  join_code?: string;
+  card_count: number;
+  participant_count: number;
+  action_count: number;
+  user_role: string;
+}
+
 export type BoardTemplate =
   | 'mad-sad-glad'
   | 'liked-learned-lacked'

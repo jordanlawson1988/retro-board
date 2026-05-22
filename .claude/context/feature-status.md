@@ -1,6 +1,6 @@
 # Feature Status — Retro Board
 
-> Living tracker of feature progress. Last updated: 2026-03-22
+> Living tracker of feature progress. Last updated: 2026-05-22
 
 ## Core Features
 
@@ -36,6 +36,17 @@
 | Feature Flags | Complete | CRUD with optimistic updates, `live_events` flag controls Ably vs polling fallback |
 | App Settings | Complete | Default template, default board settings, app name, board retention |
 | Admin Auth Middleware | Complete | Cookie-presence check in Edge middleware, server-side session validation in API routes |
+
+## User Accounts & Board Lifecycle
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| User Accounts | Complete | Better Auth signup/login; `/settings` (profile, theme, change password, sessions, delete account). Shipped to prod. |
+| User Dashboard | Complete | `/dashboard` — stat strip, All/Active/Completed filters, search, "My Retros" + "Shared With Me". Shipped to prod. |
+| Logged-in Participation History | Complete | Joining a board while signed in links `participants.user_id` + a `board_members` row, so it appears on the dashboard. |
+| Board Management | On branch `feature/board-management` | Rename, soft-delete→Trash (30-day lazy purge), reopen, leave, manage members/roles, regenerate join code. Migration 008 (`boards.deleted_at`) applied to shared DB. **Built + tested, not yet merged.** |
+| Retroactive Linking + claim | Planned (sub-project 2) | Claim anonymous participation/boards into an account. |
+| Account Lifecycle (reset/verify) | Planned (sub-project 3) | Password reset + email verification; needs an email sender (no email lib installed). |
 
 ## Infrastructure Migration (March 2026)
 

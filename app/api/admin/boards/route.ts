@@ -43,9 +43,9 @@ export async function GET(request: Request) {
   }
 
   // Get participant and card counts
-  const boardIds = boards.map((b: any) => b.id);
-  let participantCounts: any[] = [];
-  let cardCounts: any[] = [];
+  const boardIds = boards.map((b) => b.id);
+  let participantCounts: Record<string, unknown>[] = [];
+  let cardCounts: Record<string, unknown>[] = [];
   if (boardIds.length > 0) {
     [participantCounts, cardCounts] = await Promise.all([
       sql`SELECT board_id, count(*) as count FROM participants WHERE board_id = ANY(${boardIds}) GROUP BY board_id`,
@@ -54,10 +54,10 @@ export async function GET(request: Request) {
   }
 
   return Response.json({
-    boards: boards.map((b: any) => ({
+    boards: boards.map((b) => ({
       ...b,
-      participant_count: Number(participantCounts.find((p: any) => p.board_id === b.id)?.count ?? 0),
-      card_count: Number(cardCounts.find((c: any) => c.board_id === b.id)?.count ?? 0),
+      participant_count: Number(participantCounts.find((p) => p.board_id === b.id)?.count ?? 0),
+      card_count: Number(cardCounts.find((c) => c.board_id === b.id)?.count ?? 0),
     })),
     totalCount,
     counts: {

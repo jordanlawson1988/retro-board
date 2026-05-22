@@ -1,10 +1,7 @@
 import { sql } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { getSessionOrNull } from '@/lib/auth-helpers';
-
-function generateJoinCode(): string {
-  return String(Math.floor(Math.random() * 100000)).padStart(5, '0');
-}
+import { generateJoinCode } from '@/lib/join-code';
 
 export async function POST(request: Request) {
   try {

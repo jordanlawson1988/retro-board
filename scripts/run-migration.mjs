@@ -1,4 +1,5 @@
 import { readFileSync } from 'fs';
+import { resolve } from 'path';
 import { Pool } from '@neondatabase/serverless';
 
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -8,7 +9,14 @@ if (!DATABASE_URL) {
 }
 
 const pool = new Pool({ connectionString: DATABASE_URL });
-const migration = readFileSync(new URL('./migrate.sql', import.meta.url), 'utf-8');
+
+// Optional file arg (relative to repo root); defaults to the combined base schema.
+const fileArg = process.argv[2];
+const migrationPath = fileArg
+  ? resolve(process.cwd(), fileArg)
+  : new URL('./migrate.sql', import.meta.url);
+const migration = readFileSync(migrationPath, 'utf-8');
+console.log(`Applying: ${fileArg ?? 'scripts/migrate.sql'}`);
 
 try {
   const client = await pool.connect();

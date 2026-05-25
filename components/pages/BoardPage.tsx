@@ -319,6 +319,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
             onCombineCards={combineCards}
             onUncombineCard={uncombineCard}
             participants={participants}
+            onUpdateColumn={updateColumn}
           />
         ) : (
           <div className="min-h-dvh bg-[var(--bg)] flex items-center justify-center">

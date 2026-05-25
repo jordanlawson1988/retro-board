@@ -526,6 +526,8 @@ export function BoardPage({ boardId }: { boardId: string }) {
                 onToggleVote={toggleVote}
                 onToggleReaction={toggleReaction}
                 participants={participants}
+                isAdmin={isAdmin}
+                onUpdateColumn={updateColumn}
               />
             )}
 

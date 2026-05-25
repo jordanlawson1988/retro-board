@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { RetroCard } from './RetroCard';
-import type { Column, Card, Vote, Participant } from '@/types';
+import { ColumnSortMenu } from './ColumnSortMenu';
+import { sortCards } from '@/utils/sortCards';
+import type { Column, Card, Vote, Participant, CardSort } from '@/types';
 
 interface SwimlaneViewProps {
   columns: Column[];
@@ -20,6 +22,8 @@ interface SwimlaneViewProps {
   onToggleVote: (cardId: string) => void;
   onToggleReaction?: (cardId: string, emoji: string) => void;
   participants?: Participant[];
+  isAdmin?: boolean;
+  onUpdateColumn?: (columnId: string, updates: { sort_by: CardSort }) => void;
 }
 
 export function SwimlaneView({
@@ -37,12 +41,25 @@ export function SwimlaneView({
   onToggleVote,
   onToggleReaction,
   participants = [],
+  isAdmin,
+  onUpdateColumn,
 }: SwimlaneViewProps) {
   const [collapsedRows, setCollapsedRows] = useState<Set<string>>(new Set());
 
   const sortedColumns = useMemo(
     () => [...columns].sort((a, b) => a.position - b.position),
     [columns]
+  );
+
+  const voteCountByCard = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const v of votes) map.set(v.card_id, (map.get(v.card_id) || 0) + 1);
+    return map;
+  }, [votes]);
+
+  const voteCountFor = useCallback(
+    (id: string) => voteCountByCard.get(id) || 0,
+    [voteCountByCard]
   );
 
   const voteLimitReached = useMemo(() => {
@@ -67,14 +84,11 @@ export function SwimlaneView({
     <div className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6">
       <div className="flex flex-col gap-3">
         {sortedColumns.map((col) => {
-          const colCards = cards
-            .filter((c) => c.column_id === col.id && !c.merged_with)
-            .sort((a, b) => {
-              const aVotes = votes.filter((v) => v.card_id === a.id).length;
-              const bVotes = votes.filter((v) => v.card_id === b.id).length;
-              if (bVotes !== aVotes) return bVotes - aVotes;
-              return a.position - b.position;
-            });
+          const colCards = sortCards(
+            cards.filter((c) => c.column_id === col.id && !c.merged_with),
+            col.sort_by,
+            voteCountFor
+          );
           const isCollapsed = collapsedRows.has(col.id);
           const colVoteCount = votes.filter((v) =>
             colCards.some((c) => c.id === v.card_id)
@@ -86,31 +100,39 @@ export function SwimlaneView({
               className="rounded-[var(--r-lg)] border border-[var(--line)] bg-[var(--surface-muted)]"
             >
               {/* Column swimlane header */}
-              <button
-                onClick={() => toggleRow(col.id)}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--surface-hover)]"
-              >
-                {isCollapsed ? (
-                  <ChevronRight size={16} className="shrink-0 text-[var(--ink-4)]" />
-                ) : (
-                  <ChevronDown size={16} className="shrink-0 text-[var(--ink-4)]" />
-                )}
-                <div
-                  className="h-3 w-3 shrink-0 rounded-full"
-                  style={{ backgroundColor: col.color }}
-                />
-                <span className="text-sm font-semibold text-[var(--ink)]">
-                  {col.title}
-                </span>
-                <span className="rounded-[var(--r-pill)] bg-[var(--bg-elev)] px-2 py-0.5 text-xs font-medium text-[var(--ink-4)]">
-                  {colCards.length}
-                </span>
-                {votingEnabled && !secretVoting && colVoteCount > 0 && (
-                  <span className="flex items-center gap-1 rounded-[var(--r-pill)] bg-[var(--accent-soft)] px-2 py-0.5 text-xs font-medium text-[var(--accent)]">
-                    {colVoteCount} vote{colVoteCount === 1 ? '' : 's'}
+              <div className="flex w-full items-center gap-3 px-4 py-3 transition-colors hover:bg-[var(--surface-hover)]">
+                <button
+                  onClick={() => toggleRow(col.id)}
+                  className="flex flex-1 items-center gap-3 text-left"
+                >
+                  {isCollapsed ? (
+                    <ChevronRight size={16} className="shrink-0 text-[var(--ink-4)]" />
+                  ) : (
+                    <ChevronDown size={16} className="shrink-0 text-[var(--ink-4)]" />
+                  )}
+                  <div
+                    className="h-3 w-3 shrink-0 rounded-full"
+                    style={{ backgroundColor: col.color }}
+                  />
+                  <span className="text-sm font-semibold text-[var(--ink)]">
+                    {col.title}
                   </span>
+                  <span className="rounded-[var(--r-pill)] bg-[var(--bg-elev)] px-2 py-0.5 text-xs font-medium text-[var(--ink-4)]">
+                    {colCards.length}
+                  </span>
+                  {votingEnabled && !secretVoting && colVoteCount > 0 && (
+                    <span className="flex items-center gap-1 rounded-[var(--r-pill)] bg-[var(--accent-soft)] px-2 py-0.5 text-xs font-medium text-[var(--accent)]">
+                      {colVoteCount} vote{colVoteCount === 1 ? '' : 's'}
+                    </span>
+                  )}
+                </button>
+                {isAdmin && onUpdateColumn && (
+                  <ColumnSortMenu
+                    value={col.sort_by}
+                    onChange={(next) => onUpdateColumn(col.id, { sort_by: next })}
+                  />
                 )}
-              </button>
+              </div>
 
               {/* Column cards */}
               {!isCollapsed && (

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useMemo, type ReactNode } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback, type ReactNode } from 'react';
 import { useDroppable, useDraggable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { ThumbsUp, Trash2, Palette, Unlink, Merge, MoreHorizontal } from 'lucide-react';
@@ -9,7 +9,9 @@ import { COLUMN_COLORS } from '@/utils/constants';
 import { RetroCard } from './RetroCard';
 import { SortableCard } from './SortableCard';
 import { AddCardForm } from './AddCardForm';
+import { ColumnSortMenu } from './ColumnSortMenu';
 import { IconButton } from '@/components/common/IconButton';
+import { sortCards } from '@/utils/sortCards';
 import type { Column, Card, Vote, Participant } from '@/types';
 
 interface BoardColumnProps {
@@ -33,7 +35,7 @@ interface BoardColumnProps {
   isAdmin?: boolean;
   boardLocked?: boolean;
   activeDragId: string | null;
-  onUpdateColumn?: (columnId: string, updates: Partial<Pick<Column, 'title' | 'color' | 'description'>>) => void;
+  onUpdateColumn?: (columnId: string, updates: Partial<Pick<Column, 'title' | 'color' | 'description' | 'sort_by'>>) => void;
   onDeleteColumn?: (columnId: string) => void;
   canDeleteColumn?: boolean;
   participants?: Participant[];
@@ -231,7 +233,7 @@ export function BoardColumn({
     [cards]
   );
 
-  // Vote counts per card for sorting
+  // Vote counts per card
   const voteCountByCard = useMemo(() => {
     const map = new Map<string, number>();
     for (const v of votes) {
@@ -249,7 +251,7 @@ export function BoardColumn({
         map.set(card.merged_with, list);
       }
     }
-    // Sort children by vote count descending
+    // Children always sorted by raw vote count desc (unchanged from prior behavior)
     for (const [key, list] of map) {
       list.sort((a, b) => (voteCountByCard.get(b.id) || 0) - (voteCountByCard.get(a.id) || 0));
       map.set(key, list);
@@ -257,20 +259,19 @@ export function BoardColumn({
     return map;
   }, [cards, voteCountByCard]);
 
-  // Sort root cards: group votes desc → group size desc → position asc
-  const sortedCards = useMemo(() => {
-    return [...rootCards].sort((a, b) => {
-      const aChildren = childrenByParent.get(a.id) || [];
-      const bChildren = childrenByParent.get(b.id) || [];
-      const aVotes = (voteCountByCard.get(a.id) || 0) + aChildren.reduce((s, c) => s + (voteCountByCard.get(c.id) || 0), 0);
-      const bVotes = (voteCountByCard.get(b.id) || 0) + bChildren.reduce((s, c) => s + (voteCountByCard.get(c.id) || 0), 0);
-      if (bVotes !== aVotes) return bVotes - aVotes;
-      const aSize = 1 + aChildren.length;
-      const bSize = 1 + bChildren.length;
-      if (bSize !== aSize) return bSize - aSize;
-      return a.position - b.position;
-    });
-  }, [rootCards, childrenByParent, voteCountByCard]);
+  const aggregateVotesFor = useCallback(
+    (cardId: string) => {
+      const own = voteCountByCard.get(cardId) || 0;
+      const kids = childrenByParent.get(cardId) || [];
+      return own + kids.reduce((s, c) => s + (voteCountByCard.get(c.id) || 0), 0);
+    },
+    [voteCountByCard, childrenByParent]
+  );
+
+  const sortedCards = useMemo(
+    () => sortCards(rootCards, column.sort_by, aggregateVotesFor),
+    [rootCards, column.sort_by, aggregateVotesFor]
+  );
 
   const cardIds = useMemo(() => sortedCards.map((c) => c.id), [sortedCards]);
 
@@ -360,6 +361,13 @@ export function BoardColumn({
               <ThumbsUp size={10} />
               {columnVoteCount}
             </span>
+          )}
+
+          {isAdmin && !isCompleted && !isEditingTitle && (
+            <ColumnSortMenu
+              value={column.sort_by}
+              onChange={(next) => onUpdateColumn?.(column.id, { sort_by: next })}
+            />
           )}
 
           {/* Admin overflow menu */}

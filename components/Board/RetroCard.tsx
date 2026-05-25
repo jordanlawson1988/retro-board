@@ -6,7 +6,8 @@ import { cn } from '@/utils/cn';
 import { CardColorPicker } from './CardColorPicker';
 import { IconButton } from '@/components/common/IconButton';
 import { Pill } from '@/components/common/Pill';
-import type { Card, CardReactions, Vote } from '@/types';
+import { ReactionPill } from './ReactionPill';
+import type { Card, CardReactions, Participant, Vote } from '@/types';
 
 const EMOJI_PALETTE = ['👍', '👎', '❤️', '😂', '🎉', '🤔', '🔥', '👏'];
 
@@ -42,6 +43,7 @@ interface RetroCardProps {
   onUncombineCard?: (childCardId: string) => void;
   expanded?: boolean;
   onToggleExpand?: () => void;
+  participants?: Participant[];
 }
 
 export function RetroCard({
@@ -72,6 +74,7 @@ export function RetroCard({
   onCancelMerge,
   expanded = false,
   onToggleExpand,
+  participants = [],
 }: RetroCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(text);
@@ -306,19 +309,15 @@ export function RetroCard({
             {onToggleReaction && (
               <div className="mt-2 flex flex-wrap items-center gap-1">
                 {Object.entries(reactions).map(([emoji, users]) => users.length > 0 && (
-                  <button
+                  <ReactionPill
                     key={emoji}
-                    onClick={(e) => { e.stopPropagation(); onToggleReaction(id, emoji); }}
-                    className={cn(
-                      'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-mono cursor-pointer border transition-[background-color,border-color] duration-150',
-                      users.includes(String(currentParticipantId || ''))
-                        ? 'bg-[var(--accent-soft)] text-[var(--accent)] border-transparent'
-                        : 'bg-[var(--surface-muted)] text-[var(--ink-3)] border-transparent hover:bg-[var(--bg-elev)] hover:border-[var(--line)]'
-                    )}
-                  >
-                    <span>{emoji}</span>
-                    <span className="text-[10px]">{users.length}</span>
-                  </button>
+                    emoji={emoji}
+                    reactorIds={users}
+                    participants={participants}
+                    currentParticipantId={currentParticipantId ?? null}
+                    isMine={users.includes(String(currentParticipantId || ''))}
+                    onToggle={() => onToggleReaction(id, emoji)}
+                  />
                 ))}
                 {!isCompleted && (
                   <div className="relative" ref={emojiPickerRef}>

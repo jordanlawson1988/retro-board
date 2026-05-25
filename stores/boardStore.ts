@@ -377,7 +377,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     };
 
     // Optimistic update BEFORE fetch — Ably echo dedup will catch the duplicate
-    const optimisticCol: Column = { ...newCol, board_id: board.id, created_at: new Date().toISOString() };
+    const optimisticCol: Column = { ...newCol, board_id: board.id, created_at: new Date().toISOString(), sort_by: 'votes_desc' };
     set((state) => ({ columns: [...state.columns, optimisticCol] }));
 
     const res = await fetch(`/api/boards/${board.id}/columns`, {

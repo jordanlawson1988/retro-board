@@ -59,6 +59,13 @@ export interface TimerState {
   started_at: string | null;
 }
 
+// Column sort
+export const CARD_SORT_OPTIONS = ['votes_desc', 'votes_asc', 'manual'] as const;
+export type CardSort = (typeof CARD_SORT_OPTIONS)[number];
+export function isCardSort(v: unknown): v is CardSort {
+  return typeof v === 'string' && (CARD_SORT_OPTIONS as readonly string[]).includes(v);
+}
+
 // Column types
 export interface Column {
   id: string;
@@ -68,6 +75,7 @@ export interface Column {
   color: string;
   position: number;
   created_at: string;
+  sort_by: CardSort;
 }
 
 // Card types

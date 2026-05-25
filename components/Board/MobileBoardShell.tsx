@@ -12,14 +12,16 @@
  * No new store fields, no new API calls — same data, different layout.
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { MobileColumnTabs } from './MobileColumnTabs';
 import { MobileVoteTracker } from './MobileVoteTracker';
 import { MobileFAB } from './MobileFAB';
 import { MobileBottomNav, type MobileNavKey } from './MobileBottomNav';
 import { MobileCardComposerSheet } from './MobileCardComposerSheet';
 import { RetroCard } from './RetroCard';
-import type { Column, Card, Vote, ActionItem, CardReactions } from '@/types';
+import { ColumnSortMenu } from './ColumnSortMenu';
+import { sortCards } from '@/utils/sortCards';
+import type { Column, Card, Vote, ActionItem, CardReactions, Participant, CardSort } from '@/types';
 
 interface MobileBoardShellProps {
   // Board state
@@ -44,6 +46,8 @@ interface MobileBoardShellProps {
   onToggleReaction: (cardId: string, emoji: string) => void;
   onCombineCards: (parentCardId: string, childCardId: string) => void;
   onUncombineCard: (childCardId: string) => void;
+  participants: Participant[];
+  onUpdateColumn?: (columnId: string, updates: { sort_by: CardSort }) => void;
 }
 
 export function MobileBoardShell({
@@ -67,6 +71,8 @@ export function MobileBoardShell({
   onToggleReaction,
   onCombineCards,
   onUncombineCard,
+  participants,
+  onUpdateColumn,
 }: MobileBoardShellProps) {
   const sortedColumns = useMemo(
     () => [...columns].sort((a, b) => a.position - b.position),
@@ -90,18 +96,25 @@ export function MobileBoardShell({
     [sortedColumns, safeActiveColumnId]
   );
 
+  const voteCountByCard = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const v of votes) map.set(v.card_id, (map.get(v.card_id) || 0) + 1);
+    return map;
+  }, [votes]);
+
+  const voteCountFor = useCallback(
+    (id: string) => voteCountByCard.get(id) || 0,
+    [voteCountByCard]
+  );
+
   // Root cards for the active column (no merged-children in top-level list)
   const rootCards = useMemo(
-    () => cards
-      .filter((c) => c.column_id === activeColumn?.id && !c.merged_with)
-      .sort((a, b) => {
-        // Sort by vote count descending, then position
-        const aVotes = votes.filter((v) => v.card_id === a.id).length;
-        const bVotes = votes.filter((v) => v.card_id === b.id).length;
-        if (bVotes !== aVotes) return bVotes - aVotes;
-        return a.position - b.position;
-      }),
-    [cards, activeColumn, votes]
+    () => sortCards(
+      cards.filter((c) => c.column_id === activeColumn?.id && !c.merged_with),
+      activeColumn?.sort_by ?? 'votes_desc',
+      voteCountFor
+    ),
+    [cards, activeColumn, voteCountFor]
   );
 
   // Votes used by the current participant (derived from store votes array)
@@ -159,6 +172,16 @@ export function MobileBoardShell({
         </div>
       )}
 
+      {/* Per-column sort control (admin only) */}
+      {isAdmin && onUpdateColumn && activeColumn && (
+        <div className="flex items-center justify-end px-4 pt-2">
+          <ColumnSortMenu
+            value={activeColumn.sort_by}
+            onChange={(next) => onUpdateColumn(activeColumn.id, { sort_by: next })}
+          />
+        </div>
+      )}
+
       {/* Card list for active column */}
       <div className="flex-1 px-4 pt-3 pb-[136px] flex flex-col gap-2 overflow-y-auto">
         {rootCards.length > 0 ? (
@@ -195,6 +218,7 @@ export function MobileBoardShell({
                 onAcceptMerge={() => handleMergeTarget(card.id)}
                 onCancelMerge={() => setMergeSourceId(null)}
                 onUncombineCard={onUncombineCard}
+                participants={participants}
               />
             );
           })

@@ -37,7 +37,7 @@ interface BoardState {
 
   // Columns
   addColumn: (title: string, color: string, description?: string) => Promise<void>;
-  updateColumn: (columnId: string, updates: Partial<Pick<Column, 'title' | 'color' | 'description'>>) => Promise<void>;
+  updateColumn: (columnId: string, updates: Partial<Pick<Column, 'title' | 'color' | 'description' | 'sort_by'>>) => Promise<void>;
   deleteColumn: (columnId: string) => Promise<void>;
 
   // Cards
@@ -377,7 +377,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     };
 
     // Optimistic update BEFORE fetch — Ably echo dedup will catch the duplicate
-    const optimisticCol: Column = { ...newCol, board_id: board.id, created_at: new Date().toISOString() };
+    const optimisticCol: Column = { ...newCol, board_id: board.id, created_at: new Date().toISOString(), sort_by: 'votes_desc' };
     set((state) => ({ columns: [...state.columns, optimisticCol] }));
 
     const res = await fetch(`/api/boards/${board.id}/columns`, {

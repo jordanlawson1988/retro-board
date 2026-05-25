@@ -1,6 +1,7 @@
 import { sql } from '@/lib/db';
 import { ablyServer } from '@/lib/ably-server';
 import { NextResponse } from 'next/server';
+import { isCardSort } from '@/types';
 
 export async function POST(
   request: Request,
@@ -36,6 +37,12 @@ export async function PATCH(
   }
   if (updates.description !== undefined) {
     await sql`UPDATE columns SET description = ${updates.description} WHERE id = ${columnId} AND board_id = ${boardId}`;
+  }
+  if (updates.sort_by !== undefined) {
+    if (!isCardSort(updates.sort_by)) {
+      return NextResponse.json({ error: 'Invalid sort_by' }, { status: 400 });
+    }
+    await sql`UPDATE columns SET sort_by = ${updates.sort_by} WHERE id = ${columnId} AND board_id = ${boardId}`;
   }
 
   const [column] = await sql`SELECT * FROM columns WHERE id = ${columnId} AND board_id = ${boardId}`;

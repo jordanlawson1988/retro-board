@@ -37,7 +37,7 @@ interface BoardState {
 
   // Columns
   addColumn: (title: string, color: string, description?: string) => Promise<void>;
-  updateColumn: (columnId: string, updates: Partial<Pick<Column, 'title' | 'color' | 'description'>>) => Promise<void>;
+  updateColumn: (columnId: string, updates: Partial<Pick<Column, 'title' | 'color' | 'description' | 'sort_by'>>) => Promise<void>;
   deleteColumn: (columnId: string) => Promise<void>;
 
   // Cards

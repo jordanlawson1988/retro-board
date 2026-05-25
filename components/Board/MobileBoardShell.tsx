@@ -19,7 +19,7 @@ import { MobileFAB } from './MobileFAB';
 import { MobileBottomNav, type MobileNavKey } from './MobileBottomNav';
 import { MobileCardComposerSheet } from './MobileCardComposerSheet';
 import { RetroCard } from './RetroCard';
-import type { Column, Card, Vote, ActionItem, CardReactions } from '@/types';
+import type { Column, Card, Vote, ActionItem, CardReactions, Participant } from '@/types';
 
 interface MobileBoardShellProps {
   // Board state
@@ -44,6 +44,7 @@ interface MobileBoardShellProps {
   onToggleReaction: (cardId: string, emoji: string) => void;
   onCombineCards: (parentCardId: string, childCardId: string) => void;
   onUncombineCard: (childCardId: string) => void;
+  participants: Participant[];
 }
 
 export function MobileBoardShell({
@@ -67,6 +68,7 @@ export function MobileBoardShell({
   onToggleReaction,
   onCombineCards,
   onUncombineCard,
+  participants,
 }: MobileBoardShellProps) {
   const sortedColumns = useMemo(
     () => [...columns].sort((a, b) => a.position - b.position),
@@ -195,6 +197,7 @@ export function MobileBoardShell({
                 onAcceptMerge={() => handleMergeTarget(card.id)}
                 onCancelMerge={() => setMergeSourceId(null)}
                 onUncombineCard={onUncombineCard}
+                participants={participants}
               />
             );
           })

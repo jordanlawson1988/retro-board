@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { RetroCard } from './RetroCard';
-import type { Column, Card, Vote } from '@/types';
+import type { Column, Card, Vote, Participant } from '@/types';
 
 interface SwimlaneViewProps {
   columns: Column[];
@@ -19,6 +19,7 @@ interface SwimlaneViewProps {
   onDeleteCard: (cardId: string) => void;
   onToggleVote: (cardId: string) => void;
   onToggleReaction?: (cardId: string, emoji: string) => void;
+  participants?: Participant[];
 }
 
 export function SwimlaneView({
@@ -35,6 +36,7 @@ export function SwimlaneView({
   onDeleteCard,
   onToggleVote,
   onToggleReaction,
+  participants = [],
 }: SwimlaneViewProps) {
   const [collapsedRows, setCollapsedRows] = useState<Set<string>>(new Set());
 
@@ -140,6 +142,7 @@ export function SwimlaneView({
                             reactions={card.reactions}
                             onToggleReaction={onToggleReaction}
                             isCompleted={isCompleted}
+                            participants={participants}
                           />
                         );
                       })}

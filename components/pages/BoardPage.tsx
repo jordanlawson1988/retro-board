@@ -318,6 +318,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
             onToggleReaction={toggleReaction}
             onCombineCards={combineCards}
             onUncombineCard={uncombineCard}
+            participants={participants}
           />
         ) : (
           <div className="min-h-dvh bg-[var(--bg)] flex items-center justify-center">
@@ -490,6 +491,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
                           onUpdateColumn={updateColumn}
                           onDeleteColumn={deleteColumn}
                           canDeleteColumn={columns.length > 1}
+                          participants={participants}
                         />
                       ))}
                     {isAdmin && !isCompleted && (
@@ -523,6 +525,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
                 onDeleteCard={deleteCard}
                 onToggleVote={toggleVote}
                 onToggleReaction={toggleReaction}
+                participants={participants}
               />
             )}
 

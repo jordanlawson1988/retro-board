@@ -10,7 +10,7 @@ import { RetroCard } from './RetroCard';
 import { SortableCard } from './SortableCard';
 import { AddCardForm } from './AddCardForm';
 import { IconButton } from '@/components/common/IconButton';
-import type { Column, Card, Vote } from '@/types';
+import type { Column, Card, Vote, Participant } from '@/types';
 
 interface BoardColumnProps {
   column: Column;
@@ -36,6 +36,7 @@ interface BoardColumnProps {
   onUpdateColumn?: (columnId: string, updates: Partial<Pick<Column, 'title' | 'color' | 'description'>>) => void;
   onDeleteColumn?: (columnId: string) => void;
   canDeleteColumn?: boolean;
+  participants?: Participant[];
 }
 
 /** Drop zone overlay that appears on cards during drag for combining */
@@ -110,6 +111,7 @@ export function BoardColumn({
   onUpdateColumn,
   onDeleteColumn,
   canDeleteColumn,
+  participants = [],
 }: BoardColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
@@ -528,6 +530,7 @@ export function BoardColumn({
                       onUncombineCard={onUncombineCard}
                       expanded={isExpanded}
                       onToggleExpand={() => toggleCardExpanded(card.id)}
+                      participants={participants}
                     />
                     {/* Combine drop zone overlay (shown during drag) */}
                     {showCombineZone && <CombineDropZone cardId={card.id} />}
@@ -578,6 +581,7 @@ export function BoardColumn({
                               onToggleVote={onToggleVote}
                               isCompleted={isCompleted}
                               canMerge={false}
+                              participants={participants}
                             />
                           </div>
                         </div>

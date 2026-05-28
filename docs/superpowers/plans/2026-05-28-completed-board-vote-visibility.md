@@ -16,8 +16,9 @@
 
 | Status | Path | Responsibility |
 |---|---|---|
-| Modify | `utils/formatReactorList.ts` | Rename `MAX_REACTOR_NAMES` → `MAX_PEOPLE_NAMES` (shared by voter formatter). Re-export from same file. |
-| Modify | `lib/__tests__/formatReactorList.test.ts` | Update import for renamed constant; assert same cap behavior. |
+| Modify | `utils/constants.ts` | Add shared `MAX_PEOPLE_NAMES = 8` constant (final location after code review). |
+| Modify | `utils/formatReactorList.ts` | Drop local `MAX_REACTOR_NAMES`; import `MAX_PEOPLE_NAMES` from `@/utils/constants`. |
+| Modify | `lib/__tests__/formatReactorList.test.ts` | Assert `MAX_PEOPLE_NAMES` from `@/utils/constants`. |
 | New | `utils/formatVoterList.ts` | ID → display-name list with "You"/"Someone" handling. Mirrors `formatReactorList`. |
 | New | `lib/__tests__/formatVoterList.test.ts` | Formatter tests, row-for-row mirror of `formatReactorList.test.ts`. |
 | New | `lib/votePillPolicy.ts` | Pure decision function: `(input) → { render, showCount, popover, interactive, ariaLabel }`. |
@@ -860,9 +861,8 @@ export interface VotePillProps {
   hasVoted?: boolean;
   voteLimitReached?: boolean;
   onToggleVote?: () => void;
-  // Policy flags:
+  // Policy flag:
   secretVoting: boolean;
-  isCompleted: boolean;
 }
 
 export function VotePill({
@@ -875,14 +875,12 @@ export function VotePill({
   voteLimitReached = false,
   onToggleVote,
   secretVoting,
-  isCompleted,
 }: VotePillProps) {
   const policy = votePillPolicy({
     voteCount,
     mode,
     hasVoted,
     secretVoting,
-    isCompleted,
   });
 
   if (policy.render === 'none') return null;
@@ -1068,7 +1066,6 @@ Replace it with:
     voteLimitReached={voteLimitReached}
     onToggleVote={() => onToggleVote(id)}
     secretVoting={secretVoting}
-    isCompleted={!!isCompleted}
   />
 )}
 ```
@@ -1182,7 +1179,6 @@ Replace with:
       voteLimitReached={voteLimitReached}
       onToggleVote={() => onToggleVote(card.id)}
       secretVoting={secretVoting}
-      isCompleted={isCompleted}
     />
   </td>
 )}
@@ -1333,7 +1329,6 @@ Replace with:
       voteLimitReached={voteLimitReached}
       onToggleVote={() => onToggleVote(card.id)}
       secretVoting={secretVoting}
-      isCompleted={isCompleted}
     />
   </div>
 )}

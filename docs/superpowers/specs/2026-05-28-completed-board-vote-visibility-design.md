@@ -49,7 +49,7 @@ Hover/tap show-hide timing, outside-click + ESC dismissal, touch detection, and 
 
 ### Voter list formatting mirrors `formatReactorList`
 
-A pure function `formatVoterList(voters, participants, currentParticipantId)` returns `{ entries, overflow }` with the same cap. Rename `MAX_REACTOR_NAMES = 8` to `MAX_PEOPLE_NAMES = 8` and share it between reactor and voter formatters. This makes the tooltip contract testable in isolation, matching the existing `formatReactorList.test.ts` pattern.
+A pure function `formatVoterList(voters, participants, currentParticipantId)` returns `{ entries, overflow }` with the same cap. The shared constant `MAX_PEOPLE_NAMES = 8` lives in `utils/constants.ts` so neither formatter depends on the other. This makes the tooltip contract testable in isolation, matching the existing `formatReactorList.test.ts` pattern.
 
 ### Secret-voting policy is encoded in `VotePill`, not at call sites
 
@@ -68,11 +68,12 @@ interface VotePillProps {
   hasVoted?: boolean;
   voteLimitReached?: boolean;
   onToggleVote?: () => void;
-  // Policy flags:
+  // Policy flag:
   secretVoting: boolean;
-  isCompleted: boolean;
 }
 ```
+
+(Note: `isCompleted` is intentionally absent. Call sites already derive `mode` from `isCompleted` (`mode: isCompleted ? 'readonly' : 'interactive'`), so passing both would be redundant. `mode` is the authoritative signal inside the component and the policy function.)
 
 ### Display matrix
 
@@ -131,7 +132,6 @@ interface VotePillPolicyInput {
   mode: 'interactive' | 'readonly';
   hasVoted: boolean;
   secretVoting: boolean;
-  isCompleted: boolean;
 }
 
 interface VotePillPolicyOutput {
@@ -179,7 +179,8 @@ No Playwright. The behavior is observable in pure unit tests plus a browser pass
 - `components/common/PeoplePopover.tsx` (new — factored out of `ReactionPill`)
 - `lib/votePillPolicy.ts` (new — pure display policy function)
 - `utils/formatVoterList.ts` (new, mirrors `formatReactorList.ts`)
-- `utils/formatReactorList.ts` (rename `MAX_REACTOR_NAMES` → `MAX_PEOPLE_NAMES`, re-export shim if any imports lean on the old name)
+- `utils/constants.ts` (add shared `MAX_PEOPLE_NAMES` constant)
+- `utils/formatReactorList.ts` (drop the old in-file `MAX_REACTOR_NAMES`; import `MAX_PEOPLE_NAMES` from `@/utils/constants`)
 - `components/Board/ReactionPill.tsx` (refactor to use `PeoplePopover`)
 - `components/Board/RetroCard.tsx` (replace inline vote pill/button with `<VotePill />`)
 - `components/Board/ListView.tsx` (replace inline vote button)

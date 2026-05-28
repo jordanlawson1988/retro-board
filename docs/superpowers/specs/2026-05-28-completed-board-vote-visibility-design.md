@@ -119,18 +119,53 @@ Only when there are names to reveal. Specifically: `mode === 'readonly' && !secr
 
 ## Tests
 
-All Vitest, mirroring existing `formatReactorList.test.ts` and the project's `lib/__tests__/` convention.
+All Vitest, mirroring existing `formatReactorList.test.ts` and the project's `lib/__tests__/` convention. The project currently runs Vitest in `node` environment with the include glob `lib/**/*.test.ts` and `app/**/*.test.ts` — no React Testing Library, no jsdom. Rather than add that infrastructure for one component, we extract the display policy into a pure function and test it exhaustively. The React component becomes a thin renderer over that policy's output.
 
-- **`lib/__tests__/formatVoterList.test.ts`** — voter list formatting: name resolution, "Someone" fallback for unknown ids, current-user marking, overflow cap at `MAX_PEOPLE_NAMES`.
-- **`components/__tests__/VotePill.test.tsx`** — render matrix from the table above. Six rows, each asserting count visibility and tooltip contents (or absence). Specifically includes:
-  - Active + non-secret + count > 0 → count visible, no tooltip names.
-  - Active + secret + hasVoted → "Voted" badge, no count, no names.
-  - Completed + non-secret + count > 0 → count visible, popover opens with names.
-  - Completed + secret + count > 0 → count visible, no popover opens (contract test for the secret-voting reveal policy).
-  - Completed + count == 0 → pill not rendered.
-- **One round-trip vocabulary contract test** asserting that a board with `secret_voting=true, archived_at=now` reveals counts AND keeps names hidden through every view that displays cards (`RetroCard`, `ListView`, `TimelineView`) — protects against future per-view divergence (the same defensive pattern called for in CLAUDE.md after the allergen incident).
+### Decision function
 
-No Playwright. The behavior is observable in unit tests and a quick browser pass during `ui-feature-verify`.
+`lib/votePillPolicy.ts` exports `votePillPolicy(input)` which returns a structured decision:
+
+```ts
+interface VotePillPolicyInput {
+  voteCount: number;
+  mode: 'interactive' | 'readonly';
+  hasVoted: boolean;
+  secretVoting: boolean;
+  isCompleted: boolean;
+}
+
+interface VotePillPolicyOutput {
+  render: 'pill' | 'voted-badge' | 'none';   // top-level: do we show anything?
+  showCount: boolean;                          // numeric count visible on the pill?
+  popover: 'voters' | 'none';                  // does hover/tap open the names popover?
+  interactive: boolean;                        // is the pill a vote-toggle button?
+  ariaLabel: string;
+}
+```
+
+The component reads this and renders accordingly. All policy edge cases are tested without rendering React.
+
+### Test files
+
+- **`lib/__tests__/formatVoterList.test.ts`** — voter list formatting: name resolution, "Someone" fallback for unknown ids, current-user marking, overflow cap at `MAX_PEOPLE_NAMES`. Mirrors `formatReactorList.test.ts` row-for-row.
+- **`lib/__tests__/votePillPolicy.test.ts`** — exhaustive table-driven test of the display matrix from §"Display contract":
+  - Active + non-secret + count > 0 → `render: 'pill'`, `showCount: true`, `popover: 'none'`, `interactive: true`.
+  - Active + non-secret + count == 0 → `render: 'pill'` (with no count text), `interactive: true` (vote button still present).
+  - Active + secret + hasVoted → `render: 'voted-badge'`, `showCount: false`, `popover: 'none'`, `interactive: true`.
+  - Active + secret + !hasVoted → `render: 'pill'` (empty vote button), `interactive: true`.
+  - Completed + non-secret + count > 0 → `render: 'pill'`, `showCount: true`, `popover: 'voters'`, `interactive: false`.
+  - Completed + non-secret + count == 0 → `render: 'none'`.
+  - Completed + secret + count > 0 → `render: 'pill'`, `showCount: true`, `popover: 'none'`, `interactive: false` (contract test for the secret-voting reveal policy).
+  - Completed + secret + count == 0 → `render: 'none'`.
+- **One round-trip vocabulary contract test** in `lib/__tests__/votePillPolicy.test.ts` that calls the policy with a representative completed+secret input and asserts `popover === 'none' && showCount === true` — explicitly named so a future regression is loud (e.g., `it('CONTRACT: secret-voting + completed reveals counts but hides voter names', ...)`).
+
+### What is NOT covered by tests
+
+- Visual rendering of the React component (no jsdom). Verified manually during `ui-feature-verify`.
+- The hover/tap timing of the popover (lives in `PeoplePopover`, untested by this plan because the refactored-out component preserves `ReactionPill`'s existing behavior verbatim — verified by the existing emoji-reaction manual UX flow).
+- Cross-view rendering integration. The contract is enforced because all three views call `<VotePill />` with the same flags — there is no per-view decision branch to test.
+
+No Playwright. The behavior is observable in pure unit tests plus a browser pass during `ui-feature-verify`.
 
 ## Migration / rollout
 
@@ -140,17 +175,20 @@ No Playwright. The behavior is observable in unit tests and a quick browser pass
 
 ## Files touched (estimate)
 
-- `components/Board/VotePill.tsx` (new)
+- `components/Board/VotePill.tsx` (new — thin renderer over `votePillPolicy`)
 - `components/common/PeoplePopover.tsx` (new — factored out of `ReactionPill`)
+- `lib/votePillPolicy.ts` (new — pure display policy function)
 - `utils/formatVoterList.ts` (new, mirrors `formatReactorList.ts`)
+- `utils/formatReactorList.ts` (rename `MAX_REACTOR_NAMES` → `MAX_PEOPLE_NAMES`, re-export shim if any imports lean on the old name)
 - `components/Board/ReactionPill.tsx` (refactor to use `PeoplePopover`)
 - `components/Board/RetroCard.tsx` (replace inline vote pill/button with `<VotePill />`)
 - `components/Board/ListView.tsx` (replace inline vote button)
 - `components/Board/TimelineView.tsx` (replace inline vote button)
 - `lib/__tests__/formatVoterList.test.ts` (new)
-- `components/__tests__/VotePill.test.tsx` (new)
+- `lib/__tests__/votePillPolicy.test.ts` (new)
+- `lib/__tests__/formatReactorList.test.ts` (update for renamed constant)
 
-Estimated diff size: ~250–350 LOC net (the new component + tests offset by inline removals).
+Estimated diff size: ~300–400 LOC net (the new component + policy + tests offset by inline removals).
 
 ## Out of scope, captured for later
 

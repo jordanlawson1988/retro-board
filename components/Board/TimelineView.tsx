@@ -14,7 +14,6 @@ interface TimelineViewProps {
   votingEnabled: boolean;
   maxVotesPerParticipant: number;
   onToggleVote: (cardId: string) => void;
-  // NEW:
   isCompleted: boolean;
   secretVoting: boolean;
   participants: Participant[];

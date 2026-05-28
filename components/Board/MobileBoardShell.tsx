@@ -198,6 +198,7 @@ export function MobileBoardShell({
                 authorId={card.author_id}
                 color={card.color}
                 voteCount={cardVotes.length}
+                votes={votes}
                 hasVoted={hasVoted}
                 isAuthor={card.author_id === currentParticipantId}
                 isObscured={isObscured}

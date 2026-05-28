@@ -541,10 +541,10 @@ export function BoardPage({ boardId }: { boardId: string }) {
                 isObscured={isObscured}
                 votingEnabled={board.settings.voting_enabled}
                 maxVotesPerParticipant={board.settings.max_votes_per_participant}
-                onToggleVote={toggleVote}
                 isCompleted={isCompleted}
                 secretVoting={board.settings.secret_voting}
                 participants={participants}
+                onToggleVote={toggleVote}
               />
             )}
 
@@ -557,10 +557,10 @@ export function BoardPage({ boardId }: { boardId: string }) {
                 isObscured={isObscured}
                 votingEnabled={board.settings.voting_enabled}
                 maxVotesPerParticipant={board.settings.max_votes_per_participant}
-                onToggleVote={toggleVote}
                 isCompleted={isCompleted}
                 secretVoting={board.settings.secret_voting}
                 participants={participants}
+                onToggleVote={toggleVote}
               />
             )}
           </>

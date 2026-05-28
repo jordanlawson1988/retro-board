@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { ArrowUp, ArrowDown, ThumbsUp } from 'lucide-react';
+import { ArrowUp, ArrowDown } from 'lucide-react';
 import { cn } from '@/utils/cn';
-import type { Column, Card, Vote } from '@/types';
+import { VotePill } from './VotePill';
+import type { Column, Card, Vote, Participant } from '@/types';
 
 interface ListViewProps {
   columns: Column[];
@@ -14,6 +15,10 @@ interface ListViewProps {
   votingEnabled: boolean;
   maxVotesPerParticipant: number;
   onToggleVote: (cardId: string) => void;
+  // NEW:
+  isCompleted: boolean;
+  secretVoting: boolean;
+  participants: Participant[];
 }
 
 type SortField = 'column' | 'card' | 'author' | 'votes';
@@ -28,6 +33,9 @@ export function ListView({
   votingEnabled,
   maxVotesPerParticipant,
   onToggleVote,
+  isCompleted,
+  secretVoting,
+  participants,
 }: ListViewProps) {
   const [sortField, setSortField] = useState<SortField>('column');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
@@ -188,19 +196,17 @@ export function ListView({
                   </td>
                   {votingEnabled && (
                     <td className="px-4 py-3">
-                      <button
-                        onClick={() => onToggleVote(card.id)}
-                        disabled={!hasVoted && voteLimitReached}
-                        className={cn(
-                          'flex items-center gap-1 rounded-[var(--r-pill)] px-2 py-0.5 text-xs font-mono tabular-nums transition-colors',
-                          hasVoted
-                            ? 'bg-[var(--accent-soft)] text-[var(--accent)] font-medium'
-                            : 'text-[var(--ink-4)] hover:bg-[var(--surface-muted)] hover:text-[var(--ink-2)]'
-                        )}
-                      >
-                        <ThumbsUp size={12} />
-                        <span>{voteCount}</span>
-                      </button>
+                      <VotePill
+                        voteCount={voteCount}
+                        voters={votes.filter((v) => v.card_id === card.id)}
+                        participants={participants}
+                        currentParticipantId={currentParticipantId}
+                        mode={isCompleted ? 'readonly' : 'interactive'}
+                        hasVoted={hasVoted}
+                        voteLimitReached={voteLimitReached}
+                        onToggleVote={() => onToggleVote(card.id)}
+                        secretVoting={secretVoting}
+                      />
                     </td>
                   )}
                 </tr>

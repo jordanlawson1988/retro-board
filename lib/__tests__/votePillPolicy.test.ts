@@ -8,7 +8,6 @@ function input(overrides: Partial<VotePillPolicyInput>): VotePillPolicyInput {
     mode: 'interactive',
     hasVoted: false,
     secretVoting: false,
-    isCompleted: false,
     ...overrides,
   };
 }
@@ -63,7 +62,6 @@ describe('votePillPolicy', () => {
       const out = votePillPolicy(input({
         voteCount: 4,
         mode: 'readonly',
-        isCompleted: true,
       }));
       expect(out.render).toBe('pill');
       expect(out.showCount).toBe(true);
@@ -75,7 +73,6 @@ describe('votePillPolicy', () => {
       const out = votePillPolicy(input({
         voteCount: 0,
         mode: 'readonly',
-        isCompleted: true,
       }));
       expect(out.render).toBe('none');
     });
@@ -85,7 +82,6 @@ describe('votePillPolicy', () => {
         voteCount: 5,
         mode: 'readonly',
         secretVoting: true,
-        isCompleted: true,
       }));
       expect(out.render).toBe('pill');
       expect(out.showCount).toBe(true);
@@ -98,24 +94,22 @@ describe('votePillPolicy', () => {
         voteCount: 0,
         mode: 'readonly',
         secretVoting: true,
-        isCompleted: true,
       }));
       expect(out.render).toBe('none');
     });
-  });
 
-  it('CONTRACT: secret-voting + completed reveals counts but hides voter names', () => {
-    // Explicit contract test — regression here would silently violate the
-    // secret-voting promise documented in the design spec. If this changes,
-    // the change is intentional and the spec must be updated first.
-    const out = votePillPolicy(input({
-      voteCount: 7,
-      mode: 'readonly',
-      secretVoting: true,
-      isCompleted: true,
-    }));
-    expect(out.showCount).toBe(true);
-    expect(out.popover).toBe('none');
+    it('CONTRACT: secret-voting + completed reveals counts but hides voter names', () => {
+      // Explicit contract test — regression here would silently violate the
+      // secret-voting promise documented in the design spec. If this changes,
+      // the change is intentional and the spec must be updated first.
+      const out = votePillPolicy(input({
+        voteCount: 7,
+        mode: 'readonly',
+        secretVoting: true,
+      }));
+      expect(out.showCount).toBe(true);
+      expect(out.popover).toBe('none');
+    });
   });
 
   describe('ariaLabel', () => {
@@ -130,18 +124,18 @@ describe('votePillPolicy', () => {
     });
 
     it('readonly non-secret: "N votes — hover to see voters" with count', () => {
-      const out = votePillPolicy(input({ voteCount: 3, mode: 'readonly', isCompleted: true }));
+      const out = votePillPolicy(input({ voteCount: 3, mode: 'readonly' }));
       expect(out.ariaLabel).toBe('3 votes — hover to see voters');
     });
 
     it('readonly non-secret single vote: "1 vote — hover to see voters"', () => {
-      const out = votePillPolicy(input({ voteCount: 1, mode: 'readonly', isCompleted: true }));
+      const out = votePillPolicy(input({ voteCount: 1, mode: 'readonly' }));
       expect(out.ariaLabel).toBe('1 vote — hover to see voters');
     });
 
     it('readonly secret: "N votes" (no "hover" suffix — there is no tooltip)', () => {
       const out = votePillPolicy(input({
-        voteCount: 4, mode: 'readonly', secretVoting: true, isCompleted: true,
+        voteCount: 4, mode: 'readonly', secretVoting: true,
       }));
       expect(out.ariaLabel).toBe('4 votes');
     });

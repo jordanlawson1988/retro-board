@@ -38,7 +38,7 @@ describe('formatReactorList', () => {
     expect(out.entries[1]).toEqual({ id: 'ghost', name: 'Someone', isMine: false });
   });
 
-  it('caps at 8 entries and reports overflow', () => {
+  it('caps at MAX_PEOPLE_NAMES entries and reports overflow', () => {
     const ids = Array.from({ length: 11 }, (_, i) => String(i + 1));
     const people = ids.map((id) => p(id, `User${id}`));
     const out = formatReactorList(ids, people, null);
@@ -54,8 +54,8 @@ describe('formatReactorList', () => {
     expect(out.overflow).toBe(0);
   });
 
-  it('exports MAX_PEOPLE_NAMES as the cap', async () => {
-    const mod = await import('@/utils/formatReactorList');
+  it('uses MAX_PEOPLE_NAMES from utils/constants as the cap', async () => {
+    const mod = await import('@/utils/constants');
     expect(mod.MAX_PEOPLE_NAMES).toBe(8);
   });
 });

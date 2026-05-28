@@ -1,4 +1,5 @@
 import type { Participant } from '@/types';
+import { MAX_PEOPLE_NAMES } from '@/utils/constants';
 
 export interface ReactorEntry {
   id: string;
@@ -10,8 +11,6 @@ export interface FormattedReactors {
   entries: ReactorEntry[];   // capped at MAX_PEOPLE_NAMES
   overflow: number;          // count of names beyond the cap
 }
-
-export const MAX_PEOPLE_NAMES = 8;
 
 export function formatReactorList(
   reactorIds: string[],

@@ -1,5 +1,5 @@
 import type { Participant } from '@/types';
-import { MAX_PEOPLE_NAMES } from '@/utils/formatReactorList';
+import { MAX_PEOPLE_NAMES } from '@/utils/constants';
 
 export interface VoterEntry {
   id: string;

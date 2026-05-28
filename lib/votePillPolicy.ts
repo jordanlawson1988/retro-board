@@ -3,7 +3,6 @@ export interface VotePillPolicyInput {
   mode: 'interactive' | 'readonly';
   hasVoted: boolean;
   secretVoting: boolean;
-  isCompleted: boolean;
 }
 
 export interface VotePillPolicyOutput {
@@ -15,12 +14,12 @@ export interface VotePillPolicyOutput {
   popover: 'voters' | 'none';
   /** Whether the pill is an active vote-toggle button. */
   interactive: boolean;
-  /** aria-label string for the rendered element. */
+  /** aria-label string for the rendered element. Empty string when `render === 'none'` — callers should check `render` before applying this. */
   ariaLabel: string;
 }
 
 export function votePillPolicy(input: VotePillPolicyInput): VotePillPolicyOutput {
-  const { voteCount, mode, hasVoted, secretVoting, isCompleted } = input;
+  const { voteCount, mode, hasVoted, secretVoting } = input;
 
   // Readonly (completed boards)
   if (mode === 'readonly') {

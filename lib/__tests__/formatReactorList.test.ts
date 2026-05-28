@@ -53,4 +53,9 @@ describe('formatReactorList', () => {
     expect(out.entries).toEqual([]);
     expect(out.overflow).toBe(0);
   });
+
+  it('exports MAX_PEOPLE_NAMES as the cap', async () => {
+    const mod = await import('@/utils/formatReactorList');
+    expect(mod.MAX_PEOPLE_NAMES).toBe(8);
+  });
 });

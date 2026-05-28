@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Pencil, Trash2, ThumbsUp, Check, X, Merge, ChevronDown, ChevronRight, SmilePlus } from 'lucide-react';
+import { Pencil, Trash2, Check, X, Merge, ChevronDown, ChevronRight, SmilePlus } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { CardColorPicker } from './CardColorPicker';
+import { VotePill } from './VotePill';
 import { IconButton } from '@/components/common/IconButton';
 import { Pill } from '@/components/common/Pill';
 import { ReactionPill } from './ReactionPill';
@@ -64,6 +65,7 @@ export function RetroCard({
   reactions = {},
   onToggleReaction,
   isCompleted,
+  votes,
   currentParticipantId,
   childCards = [],
   canMerge,
@@ -206,36 +208,18 @@ export function RetroCard({
               </div>
 
               <div className="flex items-center gap-1">
-                {/* Vote button (interactive — only when voting enabled and board active) */}
-                {votingEnabled && !isCompleted && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onToggleVote(id); }}
-                    disabled={!hasVoted && voteLimitReached}
-                    aria-pressed={hasVoted}
-                    className={cn(
-                      'inline-flex items-center gap-1.5 rounded-full pl-2 pr-2.5 py-1 font-mono tabular-nums text-[11px] border transition-[background-color,color,border-color] duration-150',
-                      hasVoted
-                        ? 'bg-[var(--accent-soft)] text-[var(--accent)] border-transparent'
-                        : voteLimitReached
-                        ? 'cursor-not-allowed bg-[var(--bg-elev)] text-[var(--ink-5)] border-[var(--line)] opacity-50'
-                        : 'bg-[var(--bg-elev)] text-[var(--ink-3)] border-[var(--line)] hover:text-[var(--ink)] hover:border-[var(--line-strong)]'
-                    )}
-                    aria-label={hasVoted ? 'Remove vote' : voteLimitReached ? 'Vote limit reached' : 'Vote for this card'}
-                    title={voteLimitReached && !hasVoted ? 'No votes remaining' : undefined}
-                  >
-                    <ThumbsUp size={12} />
-                    {secretVoting
-                      ? (hasVoted && <span className="text-[10px]">Voted</span>)
-                      : (voteCount > 0 && <span>{voteCount}</span>)
-                    }
-                  </button>
-                )}
-                {/* Vote count (read-only — voting disabled or board completed) */}
-                {(!votingEnabled || isCompleted) && !secretVoting && voteCount > 0 && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[11px] font-mono tabular-nums text-[var(--ink-4)]">
-                    <ThumbsUp size={12} />
-                    <span>{voteCount}</span>
-                  </span>
+                {votingEnabled && (
+                  <VotePill
+                    voteCount={voteCount}
+                    voters={(votes ?? []).filter((v) => v.card_id === id)}
+                    participants={participants}
+                    currentParticipantId={currentParticipantId ?? null}
+                    mode={isCompleted ? 'readonly' : 'interactive'}
+                    hasVoted={hasVoted}
+                    voteLimitReached={voteLimitReached}
+                    onToggleVote={() => onToggleVote(id)}
+                    secretVoting={secretVoting}
+                  />
                 )}
 
                 {/* Author actions (visible on hover) */}

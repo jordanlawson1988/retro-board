@@ -1,13 +1,23 @@
 import { sql } from '@/lib/db';
 import { ablyServer } from '@/lib/ably-server';
 import { NextResponse } from 'next/server';
+import { rateLimitOr429 } from '@/lib/rate-limit';
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ boardId: string }> }
 ) {
+  const limited = await rateLimitOr429(request, 'card-create', 30, 60);
+  if (limited) return limited;
   const { boardId } = await params;
   const { id, columnId, text, authorName, authorId, position } = await request.json();
+
+  if (typeof text !== 'string' || text.trim().length === 0 || text.length > 2000) {
+    return NextResponse.json(
+      { error: 'Card text must be 1–2000 characters' },
+      { status: 400 }
+    );
+  }
 
   const [card] = await sql`
     INSERT INTO cards (id, column_id, board_id, text, author_name, author_id, position)

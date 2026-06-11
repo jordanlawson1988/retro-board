@@ -7,6 +7,7 @@ import {
   assertBoardOwner,
   authzErrorResponse,
 } from '@/lib/auth-helpers';
+import { getEntitlement } from '@/lib/entitlements';
 
 /** Convert a thrown AuthzError into a NextResponse, or null for other errors. */
 function authFail(e: unknown): NextResponse | null {
@@ -175,6 +176,19 @@ export async function POST(
       if (r) return r;
       throw e;
     }
+    const session = await getSessionOrNull();
+    if (session?.user) {
+      const ent = await getEntitlement(session.user.id, session.user.email);
+      if (!ent.canCreateBoard) {
+        return NextResponse.json(
+          {
+            error: `Reactivating this board would exceed the free plan's ${ent.limit} active board. Upgrade for unlimited boards.`,
+            code: 'BOARD_LIMIT_REACHED',
+          },
+          { status: 402 }
+        );
+      }
+    }
     // Clear archived_at and unlock; leave card_visibility as-is (facilitator can re-hide).
     const [board] = await sql`SELECT settings FROM boards WHERE id = ${boardId}`;
     const settings = { ...board.settings, board_locked: false };
@@ -193,6 +207,19 @@ export async function POST(
       const r = authFail(e);
       if (r) return r;
       throw e;
+    }
+    const session = await getSessionOrNull();
+    if (session?.user) {
+      const ent = await getEntitlement(session.user.id, session.user.email);
+      if (!ent.canCreateBoard) {
+        return NextResponse.json(
+          {
+            error: `Reactivating this board would exceed the free plan's ${ent.limit} active board. Upgrade for unlimited boards.`,
+            code: 'BOARD_LIMIT_REACHED',
+          },
+          { status: 402 }
+        );
+      }
     }
     await sql`UPDATE boards SET deleted_at = NULL WHERE id = ${boardId}`;
     return NextResponse.json({ ok: true });

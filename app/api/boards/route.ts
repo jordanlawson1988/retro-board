@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { getSessionOrNull } from '@/lib/auth-helpers';
 import { generateJoinCode } from '@/lib/join-code';
 import { rateLimitOr429 } from '@/lib/rate-limit';
+import { getEntitlement } from '@/lib/entitlements';
 
 export async function POST(request: Request) {
   const limited = await rateLimitOr429(request, 'board-create', 10, 3600);
@@ -11,9 +12,27 @@ export async function POST(request: Request) {
     const { id, title, description, template, createdBy, settings, columns, participant } =
       await request.json();
 
-    // Get authenticated user if available (board creation works for both auth'd and anon users)
+    // Creators must have an account (locked decision 2026-06-09). Participants
+    // joining boards are untouched — never gate the join routes.
     const session = await getSessionOrNull();
-    const ownerId = session?.user?.id ?? null;
+    if (!session?.user) {
+      return NextResponse.json(
+        { error: 'Sign in to create a board', code: 'AUTH_REQUIRED' },
+        { status: 401 }
+      );
+    }
+    const ownerId = session.user.id;
+
+    const entitlement = await getEntitlement(ownerId, session.user.email);
+    if (!entitlement.canCreateBoard) {
+      return NextResponse.json(
+        {
+          error: `The free plan includes ${entitlement.limit} active board. Complete or delete a board to free a slot, or upgrade for unlimited boards.`,
+          code: 'BOARD_LIMIT_REACHED',
+        },
+        { status: 402 }
+      );
+    }
 
     // Generate a unique 5-digit join code
     let joinCode = generateJoinCode();

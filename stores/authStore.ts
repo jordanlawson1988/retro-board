@@ -4,7 +4,7 @@ import { create } from 'zustand';
 import { authClient } from '@/lib/auth-client';
 import { ANTI_BOT_HEADERS } from '@/lib/anti-bot/constants';
 import { encodeHoneypotHeader, type HoneypotPayload } from '@/lib/anti-bot/honeypot';
-import type { AdminUser, User, Subscription } from '@/types';
+import type { AdminUser, User } from '@/types';
 
 export interface AntiBotPayload {
   /** Token issued by the Cloudflare Turnstile widget. */
@@ -23,7 +23,6 @@ function buildAntiBotHeaders(antiBot: AntiBotPayload): Record<string, string> {
 interface AuthState {
   user: User | null;
   adminUser: AdminUser | null;
-  subscription: Subscription | null;
   loading: boolean;
   error: string | null;
   isAuthenticated: boolean;
@@ -37,7 +36,6 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   adminUser: null,
-  subscription: null,
   loading: true,
   error: null,
   isAuthenticated: false,
@@ -47,7 +45,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const session = await authClient.getSession();
       if (!session.data?.user) {
-        set({ user: null, adminUser: null, subscription: null, loading: false, isAuthenticated: false });
+        set({ user: null, adminUser: null, loading: false, isAuthenticated: false });
         return;
       }
 
@@ -57,12 +55,11 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({
         user: session.data.user,
         adminUser,
-        subscription: null,
         loading: false,
         isAuthenticated: true,
       });
     } catch {
-      set({ user: null, adminUser: null, subscription: null, loading: false, isAuthenticated: false });
+      set({ user: null, adminUser: null, loading: false, isAuthenticated: false });
     }
   },
 
@@ -125,6 +122,6 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   signOut: async () => {
     await authClient.signOut();
-    set({ user: null, adminUser: null, subscription: null, loading: false, error: null, isAuthenticated: false });
+    set({ user: null, adminUser: null, loading: false, error: null, isAuthenticated: false });
   },
 }));

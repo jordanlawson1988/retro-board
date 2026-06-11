@@ -216,21 +216,3 @@ export interface BoardInvite {
   created_at: string;
 }
 
-// Subscription (Better Auth Stripe plugin shape)
-export type SubscriptionStatus = 'active' | 'canceled' | 'past_due' | 'trialing' | 'incomplete';
-
-export interface Subscription {
-  id: string;
-  plan: string;
-  status: SubscriptionStatus;
-  currentPeriodEnd: string;
-  cancelAtPeriodEnd: boolean;
-}
-
-// Plan limits
-export const PLAN_LIMITS = {
-  free: { maxActiveBoards: 3, pdfExport: false, imageExport: false },
-  pro: { maxActiveBoards: Infinity, pdfExport: true, imageExport: true },
-} as const;
-
-export type PlanTier = keyof typeof PLAN_LIMITS;

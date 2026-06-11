@@ -320,6 +320,12 @@ export function BoardPage({ boardId }: { boardId: string }) {
             onUncombineCard={uncombineCard}
             participants={participants}
             onUpdateColumn={updateColumn}
+            boardTitle={board.title}
+            joinCode={board.join_code ?? null}
+            settings={board.settings}
+            onUpdateSettings={updateSettings}
+            onOpenActionItems={() => setShowActionItems(true)}
+            onCompleteRetro={() => setShowCompleteModal(true)}
           />
         ) : (
           <div className="min-h-dvh bg-[var(--bg)] flex items-center justify-center">

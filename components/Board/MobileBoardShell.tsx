@@ -16,12 +16,14 @@ import { useState, useMemo, useCallback } from 'react';
 import { MobileColumnTabs } from './MobileColumnTabs';
 import { MobileVoteTracker } from './MobileVoteTracker';
 import { MobileFAB } from './MobileFAB';
-import { MobileBottomNav, type MobileNavKey } from './MobileBottomNav';
+import { MobileBottomNav } from './MobileBottomNav';
 import { MobileCardComposerSheet } from './MobileCardComposerSheet';
+import { MobileMoreSheet } from './MobileMoreSheet';
+import { ConnectionStatusBanner } from './ConnectionStatusBanner';
 import { RetroCard } from './RetroCard';
 import { ColumnSortMenu } from './ColumnSortMenu';
 import { sortCards } from '@/utils/sortCards';
-import type { Column, Card, Vote, ActionItem, CardReactions, Participant, CardSort } from '@/types';
+import type { Column, Card, Vote, ActionItem, CardReactions, Participant, CardSort, BoardSettings } from '@/types';
 
 interface MobileBoardShellProps {
   // Board state
@@ -48,6 +50,13 @@ interface MobileBoardShellProps {
   onUncombineCard: (childCardId: string) => void;
   participants: Participant[];
   onUpdateColumn?: (columnId: string, updates: { sort_by: CardSort }) => void;
+  // New props wired from BoardPage
+  boardTitle: string;
+  joinCode: string | null;
+  settings: BoardSettings;
+  onUpdateSettings: (settings: Partial<BoardSettings>) => void;
+  onOpenActionItems: () => void;
+  onCompleteRetro: () => void;
 }
 
 export function MobileBoardShell({
@@ -73,6 +82,12 @@ export function MobileBoardShell({
   onUncombineCard,
   participants,
   onUpdateColumn,
+  boardTitle,
+  joinCode,
+  settings,
+  onUpdateSettings,
+  onOpenActionItems,
+  onCompleteRetro,
 }: MobileBoardShellProps) {
   const sortedColumns = useMemo(
     () => [...columns].sort((a, b) => a.position - b.position),
@@ -82,7 +97,7 @@ export function MobileBoardShell({
   const [activeColumnId, setActiveColumnId] = useState<string>(
     () => sortedColumns[0]?.id ?? ''
   );
-  const [navTab, setNavTab] = useState<MobileNavKey>('board');
+  const [moreOpen, setMoreOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
 
   // Keep activeColumnId valid when columns change (e.g., real-time add/delete)
@@ -139,6 +154,9 @@ export function MobileBoardShell({
 
   return (
     <div className="flex flex-col min-h-dvh bg-[var(--bg)]">
+      {/* Connection status banner */}
+      <ConnectionStatusBanner />
+
       {/* Vote tracker row — only shown when voting is enabled and user has joined */}
       {votingEnabled && !!currentParticipantId && (
         <MobileVoteTracker used={votesUsed} total={maxVotesPerParticipant} />
@@ -237,11 +255,30 @@ export function MobileBoardShell({
         <MobileFAB onClick={() => setComposerOpen(true)} />
       )}
 
-      {/* Bottom nav */}
+      {/* Bottom nav — 3 momentary tabs */}
       <MobileBottomNav
-        active={navTab}
-        onSelect={setNavTab}
+        active="board"
+        onSelect={(key) => {
+          if (key === 'actions') onOpenActionItems();
+          if (key === 'more') setMoreOpen(true);
+        }}
         actionBadgeCount={actionItems.length}
+      />
+
+      {/* More sheet */}
+      <MobileMoreSheet
+        open={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        boardTitle={boardTitle}
+        joinCode={joinCode}
+        participants={participants}
+        isAdmin={isAdmin}
+        isCompleted={isCompleted}
+        settings={settings}
+        onUpdateSettings={onUpdateSettings}
+        actionItemCount={actionItems.length}
+        onToggleActionItems={onOpenActionItems}
+        onCompleteRetro={onCompleteRetro}
       />
 
       {/* Card composer sheet */}

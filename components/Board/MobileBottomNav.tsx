@@ -1,9 +1,9 @@
 'use client';
 
 import { cn } from '@/utils/cn';
-import { Columns3, ThumbsUp, ListChecks, MoreHorizontal } from 'lucide-react';
+import { Columns3, ListChecks, MoreHorizontal } from 'lucide-react';
 
-export type MobileNavKey = 'board' | 'votes' | 'actions' | 'more';
+export type MobileNavKey = 'board' | 'actions' | 'more';
 
 interface MobileBottomNavProps {
   active: MobileNavKey;
@@ -13,7 +13,6 @@ interface MobileBottomNavProps {
 
 const ITEMS: Array<{ key: MobileNavKey; icon: typeof Columns3; label: string }> = [
   { key: 'board',   icon: Columns3,       label: 'Board' },
-  { key: 'votes',   icon: ThumbsUp,       label: 'Votes' },
   { key: 'actions', icon: ListChecks,     label: 'Actions' },
   { key: 'more',    icon: MoreHorizontal, label: 'More' },
 ];
@@ -25,7 +24,7 @@ export function MobileBottomNav({
 }: MobileBottomNavProps) {
   return (
     <nav
-      className="sticky bottom-0 grid grid-cols-4 gap-1 px-2 pt-2 pb-[18px] border-t border-[var(--line)] z-20"
+      className="sticky bottom-0 grid grid-cols-3 gap-1 px-2 pt-2 pb-[18px] border-t border-[var(--line)] z-20"
       style={{
         background: 'color-mix(in oklab, var(--bg) 85%, transparent)',
         backdropFilter: 'blur(10px)',

@@ -1,11 +1,26 @@
 import { sql } from '@/lib/db';
+import { requireSystemAdmin, authzErrorResponse } from '@/lib/auth-helpers';
 
 export async function GET() {
+  try {
+    await requireSystemAdmin();
+  } catch (e) {
+    const r = authzErrorResponse(e);
+    if (r) return Response.json(r.body, { status: r.status });
+    throw e;
+  }
   const [settings] = await sql`SELECT * FROM app_settings LIMIT 1`;
   return Response.json({ settings: settings ?? null });
 }
 
 export async function PATCH(request: Request) {
+  try {
+    await requireSystemAdmin();
+  } catch (e) {
+    const r = authzErrorResponse(e);
+    if (r) return Response.json(r.body, { status: r.status });
+    throw e;
+  }
   const updates = await request.json();
   const [settings] = await sql`SELECT * FROM app_settings LIMIT 1`;
   if (!settings) {

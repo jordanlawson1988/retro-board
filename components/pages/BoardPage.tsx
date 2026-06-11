@@ -429,10 +429,14 @@ export function BoardPage({ boardId }: { boardId: string }) {
                   className={cn(
                     'flex items-center gap-1.5 rounded-[var(--radius-md)] px-2.5 py-1.5 text-xs font-medium transition-colors',
                     activeColumnFilter === col.id
-                      ? 'text-white shadow-sm'
+                      ? 'text-[var(--color-gray-8)] shadow-sm'
                       : 'bg-[var(--color-surface)] border border-[var(--color-gray-2)] text-[var(--color-gray-5)] hover:border-[var(--color-gray-3)]'
                   )}
-                  style={activeColumnFilter === col.id ? { backgroundColor: col.color } : undefined}
+                  style={
+                    activeColumnFilter === col.id
+                      ? { backgroundColor: `color-mix(in oklab, ${col.color} 22%, var(--bg-elev))` }
+                      : undefined
+                  }
                 >
                   <span className="h-2 w-2 rounded-full" style={{ backgroundColor: col.color }} />
                   {col.title}

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, LogIn, Zap, ListChecks, Eye } from 'lucide-react';
-import { AppShell } from '@/components/Layout';
+import { AppShell, SiteFooter } from '@/components/Layout';
 import { Button, Input, Textarea, Modal, Pill } from '@/components/common';
 import { BoardHistorySidebar } from '@/components/Board';
 import { BOARD_TEMPLATES, APP_NAME } from '@/utils';
@@ -280,6 +280,7 @@ export function HomePage() {
           </div>
         </div>
       </Modal>
+      <SiteFooter />
     </AppShell>
   );
 }

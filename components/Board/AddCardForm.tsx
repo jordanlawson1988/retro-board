@@ -68,7 +68,7 @@ export function AddCardForm({ onSubmit, disabled }: AddCardFormProps) {
       rows={2}
       placeholder="Type your thought…"
       className={cn(
-        'w-full px-3 py-2.5 rounded-[var(--r-md)] resize-none text-[15px]',
+        'w-full px-3 py-2.5 rounded-[var(--r-md)] resize-none text-[16px]',
         'bg-[var(--surface)] border border-[var(--accent)] text-[var(--ink)]',
         'outline-none shadow-[0_0_0_3px_var(--accent-soft)] transition-colors duration-150',
         'placeholder:text-[var(--ink-4)]'

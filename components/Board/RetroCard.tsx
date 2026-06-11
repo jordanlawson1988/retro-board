@@ -159,7 +159,7 @@ export function RetroCard({
               autoFocus
               className={cn(
                 'w-full resize-none rounded-[var(--r-sm)] border border-[var(--line)]',
-                'bg-[var(--surface)] px-2 py-1.5 text-[var(--ink)]',
+                'bg-[var(--surface)] px-2 py-1.5 text-[16px] text-[var(--ink)]',
                 'focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]'
               )}
             />
@@ -185,7 +185,7 @@ export function RetroCard({
           </div>
         ) : (
           <>
-            <p className="whitespace-pre-wrap text-[15px] leading-[1.45] text-[var(--ink)]">{text}</p>
+            <p className="whitespace-pre-wrap text-[16px] leading-[1.45] text-[var(--ink)]">{text}</p>
 
             <div className="mt-2 flex items-center justify-between">
               <div className="flex items-center gap-2">

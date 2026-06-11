@@ -29,19 +29,19 @@ export function MobileColumnTabs({ columns, activeColumnId, onSelect }: MobileCo
               'shrink-0 inline-flex items-center gap-2 px-3.5 py-2 rounded-full border text-[13px] font-medium',
               'transition-[background-color,color,border-color] duration-150',
               active
-                ? 'border-transparent text-white'
+                ? 'border-transparent text-[var(--ink)]'
                 : 'bg-[var(--bg-elev)] border-[var(--line)] text-[var(--ink-3)] hover:border-[var(--line-strong)]'
             )}
-            style={active ? { background: c.color || 'var(--accent)' } : undefined}
+            style={
+              active
+                ? { background: `color-mix(in oklab, ${c.color || 'var(--accent)'} 22%, var(--bg-elev))` }
+                : undefined
+            }
           >
             <span
               aria-hidden
               className="w-2 h-2 rounded-full shrink-0"
-              style={{
-                background: active
-                  ? 'rgba(255,255,255,0.85)'
-                  : (c.color || 'var(--accent)'),
-              }}
+              style={{ background: c.color || 'var(--accent)' }}
             />
             {c.title}
           </button>

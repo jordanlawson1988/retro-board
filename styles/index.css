@@ -62,8 +62,8 @@
   --ink:   oklch(0.18 0.015 260);
   --ink-2: oklch(0.32 0.012 260);
   --ink-3: oklch(0.50 0.012 260);
-  --ink-4: oklch(0.65 0.010 260);
-  --ink-5: oklch(0.80 0.008 260);
+  --ink-4: oklch(0.56 0.012 260);
+  --ink-5: oklch(0.70 0.010 260);
 
   /* Lines */
   --line:        oklch(0.93 0.005 260);
@@ -121,7 +121,7 @@
   --ink:   oklch(0.97 0.005 80);
   --ink-2: oklch(0.88 0.008 80);
   --ink-3: oklch(0.72 0.008 260);
-  --ink-4: oklch(0.58 0.010 260);
+  --ink-4: oklch(0.63 0.010 260);
   --ink-5: oklch(0.42 0.012 260);
 
   --line:        oklch(0.27 0.012 260);
@@ -176,7 +176,7 @@
     --ink:   oklch(0.97 0.005 80);
     --ink-2: oklch(0.88 0.008 80);
     --ink-3: oklch(0.72 0.008 260);
-    --ink-4: oklch(0.58 0.010 260);
+    --ink-4: oklch(0.63 0.010 260);
     --ink-5: oklch(0.42 0.012 260);
 
     --line:        oklch(0.27 0.012 260);
@@ -386,6 +386,20 @@
 
 @keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
 @keyframes scale-in { from { opacity: 0; transform: scale(0.95) } to { opacity: 1; transform: scale(1) } }
+
+/* ------------------------------------------------------------------ */
+/* 9. Reduced motion                                                    */
+/* ------------------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 
 /* ============================================================ */
 /* Logo mark — CSS-rendered Quiet Modern logo                    */

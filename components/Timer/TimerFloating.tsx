@@ -92,7 +92,7 @@ export function TimerFloating({ timer, isAdmin, onStart, onPause, onResume, onRe
   // ── Collapsed state: compact floating capsule ─────────────────
   if (!expanded) {
     return (
-      <div className="fixed bottom-6 right-6 z-50">
+      <div className="fixed bottom-6 right-6 z-50 max-md:bottom-28">
         <button
           onClick={() => setExpanded(true)}
           className={cn(
@@ -124,7 +124,7 @@ export function TimerFloating({ timer, isAdmin, onStart, onPause, onResume, onRe
 
   // ── Expanded state: floating capsule panel ───────────────────
   return (
-    <div className="fixed bottom-6 right-6 z-50" ref={panelRef}>
+    <div className="fixed bottom-6 right-6 z-50 max-md:bottom-28" ref={panelRef}>
       <div className={cn(
         'w-72 rounded-[var(--r-2xl)] border border-[var(--line)] shadow-[var(--shadow-lg)]',
         'bg-[var(--bg-elev)] overflow-hidden'

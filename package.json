@@ -28,6 +28,7 @@
     "next": "^16.2.9",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "resend": "^6.12.4",
     "tailwind-merge": "^3.5.0",
     "zustand": "^5.0.11"
   },

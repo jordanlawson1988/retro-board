@@ -46,8 +46,14 @@ export function ActionItemsPanel({
   return (
     <div
       className={cn(
-        'fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-[var(--color-gray-1)] bg-[var(--color-surface)] shadow-xl transition-transform duration-300',
-        open ? 'translate-x-0' : 'translate-x-full'
+        // Desktop: right-side slide-in panel (unchanged ≥768px)
+        'fixed z-40 flex flex-col bg-[var(--color-surface)] shadow-xl transition-transform duration-300',
+        'md:inset-y-0 md:right-0 md:w-full md:max-w-md md:border-l md:border-[var(--color-gray-1)]',
+        // Mobile: bottom sheet
+        'max-md:inset-x-0 max-md:bottom-0 max-md:max-h-[80dvh] max-md:rounded-t-2xl max-md:border-t max-md:border-[var(--color-gray-1)]',
+        open
+          ? 'md:translate-x-0 max-md:translate-y-0'
+          : 'md:translate-x-full max-md:translate-y-full'
       )}
     >
       {/* Header */}

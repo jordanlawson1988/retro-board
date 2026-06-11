@@ -595,6 +595,11 @@ export function BoardPage({ boardId }: { boardId: string }) {
         </div>
       )}
 
+    </AppShell>
+      </div>
+
+      {/* ── Shared overlays (both shells) ──────────────────────────── */}
+
       {/* Complete Retro Modal */}
       <Modal
         open={showCompleteModal}
@@ -651,8 +656,6 @@ export function BoardPage({ boardId }: { boardId: string }) {
           readOnly={isCompleted}
         />
       )}
-    </AppShell>
-      </div>
     </>
   );
 }

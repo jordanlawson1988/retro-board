@@ -1,6 +1,6 @@
 import { sql } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
-import { getSessionOrNull, assertBoardOwner, authzErrorResponse } from '@/lib/auth-helpers';
+import { getSessionOrNull, assertBoardOwner, assertCanFacilitate, authzErrorResponse } from '@/lib/auth-helpers';
 import { isBoardMemberRole } from '@/types';
 
 function authFail(e: unknown): NextResponse | null {
@@ -14,6 +14,12 @@ export async function GET(
 ) {
   const { boardId } = await params;
 
+  const session = await getSessionOrNull();
+  const requesterId = session?.user?.id ?? null;
+  if (!requesterId) {
+    return NextResponse.json({ error: 'Sign in required' }, { status: 401 });
+  }
+
   const members = await sql`
     SELECT bm.*, u.email AS user_email, u.name AS user_name
     FROM board_members bm
@@ -22,7 +28,24 @@ export async function GET(
     ORDER BY bm.joined_at ASC
   `;
 
-  return NextResponse.json({ members });
+  // Facilitators/owners see emails; plain members see names only;
+  // non-members see nothing. Member emails are PII, not public data.
+  let canSeeEmails = false;
+  try {
+    await assertCanFacilitate(boardId);
+    canSeeEmails = true;
+  } catch {
+    canSeeEmails = false;
+  }
+
+  const isMember = members.some((m) => m.user_id === requesterId);
+  if (!isMember && !canSeeEmails) {
+    return NextResponse.json({ error: 'Not a member of this board' }, { status: 403 });
+  }
+
+  return NextResponse.json({
+    members: members.map((m) => (canSeeEmails ? m : { ...m, user_email: null })),
+  });
 }
 
 // Add a member or change a member's role. Owner only.

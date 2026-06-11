@@ -123,7 +123,7 @@ export function BoardPageWrapper({ boardId }: { boardId: string }) {
 
   // Joined: render with Ably
   return (
-    <AblyProvider clientId={currentParticipantId}>
+    <AblyProvider clientId={currentParticipantId} boardId={boardId}>
       <ChannelProvider channelName={`retro-board:${boardId}`}>
         <ChannelProvider channelName={`retro-board:${boardId}:timer`}>
           <BoardPageInner boardId={boardId} />

@@ -2,8 +2,11 @@ import { sql } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { getSessionOrNull } from '@/lib/auth-helpers';
 import { generateJoinCode } from '@/lib/join-code';
+import { rateLimitOr429 } from '@/lib/rate-limit';
 
 export async function POST(request: Request) {
+  const limited = await rateLimitOr429(request, 'board-create', 10, 3600);
+  if (limited) return limited;
   try {
     const { id, title, description, template, createdBy, settings, columns, participant } =
       await request.json();

@@ -51,7 +51,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         return;
       }
 
-      const adminRes = await fetch(`/api/admin/verify?userId=${session.data.user.id}`);
+      const adminRes = await fetch('/api/admin/verify');
       const adminUser = adminRes.ok ? await adminRes.json() : null;
 
       set({
@@ -83,7 +83,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       throw new Error('Sign in failed');
     }
 
-    const adminRes = await fetch(`/api/admin/verify?userId=${session.data.user.id}`);
+    const adminRes = await fetch('/api/admin/verify');
     const adminUser = adminRes.ok ? await adminRes.json() : null;
 
     set({

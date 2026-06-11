@@ -1,6 +1,15 @@
 import { sql } from '@/lib/db';
+import { requireSystemAdmin, authzErrorResponse } from '@/lib/auth-helpers';
 
 export async function GET(request: Request) {
+  try {
+    await requireSystemAdmin();
+  } catch (e) {
+    const r = authzErrorResponse(e);
+    if (r) return Response.json(r.body, { status: r.status });
+    throw e;
+  }
+
   const url = new URL(request.url);
   const search = url.searchParams.get('search') || '';
   const filter = url.searchParams.get('filter') || 'all';
@@ -69,12 +78,26 @@ export async function GET(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  try {
+    await requireSystemAdmin();
+  } catch (e) {
+    const r = authzErrorResponse(e);
+    if (r) return Response.json(r.body, { status: r.status });
+    throw e;
+  }
   const { boardId } = await request.json();
   await sql`DELETE FROM boards WHERE id = ${boardId}`;
   return Response.json({ ok: true });
 }
 
 export async function POST(request: Request) {
+  try {
+    await requireSystemAdmin();
+  } catch (e) {
+    const r = authzErrorResponse(e);
+    if (r) return Response.json(r.body, { status: r.status });
+    throw e;
+  }
   const { boardId, action } = await request.json();
   if (action === 'archive') {
     // Fetch current settings to merge board_locked

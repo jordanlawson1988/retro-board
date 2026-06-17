@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Check, Link2, Users, CheckCircle2 } from 'lucide-react';
+import { Check, Link2, Users, CheckCircle2 } from 'lucide-react';
+import { MobileSheet } from '@/components/common/Sheet';
 import { FacilitatorToolbar } from './FacilitatorToolbar';
 import type { BoardSettings, Participant } from '@/types';
 
@@ -35,7 +36,6 @@ export function MobileMoreSheet({
   onCompleteRetro,
 }: MobileMoreSheetProps) {
   const [copied, setCopied] = useState(false);
-  if (!open) return null;
 
   const handleCopyLink = async () => {
     await navigator.clipboard.writeText(window.location.href.split('?')[0]);
@@ -44,30 +44,20 @@ export function MobileMoreSheet({
   };
 
   return (
-    <>
-      <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose} aria-hidden />
-      <div
-        role="dialog"
-        aria-label="Board options"
-        className="fixed inset-x-0 bottom-0 z-50 flex max-h-[80dvh] flex-col gap-4 overflow-y-auto rounded-t-2xl border-t border-[var(--line)] bg-[var(--surface)] p-4 pb-8"
-      >
-        <div className="flex items-center justify-between">
-          <h3 className="min-w-0 truncate text-base font-semibold text-[var(--ink)]">
-            {boardTitle}
-            {isCompleted && (
-              <span className="ml-2 text-xs font-medium text-[var(--success)]">Completed</span>
-            )}
-          </h3>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="rounded-[var(--r-md)] p-2 text-[var(--ink-3)] hover:bg-[var(--surface-muted)]"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
+    <MobileSheet
+      open={open}
+      onClose={onClose}
+      label="Board options"
+      title={
+        <>
+          {boardTitle}
+          {isCompleted && (
+            <span className="ml-2 text-xs font-medium text-[var(--success)]">Completed</span>
+          )}
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
         {/* Share */}
         <div className="flex flex-col gap-2">
           <button
@@ -130,6 +120,6 @@ export function MobileMoreSheet({
           </div>
         )}
       </div>
-    </>
+    </MobileSheet>
   );
 }

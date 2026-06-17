@@ -25,6 +25,10 @@
   --r-2xl: 22px;
   --r-pill: 999px;
 
+  /* Safe-area insets (resolve once viewport-fit=cover is set) */
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+
   /* Type scale */
   --t-display: clamp(2.4rem, 5vw, 3.5rem);
   --t-h1: 2.1rem;
@@ -340,6 +344,9 @@
 /* ------------------------------------------------------------------ */
 @layer base {
   *, *::before, *::after { box-sizing: border-box; }
+
+  /* Kill the grey tap-highlight flash on mobile Safari/Chrome */
+  * { -webkit-tap-highlight-color: transparent; }
 
   html {
     -webkit-font-smoothing: antialiased;

@@ -437,3 +437,7 @@
 /* ============================================================ */
 .scroll-hide::-webkit-scrollbar { display: none; }
 .scroll-hide { scrollbar-width: none; }
+
+/* Mobile bottom-sheet enter animations (used by MobileSheet) */
+@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }

@@ -115,6 +115,7 @@ export function MobileMoreSheet({
               Facilitator
             </span>
             <FacilitatorToolbar
+              layout="stacked"
               settings={settings}
               onUpdateSettings={onUpdateSettings}
               actionItemCount={actionItemCount}
@@ -134,7 +135,7 @@ export function MobileMoreSheet({
                 onClose();
                 onCompleteRetro();
               }}
-              className="flex min-h-11 items-center justify-center gap-2 rounded-[var(--r-md)] bg-[var(--ink)] px-4 py-2.5 text-sm font-medium text-[var(--bg-elev)]"
+              className="flex min-h-11 items-center justify-center gap-2 rounded-[var(--r-md)] bg-[var(--accent)] px-4 py-2.5 text-sm font-medium text-[var(--on-accent)] hover:bg-[var(--accent-hover)]"
             >
               <CheckCircle2 size={16} />
               Complete retro

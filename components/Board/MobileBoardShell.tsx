@@ -17,6 +17,7 @@ import { MobileColumnTabs } from './MobileColumnTabs';
 import { MobileVoteTracker } from './MobileVoteTracker';
 import { MobileFAB } from './MobileFAB';
 import { MobileBottomNav } from './MobileBottomNav';
+import { computeMobileNavActive } from '@/lib/mobileNav';
 import { MobileCardComposerSheet } from './MobileCardComposerSheet';
 import { MobileMoreSheet } from './MobileMoreSheet';
 import { ConnectionStatusBanner } from './ConnectionStatusBanner';
@@ -55,7 +56,9 @@ interface MobileBoardShellProps {
   joinCode: string | null;
   settings: BoardSettings;
   onUpdateSettings: (settings: Partial<BoardSettings>) => void;
+  actionsOpen: boolean;
   onOpenActionItems: () => void;
+  onCloseActionItems: () => void;
   onCompleteRetro: () => void;
 }
 
@@ -86,7 +89,9 @@ export function MobileBoardShell({
   joinCode,
   settings,
   onUpdateSettings,
+  actionsOpen,
   onOpenActionItems,
+  onCloseActionItems,
   onCompleteRetro,
 }: MobileBoardShellProps) {
   const sortedColumns = useMemo(
@@ -255,10 +260,14 @@ export function MobileBoardShell({
         <MobileFAB onClick={() => setComposerOpen(true)} />
       )}
 
-      {/* Bottom nav — 3 momentary tabs */}
+      {/* Bottom nav — honest toolbar: active reflects which sheet is open */}
       <MobileBottomNav
-        active="board"
+        active={computeMobileNavActive({ moreOpen, actionsOpen })}
         onSelect={(key) => {
+          if (key === 'board') {
+            setMoreOpen(false);
+            onCloseActionItems();
+          }
           if (key === 'actions') onOpenActionItems();
           if (key === 'more') setMoreOpen(true);
         }}

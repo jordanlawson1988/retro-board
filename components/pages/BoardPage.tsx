@@ -324,7 +324,9 @@ export function BoardPage({ boardId }: { boardId: string }) {
             joinCode={board.join_code ?? null}
             settings={board.settings}
             onUpdateSettings={updateSettings}
+            actionsOpen={showActionItems}
             onOpenActionItems={() => setShowActionItems(true)}
+            onCloseActionItems={() => setShowActionItems(false)}
             onCompleteRetro={() => setShowCompleteModal(true)}
           />
         ) : (

@@ -22,6 +22,11 @@ export const metadata: Metadata = {
       { url: '/favicon.svg', type: 'image/svg+xml' },
     ],
   },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'RetroBoard',
+  },
 };
 
 export const viewport: Viewport = {

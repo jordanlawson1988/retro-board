@@ -180,6 +180,13 @@ Desktop board changes; data model / realtime / auth changes; offline support; na
 
 ---
 
+## 10b. Final decisions (recorded at implementation)
+
+- **Board views on mobile** (swimlane/list/timeline): remain **desktop-only by design**. The mobile column-tab layout is the intended mobile view; no mobile view switcher was added. Not a regression.
+- **Add Column on mobile**: remains a **desktop facilitator action**. Not surfaced on mobile this pass (rare mid-retro on a phone; templates/facilitator set columns at creation on desktop).
+- **PWA**: install-only — `app/manifest.ts` (standalone, theme-color) + `appleWebApp` status-bar meta. **No service worker, no offline.**
+- **Body-scroll lock**: scoped to the `md:hidden` mobile wrapper (`h-[100dvh] overflow-hidden`), NOT global `html,body` — protects the desktop board (same route) and every other page.
+
 ## 11. Risks & rollout
 
 - **iOS `100dvh` + dynamic toolbar** is the highest-risk area — must be physically verified on iOS Safari, not just devtools.

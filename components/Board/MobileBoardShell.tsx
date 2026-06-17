@@ -13,6 +13,7 @@
  */
 
 import { useState, useMemo, useCallback } from 'react';
+import { StickyNote } from 'lucide-react';
 import { MobileColumnTabs } from './MobileColumnTabs';
 import { MobileVoteTracker } from './MobileVoteTracker';
 import { MobileFAB } from './MobileFAB';
@@ -157,6 +158,9 @@ export function MobileBoardShell({
 
   const voteLimitReached = votesUsed >= maxVotesPerParticipant;
   const canMerge = !isCompleted && !boardLocked;
+  // Single source of truth for whether the add-card FAB is shown — reused by
+  // the empty-state copy so it never says "tap +" when there is no +.
+  const fabVisible = !cardCreationDisabled && !isCompleted && !!currentParticipantId;
 
   const [mergeSourceId, setMergeSourceId] = useState<string | null>(null);
 
@@ -257,16 +261,25 @@ export function MobileBoardShell({
             );
           })
         ) : (
-          <p className="text-center text-[13px] text-[var(--ink-4)] mt-12">
-            {cardCreationDisabled
-              ? 'Card creation is disabled.'
-              : 'No cards yet — tap + to add one.'}
-          </p>
+          <div className="mt-12 flex flex-col items-center gap-3 text-center">
+            <div className="grid h-12 w-12 place-items-center rounded-full bg-[var(--surface-muted)] text-[var(--ink-4)]">
+              <StickyNote size={22} />
+            </div>
+            <p className="text-[13px] text-[var(--ink-4)]">
+              {cardCreationDisabled
+                ? 'Card creation is disabled.'
+                : isCompleted
+                ? 'No cards in this column.'
+                : fabVisible
+                ? 'No cards yet — tap the + button to add the first one.'
+                : 'No cards yet.'}
+            </p>
+          </div>
         )}
       </div>
 
       {/* FAB — only when card creation is allowed */}
-      {!cardCreationDisabled && !isCompleted && !!currentParticipantId && (
+      {fabVisible && (
         <MobileFAB onClick={() => setComposerOpen(true)} />
       )}
 
@@ -281,7 +294,7 @@ export function MobileBoardShell({
           if (key === 'actions') onOpenActionItems();
           if (key === 'more') setMoreOpen(true);
         }}
-        actionBadgeCount={actionItems.length}
+        actionBadgeCount={actionItems.filter((i) => i.status !== 'done').length}
       />
 
       {/* More sheet */}

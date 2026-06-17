@@ -335,7 +335,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
             onCompleteRetro={() => setShowCompleteModal(true)}
           />
         ) : (
-          <div className="min-h-dvh bg-[var(--bg)] flex items-center justify-center">
+          <div className="flex h-full items-center justify-center bg-[var(--bg)]">
             <p className="text-[var(--ink-4)] text-[13px]">Join the board to participate</p>
           </div>
         )}

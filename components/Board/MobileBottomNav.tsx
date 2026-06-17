@@ -41,7 +41,7 @@ export function MobileBottomNav({
             type="button"
             onClick={() => onSelect(key)}
             className={cn(
-              'relative flex flex-col items-center gap-0.5 py-2 px-1 rounded-xl text-[10px] font-medium border-none bg-transparent cursor-pointer transition-colors duration-120',
+              'relative flex flex-col items-center gap-0.5 py-2 px-1 rounded-xl text-[10px] font-medium border-none bg-transparent cursor-pointer transition-[transform,background-color,color] duration-120 active:scale-95 active:bg-[var(--surface-muted)]',
               isActive
                 ? 'text-[var(--accent)]'
                 : 'text-[var(--ink-4)] hover:bg-[var(--surface-muted)]'
@@ -52,10 +52,12 @@ export function MobileBottomNav({
             <span>{label}</span>
             {key === 'actions' && actionBadgeCount > 0 && (
               <span
-                aria-label={`${actionBadgeCount} action items`}
-                className="absolute top-1.5 right-1/2 translate-x-3 w-2 h-2 rounded-full"
+                aria-label={`${actionBadgeCount} open action items`}
+                className="absolute top-0.5 right-1/2 grid h-4 min-w-[16px] translate-x-3.5 place-items-center rounded-full px-1 text-[9px] font-semibold text-[var(--on-accent)]"
                 style={{ background: 'var(--accent)' }}
-              />
+              >
+                {actionBadgeCount > 99 ? '99+' : actionBadgeCount}
+              </span>
             )}
           </button>
         );

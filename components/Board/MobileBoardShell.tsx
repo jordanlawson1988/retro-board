@@ -50,6 +50,11 @@ interface MobileBoardShellProps {
   onCombineCards: (parentCardId: string, childCardId: string) => void;
   onUncombineCard: (childCardId: string) => void;
   participants: Participant[];
+  onlineParticipantIds: string[];
+  boardCreatorId: string;
+  onPromoteParticipant: (participantId: string) => void;
+  onDemoteParticipant: (participantId: string) => void;
+  onRemoveParticipant: (participantId: string) => void;
   onUpdateColumn?: (columnId: string, updates: { sort_by: CardSort }) => void;
   // New props wired from BoardPage
   boardTitle: string;
@@ -84,6 +89,11 @@ export function MobileBoardShell({
   onCombineCards,
   onUncombineCard,
   participants,
+  onlineParticipantIds,
+  boardCreatorId,
+  onPromoteParticipant,
+  onDemoteParticipant,
+  onRemoveParticipant,
   onUpdateColumn,
   boardTitle,
   joinCode,
@@ -281,6 +291,12 @@ export function MobileBoardShell({
         boardTitle={boardTitle}
         joinCode={joinCode}
         participants={participants}
+        onlineParticipantIds={onlineParticipantIds}
+        currentParticipantId={currentParticipantId}
+        boardCreatorId={boardCreatorId}
+        onPromoteParticipant={onPromoteParticipant}
+        onDemoteParticipant={onDemoteParticipant}
+        onRemoveParticipant={onRemoveParticipant}
         isAdmin={isAdmin}
         isCompleted={isCompleted}
         settings={settings}

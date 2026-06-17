@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Check, Link2, Users, CheckCircle2 } from 'lucide-react';
 import { MobileSheet } from '@/components/common/Sheet';
 import { FacilitatorToolbar } from './FacilitatorToolbar';
+import { ParticipantList } from './ParticipantList';
 import type { BoardSettings, Participant } from '@/types';
 
 interface MobileMoreSheetProps {
@@ -12,6 +13,12 @@ interface MobileMoreSheetProps {
   boardTitle: string;
   joinCode: string | null;
   participants: Participant[];
+  onlineParticipantIds: string[];
+  currentParticipantId: string | null;
+  boardCreatorId: string;
+  onPromoteParticipant: (participantId: string) => void;
+  onDemoteParticipant: (participantId: string) => void;
+  onRemoveParticipant: (participantId: string) => void;
   isAdmin: boolean;
   isCompleted: boolean;
   settings: BoardSettings;
@@ -27,6 +34,12 @@ export function MobileMoreSheet({
   boardTitle,
   joinCode,
   participants,
+  onlineParticipantIds,
+  currentParticipantId,
+  boardCreatorId,
+  onPromoteParticipant,
+  onDemoteParticipant,
+  onRemoveParticipant,
   isAdmin,
   isCompleted,
   settings,
@@ -81,9 +94,18 @@ export function MobileMoreSheet({
             <Users size={16} />
             {participants.length} participant{participants.length === 1 ? '' : 's'}
           </div>
-          <p className="mt-1 text-[13px] leading-5 text-[var(--ink-3)]">
-            {participants.map((p) => p.display_name).join(', ')}
-          </p>
+          <div className="mt-1">
+            <ParticipantList
+              participants={participants}
+              onlineParticipantIds={onlineParticipantIds}
+              currentParticipantId={currentParticipantId}
+              isAdmin={isAdmin}
+              boardCreatorId={boardCreatorId}
+              onPromote={onPromoteParticipant}
+              onDemote={onDemoteParticipant}
+              onRemove={onRemoveParticipant}
+            />
+          </div>
         </div>
 
         {/* Facilitator controls — same component as the desktop header */}

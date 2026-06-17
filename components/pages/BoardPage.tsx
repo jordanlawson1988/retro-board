@@ -319,6 +319,11 @@ export function BoardPage({ boardId }: { boardId: string }) {
             onCombineCards={combineCards}
             onUncombineCard={uncombineCard}
             participants={participants}
+            onlineParticipantIds={onlineParticipantIds}
+            boardCreatorId={board.created_by}
+            onPromoteParticipant={(id) => updateParticipant(id, { is_admin: true })}
+            onDemoteParticipant={(id) => updateParticipant(id, { is_admin: false })}
+            onRemoveParticipant={(id) => removeParticipant(id)}
             onUpdateColumn={updateColumn}
             boardTitle={board.title}
             joinCode={board.join_code ?? null}

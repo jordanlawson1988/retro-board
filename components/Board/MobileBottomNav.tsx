@@ -24,8 +24,9 @@ export function MobileBottomNav({
 }: MobileBottomNavProps) {
   return (
     <nav
-      className="sticky bottom-0 grid grid-cols-3 gap-1 px-2 pt-2 pb-[18px] border-t border-[var(--line)] z-20"
+      className="shrink-0 grid grid-cols-3 gap-1 px-2 pt-2 border-t border-[var(--line)] z-30"
       style={{
+        paddingBottom: 'calc(8px + var(--safe-bottom))',
         background: 'color-mix(in oklab, var(--bg) 85%, transparent)',
         backdropFilter: 'blur(10px)',
         WebkitBackdropFilter: 'blur(10px)',

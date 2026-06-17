@@ -295,7 +295,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
   return (
     <>
       {/* ── Mobile shell (< 768px) ───────────────────────────────── */}
-      <div className="md:hidden">
+      <div className="md:hidden h-[100dvh] overflow-hidden">
         {isJoined ? (
           <MobileBoardShell
             columns={columns}

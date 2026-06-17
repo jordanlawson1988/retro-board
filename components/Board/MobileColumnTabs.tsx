@@ -12,7 +12,7 @@ interface MobileColumnTabsProps {
 export function MobileColumnTabs({ columns, activeColumnId, onSelect }: MobileColumnTabsProps) {
   return (
     <div
-      className="flex gap-2 px-4 py-3 overflow-x-auto scroll-hide"
+      className="shrink-0 flex gap-2 px-4 py-3 overflow-x-auto scroll-hide"
       style={{ scrollSnapType: 'x mandatory' }}
       role="tablist"
       aria-label="Board columns"

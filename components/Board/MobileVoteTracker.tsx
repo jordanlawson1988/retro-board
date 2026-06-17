@@ -13,7 +13,7 @@ export function MobileVoteTracker({ used, total }: MobileVoteTrackerProps) {
   const displayUsed = Math.min(used, displayTotal);
 
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--line)]">
+    <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-[var(--line)]">
       <div className="flex items-center gap-2.5">
         <div className="w-7 h-7 rounded-full bg-[var(--accent-soft)] grid place-items-center shrink-0">
           <ThumbsUp size={14} className="text-[var(--accent)]" />

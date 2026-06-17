@@ -153,7 +153,7 @@ export function MobileBoardShell({
   };
 
   return (
-    <div className="flex flex-col min-h-dvh bg-[var(--bg)]">
+    <div className="relative flex flex-col h-full overflow-hidden bg-[var(--bg)]">
       {/* Connection status banner */}
       <ConnectionStatusBanner />
 
@@ -176,7 +176,7 @@ export function MobileBoardShell({
 
       {/* Merge mode banner */}
       {mergeSourceId && (
-        <div className="flex items-center justify-between bg-[var(--accent-soft)] px-4 py-2 text-sm">
+        <div className="shrink-0 flex items-center justify-between bg-[var(--accent-soft)] px-4 py-2 text-sm">
           <span className="text-[var(--accent)] font-medium text-[13px]">
             Select a card to merge into
           </span>
@@ -192,7 +192,7 @@ export function MobileBoardShell({
 
       {/* Per-column sort control (admin only) */}
       {isAdmin && onUpdateColumn && activeColumn && (
-        <div className="flex items-center justify-end px-4 pt-2">
+        <div className="shrink-0 flex items-center justify-end px-4 pt-2">
           <ColumnSortMenu
             value={activeColumn.sort_by}
             onChange={(next) => onUpdateColumn(activeColumn.id, { sort_by: next })}
@@ -200,8 +200,8 @@ export function MobileBoardShell({
         </div>
       )}
 
-      {/* Card list for active column */}
-      <div className="flex-1 px-4 pt-3 pb-[136px] flex flex-col gap-2 overflow-y-auto">
+      {/* Card list for active column — the ONLY scroll region on mobile */}
+      <div className="flex-1 min-h-0 px-4 pt-3 pb-[calc(84px+var(--safe-bottom))] flex flex-col gap-2 overflow-y-auto overscroll-contain">
         {rootCards.length > 0 ? (
           rootCards.map((card) => {
             const cardVotes = votes.filter((v) => v.card_id === card.id);

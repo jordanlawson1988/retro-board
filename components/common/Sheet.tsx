@@ -12,6 +12,8 @@ interface MobileSheetProps {
   label: string;
   /** Optional visible header. When provided, renders a drag handle + title + 44px close button. */
   title?: ReactNode;
+  /** Lift the sheet up by this many px (e.g. the on-screen keyboard inset). Default 0. */
+  bottomOffset?: number;
   children: ReactNode;
 }
 
@@ -25,7 +27,7 @@ interface MobileSheetProps {
  * - scroll body is overscroll-contained; bottom padding clears the safe area
  * - unmounts when closed (leaves the AT/tab order entirely)
  */
-export function MobileSheet({ open, onClose, label, title, children }: MobileSheetProps) {
+export function MobileSheet({ open, onClose, label, title, bottomOffset = 0, children }: MobileSheetProps) {
   const trapRef = useFocusTrap<HTMLDivElement>(open);
   useDismissable(open, onClose);
 
@@ -45,7 +47,10 @@ export function MobileSheet({ open, onClose, label, title, children }: MobileShe
         aria-modal="true"
         aria-label={label}
         className="fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col overflow-y-auto overscroll-contain rounded-t-2xl border-t border-[var(--line)] bg-[var(--surface)] px-4 pt-3 shadow-[var(--shadow-lg)] motion-safe:animate-[slideUp_300ms_cubic-bezier(0.32,0.72,0,1)]"
-        style={{ paddingBottom: 'calc(1rem + var(--safe-bottom))' }}
+        style={{
+          bottom: bottomOffset ? `${bottomOffset}px` : undefined,
+          paddingBottom: bottomOffset ? '1rem' : 'calc(1rem + var(--safe-bottom))',
+        }}
       >
         {/* Drag handle */}
         <div aria-hidden className="mx-auto mb-3 h-1 w-10 shrink-0 rounded-full bg-[var(--line-strong)]" />

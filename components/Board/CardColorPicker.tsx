@@ -45,14 +45,14 @@ export function CardColorPicker({ currentColor, onSelectColor, onOpenChange }: C
     <div className="relative" ref={pickerRef}>
       <button
         onClick={() => setOpen(!isOpen)}
-        className="inline-flex items-center justify-center w-7 h-7 rounded-[var(--r-sm)] text-[var(--ink-4)] hover:bg-[var(--surface-muted)] hover:text-[var(--ink-3)] transition-[background-color,color] duration-150"
+        className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-[var(--r-md)] text-[var(--ink-4)] transition-[background-color,color] duration-150 hover:bg-[var(--surface-muted)] hover:text-[var(--ink-3)] sm:min-h-0 sm:min-w-0 sm:h-7 sm:w-7 sm:rounded-[var(--r-sm)]"
         aria-label="Change card color"
       >
-        <Palette size={14} />
+        <Palette size={16} className="sm:size-3.5" />
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-full z-30 mt-1 flex gap-1.5 rounded-[var(--r-md)] border border-[var(--line)] bg-[var(--surface)] p-2 shadow-[var(--shadow-md)]">
+        <div className="absolute right-0 top-full z-30 mt-1 flex max-w-[248px] flex-wrap gap-1.5 rounded-[var(--r-md)] border border-[var(--line)] bg-[var(--surface)] p-2 shadow-[var(--shadow-md)] sm:max-w-none sm:flex-nowrap">
           {SWATCHES.map((s) => (
             <button
               key={s.label}
@@ -63,7 +63,7 @@ export function CardColorPicker({ currentColor, onSelectColor, onOpenChange }: C
               }}
               aria-label={s.label}
               className={cn(
-                'w-6 h-6 rounded-full border transition-colors duration-150',
+                'h-9 w-9 rounded-full border transition-colors duration-150 sm:h-6 sm:w-6',
                 currentColor === s.value
                   ? 'border-[var(--ink)] ring-2 ring-[var(--ink)]/20'
                   : 'border-[var(--line)] hover:border-[var(--line-strong)]'

@@ -48,7 +48,7 @@ export function VotePill({
         onClick={(e) => { e.stopPropagation(); onToggleVote?.(); }}
         aria-pressed
         aria-label={policy.ariaLabel}
-        className="inline-flex items-center gap-1.5 rounded-full pl-2 pr-2.5 py-1 font-mono tabular-nums text-[11px] border transition-[background-color,color,border-color] duration-150 bg-[var(--accent-soft)] text-[var(--accent)] border-transparent"
+        className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-transparent bg-[var(--accent-soft)] pl-2.5 pr-3 py-2 font-mono tabular-nums text-[11px] text-[var(--accent)] transition-[background-color,color,border-color] duration-150 sm:min-h-0 sm:pl-2 sm:pr-2.5 sm:py-1"
       >
         <ThumbsUp size={12} />
         <span className="text-[10px]">Voted</span>
@@ -78,7 +78,7 @@ export function VotePill({
             onClick={onTriggerClick}
             onPointerDown={onTriggerPointerDown}
             aria-label={policy.ariaLabel}
-            className="inline-flex items-center gap-1.5 rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[11px] font-mono tabular-nums text-[var(--ink-4)] cursor-help hover:bg-[var(--bg-elev)] transition-colors"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-[var(--surface-muted)] px-2.5 py-2 text-[11px] font-mono tabular-nums text-[var(--ink-4)] cursor-help transition-colors hover:bg-[var(--bg-elev)] sm:min-h-0 sm:px-2 sm:py-0.5"
           >
             <ThumbsUp size={12} />
             <span>{voteCount}</span>
@@ -111,7 +111,7 @@ export function VotePill({
       aria-label={policy.ariaLabel}
       title={voteLimitReached && !hasVoted ? 'No votes remaining' : undefined}
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full pl-2 pr-2.5 py-1 font-mono tabular-nums text-[11px] border transition-[background-color,color,border-color] duration-150',
+        'inline-flex min-h-11 items-center gap-1.5 rounded-full border pl-2.5 pr-3 py-2 font-mono tabular-nums text-[11px] transition-[background-color,color,border-color] duration-150 sm:min-h-0 sm:pl-2 sm:pr-2.5 sm:py-1',
         hasVoted
           ? 'bg-[var(--accent-soft)] text-[var(--accent)] border-transparent'
           : voteLimitReached

@@ -142,7 +142,7 @@ export function RetroCard({
           isObscured && !isAuthor && 'select-none',
           colorPickerOpen && 'z-20',
           isMergeSource && 'ring-2 ring-[var(--ink)] opacity-60',
-          isMergeTarget && 'cursor-pointer ring-2 ring-dashed ring-[var(--accent)]/50 hover:ring-[var(--accent)] hover:bg-[var(--accent-soft)]'
+          isMergeTarget && 'cursor-pointer ring-2 ring-dashed ring-[var(--accent)] bg-[var(--accent-soft)] sm:bg-transparent sm:ring-[var(--accent)]/50 sm:hover:ring-[var(--accent)] sm:hover:bg-[var(--accent-soft)]'
         )}
         style={{
           ...borderLeftStyle,
@@ -169,14 +169,14 @@ export function RetroCard({
                   setEditText(text);
                   setIsEditing(false);
                 }}
-                className="rounded-[var(--r-sm)] p-2 text-[var(--ink-4)] hover:bg-[var(--surface-muted)]"
+                className="grid min-h-11 min-w-11 place-items-center rounded-[var(--r-sm)] text-[var(--ink-4)] hover:bg-[var(--surface-muted)] sm:min-h-0 sm:min-w-0 sm:p-2"
                 aria-label="Cancel edit"
               >
                 <X size={16} />
               </button>
               <button
                 onClick={handleSave}
-                className="rounded-[var(--r-sm)] p-2 text-[var(--success)] hover:bg-[color-mix(in_oklab,var(--success)_12%,transparent)]"
+                className="grid min-h-11 min-w-11 place-items-center rounded-[var(--r-sm)] text-[var(--success)] hover:bg-[color-mix(in_oklab,var(--success)_12%,transparent)] sm:min-h-0 sm:min-w-0 sm:p-2"
                 aria-label="Save edit"
               >
                 <Check size={16} />
@@ -222,17 +222,17 @@ export function RetroCard({
                   />
                 )}
 
-                {/* Author actions (visible on hover) */}
+                {/* Author actions (always visible on touch, hover-revealed ≥sm) */}
                 {isAuthor && !isCompleted && !isMergeSource && !isMergeTarget && (
-                  <div className="flex items-center gap-0.5 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
+                  <div className="flex items-center gap-1.5 opacity-100 sm:gap-0.5 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
                     {canMerge && onStartMerge && (
                       <IconButton
-                        size="sm"
+                        size="touch"
                         onClick={(e) => { e.stopPropagation(); onStartMerge(); }}
                         aria-label="Combine with another card"
                         title="Combine cards"
                       >
-                        <Merge size={14} />
+                        <Merge size={16} className="sm:size-3.5" />
                       </IconButton>
                     )}
                     <CardColorPicker
@@ -241,7 +241,7 @@ export function RetroCard({
                       onOpenChange={setColorPickerOpen}
                     />
                     <IconButton
-                      size="sm"
+                      size="touch"
                       onClick={(e) => {
                         e.stopPropagation();
                         setEditText(text);
@@ -249,29 +249,29 @@ export function RetroCard({
                       }}
                       aria-label="Edit card"
                     >
-                      <Pencil size={14} />
+                      <Pencil size={16} className="sm:size-3.5" />
                     </IconButton>
                     <IconButton
-                      size="sm"
+                      size="touch"
                       onClick={(e) => { e.stopPropagation(); onDelete(id); }}
                       aria-label="Delete card"
                       className="hover:bg-[color-mix(in_oklab,var(--danger)_12%,transparent)] hover:text-[var(--danger)]"
                     >
-                      <Trash2 size={14} />
+                      <Trash2 size={16} className="sm:size-3.5" />
                     </IconButton>
                   </div>
                 )}
 
                 {/* Non-author merge button */}
                 {!isAuthor && !isCompleted && !isMergeSource && !isMergeTarget && canMerge && onStartMerge && (
-                  <div className="flex items-center gap-0.5 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
+                  <div className="flex items-center gap-1.5 opacity-100 sm:gap-0.5 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
                     <IconButton
-                      size="sm"
+                      size="touch"
                       onClick={(e) => { e.stopPropagation(); onStartMerge(); }}
                       aria-label="Combine with another card"
                       title="Combine cards"
                     >
-                      <Merge size={14} />
+                      <Merge size={16} className="sm:size-3.5" />
                     </IconButton>
                   </div>
                 )}
@@ -279,11 +279,11 @@ export function RetroCard({
                 {/* Cancel merge source */}
                 {isMergeSource && onCancelMerge && (
                   <IconButton
-                    size="sm"
+                    size="touch"
                     onClick={(e) => { e.stopPropagation(); onCancelMerge(); }}
                     aria-label="Cancel merge"
                   >
-                    <X size={14} />
+                    <X size={16} className="sm:size-3.5" />
                   </IconButton>
                 )}
               </div>
@@ -307,13 +307,14 @@ export function RetroCard({
                   <div className="relative" ref={emojiPickerRef}>
                     <button
                       onClick={(e) => { e.stopPropagation(); setEmojiPickerOpen(!emojiPickerOpen); }}
-                      className="rounded-full p-1 text-[var(--ink-4)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--ink-3)]"
+                      className="grid min-h-11 min-w-11 place-items-center rounded-full text-[var(--ink-4)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--ink-3)] sm:min-h-0 sm:min-w-0 sm:p-1"
                       title="Add reaction"
+                      aria-label="Add reaction"
                     >
-                      <SmilePlus size={14} />
+                      <SmilePlus size={16} className="sm:size-3.5" />
                     </button>
                     {emojiPickerOpen && (
-                      <div className="absolute bottom-full left-0 z-30 mb-1 flex gap-0.5 rounded-[var(--r-md)] border border-[var(--line)] bg-[var(--surface)] p-1 shadow-md">
+                      <div className="absolute bottom-full left-0 z-30 mb-1 flex max-w-[228px] flex-wrap gap-1 rounded-[var(--r-md)] border border-[var(--line)] bg-[var(--surface)] p-1.5 shadow-md sm:max-w-none sm:flex-nowrap sm:gap-0.5 sm:p-1">
                         {EMOJI_PALETTE.map((emoji) => (
                           <button
                             key={emoji}
@@ -322,7 +323,7 @@ export function RetroCard({
                               onToggleReaction(id, emoji);
                               setEmojiPickerOpen(false);
                             }}
-                            className="rounded p-1 text-sm hover:bg-[var(--surface-muted)] transition-colors"
+                            className="grid min-h-11 min-w-11 place-items-center rounded text-xl hover:bg-[var(--surface-muted)] transition-colors sm:min-h-0 sm:min-w-0 sm:p-1 sm:text-sm"
                           >
                             {emoji}
                           </button>

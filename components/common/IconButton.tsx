@@ -4,7 +4,7 @@ import { forwardRef } from 'react';
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { cn } from '@/utils/cn';
 
-type IconButtonSize = 'sm' | 'md' | 'lg';
+type IconButtonSize = 'sm' | 'md' | 'lg' | 'touch';
 
 interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: IconButtonSize;
@@ -15,6 +15,8 @@ const sizeStyles: Record<IconButtonSize, string> = {
   sm: 'w-7 h-7 rounded-[var(--r-sm)]',
   md: 'w-8 h-8 rounded-[var(--r-sm)]',
   lg: 'w-10 h-10 rounded-[var(--r-md)]',
+  // 44px hit area for touch; collapses to sm on pointer-fine screens.
+  touch: 'min-w-11 min-h-11 rounded-[var(--r-md)] sm:min-w-0 sm:min-h-0 sm:w-7 sm:h-7 sm:rounded-[var(--r-sm)]',
 };
 
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(

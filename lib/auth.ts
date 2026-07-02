@@ -4,6 +4,7 @@ import { createAuthMiddleware, APIError } from 'better-auth/api';
 import { Pool } from '@neondatabase/serverless';
 import { ANTI_BOT_HEADERS, TURNSTILE_DEV_KEYS } from './anti-bot/constants';
 import { decodeAndValidateHoneypot } from './anti-bot/honeypot';
+import { sendPasswordResetEmail } from './email';
 
 const CAPTCHA_PROTECTED_PATHS = new Set([
   '/sign-up/email',
@@ -34,6 +35,9 @@ function getAuth() {
       database: new Pool({ connectionString: process.env.DATABASE_URL }),
       emailAndPassword: {
         enabled: true,
+        sendResetPassword: async ({ user, url }: { user: { email: string }; url: string }) => {
+          await sendPasswordResetEmail(user.email, url);
+        },
       },
       user: {
         deleteUser: {

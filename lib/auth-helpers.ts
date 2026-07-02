@@ -109,6 +109,22 @@ export async function assertBoardOwner(boardId: string): Promise<{ userId: strin
   return { userId: a.userId };
 }
 
+/**
+ * Throw unless the caller is a system admin (present in admin_users).
+ * The real authority gate for /api/admin/* — the Edge middleware cookie
+ * check is UX-only and does not cover /api routes.
+ */
+export async function requireSystemAdmin(): Promise<{ userId: string }> {
+  const session = await getSessionOrNull();
+  const userId = session?.user?.id ?? null;
+  if (!userId) throw new AuthzError(401, 'Sign in required');
+
+  const [row] = await sql`SELECT 1 AS ok FROM admin_users WHERE id = ${userId}`;
+  if (!row) throw new AuthzError(403, 'Admin access required');
+
+  return { userId };
+}
+
 /** Map a thrown AuthzError to a response body+status; returns null for other errors. */
 export function authzErrorResponse(
   e: unknown

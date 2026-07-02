@@ -117,16 +117,21 @@ export default function LoginPage() {
                 required
                 disabled={loading || success}
               />
-              <Input
-                id="login-password"
-                label="Password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Your password"
-                required
-                disabled={loading || success}
-              />
+              <div className="flex flex-col gap-1">
+                <Input
+                  id="login-password"
+                  label="Password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Your password"
+                  required
+                  disabled={loading || success}
+                />
+                <Link href="/forgot-password" className="self-end text-xs text-[var(--accent)]">
+                  Forgot password?
+                </Link>
+              </div>
 
               {/* Honeypot: hidden from humans, visible to naïve bots */}
               <input

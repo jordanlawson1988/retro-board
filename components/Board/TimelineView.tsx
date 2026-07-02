@@ -1,9 +1,10 @@
 'use client';
 
 import { useMemo } from 'react';
-import { ThumbsUp } from 'lucide-react';
 import { cn } from '@/utils/cn';
-import type { Column, Card, Vote } from '@/types';
+import { VotePill } from './VotePill';
+import { voteTotalsRevealed } from '@/lib/votePillPolicy';
+import type { Column, Card, Vote, Participant } from '@/types';
 
 interface TimelineViewProps {
   columns: Column[];
@@ -14,6 +15,9 @@ interface TimelineViewProps {
   votingEnabled: boolean;
   maxVotesPerParticipant: number;
   onToggleVote: (cardId: string) => void;
+  isCompleted: boolean;
+  secretVoting: boolean;
+  participants: Participant[];
 }
 
 interface TimelineGroup {
@@ -30,6 +34,9 @@ export function TimelineView({
   votingEnabled,
   maxVotesPerParticipant,
   onToggleVote,
+  isCompleted,
+  secretVoting,
+  participants,
 }: TimelineViewProps) {
   const columnMap = useMemo(() => {
     const map = new Map<string, Column>();
@@ -139,22 +146,21 @@ export function TimelineView({
                         {card.text}
                       </p>
 
-                      {/* Vote count */}
-                      {votingEnabled && (
+                      {/* Vote count — also shown as totals once voting is off */}
+                      {(votingEnabled || (voteCount > 0 && voteTotalsRevealed(secretVoting, isCompleted))) && (
                         <div className="mt-2 flex items-center">
-                          <button
-                            onClick={() => onToggleVote(card.id)}
-                            disabled={!hasVoted && voteLimitReached}
-                            className={cn(
-                              'flex items-center gap-1 rounded-[var(--r-pill)] px-2 py-0.5 text-xs font-mono tabular-nums transition-colors',
-                              hasVoted
-                                ? 'bg-[var(--accent-soft)] text-[var(--accent)] font-medium'
-                                : 'text-[var(--ink-4)] hover:bg-[var(--surface-muted)] hover:text-[var(--ink-2)]'
-                            )}
-                          >
-                            <ThumbsUp size={12} />
-                            {voteCount > 0 && <span>{voteCount}</span>}
-                          </button>
+                          <VotePill
+                            voteCount={voteCount}
+                            voters={votes.filter((v) => v.card_id === card.id)}
+                            participants={participants}
+                            currentParticipantId={currentParticipantId}
+                            votingEnabled={votingEnabled}
+                            isCompleted={isCompleted}
+                            hasVoted={hasVoted}
+                            voteLimitReached={voteLimitReached}
+                            onToggleVote={() => onToggleVote(card.id)}
+                            secretVoting={secretVoting}
+                          />
                         </div>
                       )}
                     </div>

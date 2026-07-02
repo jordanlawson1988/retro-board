@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import '@/styles/index.css';
 
@@ -22,6 +22,21 @@ export const metadata: Metadata = {
       { url: '/favicon.svg', type: 'image/svg+xml' },
     ],
   },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'RetroBoard',
+  },
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#fbfaf7' }, // ≈ --bg light oklch(0.985 0.004 80)
+    { media: '(prefers-color-scheme: dark)', color: '#15161b' }, // ≈ --bg dark  oklch(0.155 0.012 260)
+  ],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

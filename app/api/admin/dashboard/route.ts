@@ -1,6 +1,15 @@
 import { sql } from '@/lib/db';
+import { requireSystemAdmin, authzErrorResponse } from '@/lib/auth-helpers';
 
 export async function GET() {
+  try {
+    await requireSystemAdmin();
+  } catch (e) {
+    const r = authzErrorResponse(e);
+    if (r) return Response.json(r.body, { status: r.status });
+    throw e;
+  }
+
   const [activeBoards, completedBoards, flags, recentBoards] = await Promise.all([
     sql`SELECT count(*) as count FROM boards WHERE archived_at IS NULL`,
     sql`SELECT count(*) as count FROM boards WHERE archived_at IS NOT NULL`,

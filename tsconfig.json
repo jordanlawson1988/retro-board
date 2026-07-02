@@ -36,6 +36,10 @@
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "retro-board-legal",
+    "retro-board-phase0a",
+    "retro-board-phase0b",
+    "retro-board-phase0c"
   ]
 }

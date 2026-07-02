@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sortCards } from '@/utils/sortCards';
+import { sortCards, effectiveCardSort } from '@/utils/sortCards';
 import type { Card } from '@/types';
 
 function card(id: string, position: number, overrides: Partial<Card> = {}): Card {
@@ -55,5 +55,44 @@ describe('sortCards', () => {
     const out = sortCards(cards, 'votes_desc', votes({ b: 2 }));
     // b (2) before a (0) before c (0); a vs c broken by position
     expect(out.map((c) => c.id)).toEqual(['b', 'a', 'c']);
+  });
+});
+
+describe('effectiveCardSort', () => {
+  const ctx = (o: Partial<{ votingEnabled: boolean; secretVoting: boolean; isCompleted: boolean }> = {}) => ({
+    votingEnabled: false,
+    secretVoting: false,
+    isCompleted: false,
+    ...o,
+  });
+
+  it('manual passes through in every phase', () => {
+    expect(effectiveCardSort('manual', ctx())).toBe('manual');
+    expect(effectiveCardSort('manual', ctx({ votingEnabled: true }))).toBe('manual');
+    expect(effectiveCardSort('manual', ctx({ isCompleted: true }))).toBe('manual');
+    expect(effectiveCardSort('manual', ctx({ secretVoting: true }))).toBe('manual');
+  });
+
+  it('suppresses vote sorts to manual while voting is active (cards must not jump under the cursor)', () => {
+    expect(effectiveCardSort('votes_desc', ctx({ votingEnabled: true }))).toBe('manual');
+    expect(effectiveCardSort('votes_asc', ctx({ votingEnabled: true }))).toBe('manual');
+  });
+
+  it('applies vote sorts once voting is turned off on a normal board (the reveal)', () => {
+    expect(effectiveCardSort('votes_desc', ctx())).toBe('votes_desc');
+    expect(effectiveCardSort('votes_asc', ctx())).toBe('votes_asc');
+  });
+
+  it('CONTRACT: secret boards keep manual order until completed — vote order would leak counts', () => {
+    expect(effectiveCardSort('votes_desc', ctx({ secretVoting: true }))).toBe('manual');
+    expect(effectiveCardSort('votes_desc', ctx({ secretVoting: true, votingEnabled: true }))).toBe('manual');
+  });
+
+  it('secret + completed applies vote sort (counts revealed at completion)', () => {
+    expect(effectiveCardSort('votes_desc', ctx({ secretVoting: true, isCompleted: true }))).toBe('votes_desc');
+  });
+
+  it('completed board applies vote sort even if voting was left enabled', () => {
+    expect(effectiveCardSort('votes_desc', ctx({ votingEnabled: true, isCompleted: true }))).toBe('votes_desc');
   });
 });

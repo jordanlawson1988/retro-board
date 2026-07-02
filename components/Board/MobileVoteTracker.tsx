@@ -13,7 +13,7 @@ export function MobileVoteTracker({ used, total }: MobileVoteTrackerProps) {
   const displayUsed = Math.min(used, displayTotal);
 
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--line)]">
+    <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-[var(--line)]">
       <div className="flex items-center gap-2.5">
         <div className="w-7 h-7 rounded-full bg-[var(--accent-soft)] grid place-items-center shrink-0">
           <ThumbsUp size={14} className="text-[var(--accent)]" />
@@ -27,18 +27,27 @@ export function MobileVoteTracker({ used, total }: MobileVoteTrackerProps) {
           </p>
         </div>
       </div>
-      <div className="flex items-center gap-1.5" aria-hidden>
-        {Array.from({ length: displayTotal }).map((_, i) => (
-          <span
-            key={i}
-            className="w-2 h-2 rounded-full"
-            style={{
-              background: i < displayUsed ? 'var(--accent)' : 'var(--surface-muted)',
-              border: i < displayUsed ? 'none' : '1px solid var(--line)',
-            }}
+      {total > 10 ? (
+        <div className="ml-3 h-1.5 w-24 overflow-hidden rounded-full bg-[var(--surface-muted)]" aria-hidden>
+          <div
+            className="h-full rounded-full bg-[var(--accent)] transition-[width] duration-200"
+            style={{ width: `${total > 0 ? Math.min(100, (used / total) * 100) : 0}%` }}
           />
-        ))}
-      </div>
+        </div>
+      ) : (
+        <div className="flex items-center gap-1.5" aria-hidden>
+          {Array.from({ length: displayTotal }).map((_, i) => (
+            <span
+              key={i}
+              className="w-2 h-2 rounded-full"
+              style={{
+                background: i < displayUsed ? 'var(--accent)' : 'var(--surface-muted)',
+                border: i < displayUsed ? 'none' : '1px solid var(--line)',
+              }}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

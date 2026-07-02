@@ -1,4 +1,5 @@
 import type { Participant } from '@/types';
+import { MAX_PEOPLE_NAMES } from '@/utils/constants';
 
 export interface ReactorEntry {
   id: string;
@@ -7,11 +8,9 @@ export interface ReactorEntry {
 }
 
 export interface FormattedReactors {
-  entries: ReactorEntry[];   // capped at MAX_REACTOR_NAMES
+  entries: ReactorEntry[];   // capped at MAX_PEOPLE_NAMES
   overflow: number;          // count of names beyond the cap
 }
-
-export const MAX_REACTOR_NAMES = 8;
 
 export function formatReactorList(
   reactorIds: string[],
@@ -19,8 +18,8 @@ export function formatReactorList(
   currentParticipantId: string | null,
 ): FormattedReactors {
   const byId = new Map(participants.map((p) => [p.id, p.display_name]));
-  const visible = reactorIds.slice(0, MAX_REACTOR_NAMES);
-  const overflow = Math.max(0, reactorIds.length - MAX_REACTOR_NAMES);
+  const visible = reactorIds.slice(0, MAX_PEOPLE_NAMES);
+  const overflow = Math.max(0, reactorIds.length - MAX_PEOPLE_NAMES);
 
   const entries: ReactorEntry[] = visible.map((id) => ({
     id,

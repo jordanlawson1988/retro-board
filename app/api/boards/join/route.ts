@@ -1,8 +1,11 @@
 import { sql } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { getSessionOrNull } from '@/lib/auth-helpers';
+import { rateLimitOr429 } from '@/lib/rate-limit';
 
 export async function POST(request: Request) {
+  const limited = await rateLimitOr429(request, 'join', 10, 60);
+  if (limited) return limited;
   try {
     const { joinCode } = await request.json();
 

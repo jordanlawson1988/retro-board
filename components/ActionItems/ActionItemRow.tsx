@@ -38,7 +38,7 @@ export function ActionItemRow({ item, participants, onUpdate, onDelete, readOnly
 
   return (
     <div className={cn(
-      'group flex items-start gap-2 rounded-[var(--radius-md)] border border-[var(--color-gray-1)] bg-[var(--color-surface)] p-3',
+      'group flex items-start gap-2 rounded-[var(--r-md)] border border-[var(--line)] bg-[var(--surface)] p-3',
       item.status === 'done' && 'opacity-60'
     )}>
       {/* Status toggle */}
@@ -46,13 +46,13 @@ export function ActionItemRow({ item, participants, onUpdate, onDelete, readOnly
         onClick={() => !readOnly && onUpdate(item.id, { status: nextStatus })}
         disabled={readOnly}
         className={cn(
-          'mt-0.5 shrink-0 rounded-full p-0.5 transition-colors',
+          'grid min-h-11 min-w-11 shrink-0 place-items-center rounded-full transition-colors md:mt-0.5 md:min-h-0 md:min-w-0 md:p-0.5',
           readOnly && 'cursor-default',
           item.status === 'done'
-            ? 'text-[var(--color-success)]'
+            ? 'text-[var(--success)]'
             : item.status === 'in_progress'
-              ? 'text-[var(--color-navy)]'
-              : 'text-[var(--color-gray-4)] hover:text-[var(--color-gray-6)]'
+              ? 'text-[var(--accent)]'
+              : 'text-[var(--ink-3)] hover:text-[var(--ink)]'
         )}
         title={readOnly ? item.status.replace('_', ' ') : `Mark as ${nextStatus.replace('_', ' ')}`}
       >
@@ -60,7 +60,7 @@ export function ActionItemRow({ item, participants, onUpdate, onDelete, readOnly
       </button>
 
       {/* Content */}
-      <div className="flex-1 min-w-0">
+      <div className="min-w-0 flex-1">
         {isEditing ? (
           <input
             value={editText}
@@ -71,13 +71,13 @@ export function ActionItemRow({ item, participants, onUpdate, onDelete, readOnly
               if (e.key === 'Escape') { setEditText(item.description); setIsEditing(false); }
             }}
             autoFocus
-            className="w-full rounded-[var(--radius-sm)] border border-[var(--color-gray-2)] px-2 py-1 text-sm focus:border-[var(--color-navy)] focus:outline-none focus:ring-1 focus:ring-[var(--color-navy)]"
+            className="w-full rounded-[var(--r-sm)] border border-[var(--line)] bg-[var(--bg-sunken)] px-2 py-1 text-[16px] text-[var(--ink)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] md:text-sm"
           />
         ) : (
           <p
             onClick={() => !readOnly && setIsEditing(true)}
             className={cn(
-              'text-sm text-[var(--color-gray-8)]',
+              'text-sm text-[var(--ink)]',
               !readOnly && 'cursor-pointer',
               item.status === 'done' && 'line-through'
             )}
@@ -86,15 +86,15 @@ export function ActionItemRow({ item, participants, onUpdate, onDelete, readOnly
           </p>
         )}
 
-        <div className="mt-1 flex items-center gap-2 text-xs text-[var(--color-gray-4)]">
+        <div className="mt-1 flex items-center gap-2 text-xs text-[var(--ink-3)]">
           {/* Assignee */}
           <select
             value={item.assignee || ''}
             onChange={(e) => onUpdate(item.id, { assignee: e.target.value || null })}
             disabled={readOnly}
             className={cn(
-              'max-w-[120px] truncate rounded border-0 bg-transparent p-0 text-xs text-[var(--color-gray-4)] focus:outline-none',
-              readOnly ? 'cursor-default' : 'hover:text-[var(--color-gray-6)] cursor-pointer'
+              'max-w-[120px] truncate rounded border-0 bg-transparent p-0 text-[16px] text-[var(--ink-3)] focus:outline-none md:text-xs',
+              readOnly ? 'cursor-default' : 'cursor-pointer hover:text-[var(--ink-2)]'
             )}
           >
             <option value="">Unassigned</option>
@@ -112,21 +112,22 @@ export function ActionItemRow({ item, participants, onUpdate, onDelete, readOnly
             onChange={(e) => onUpdate(item.id, { due_date: e.target.value || null })}
             disabled={readOnly}
             className={cn(
-              'rounded border-0 bg-transparent p-0 text-xs text-[var(--color-gray-4)] focus:outline-none',
-              readOnly ? 'cursor-default' : 'hover:text-[var(--color-gray-6)] cursor-pointer'
+              'rounded border-0 bg-transparent p-0 text-[16px] text-[var(--ink-3)] focus:outline-none md:text-xs',
+              readOnly ? 'cursor-default' : 'cursor-pointer hover:text-[var(--ink-2)]'
             )}
           />
         </div>
       </div>
 
-      {/* Delete */}
+      {/* Delete — always visible on touch, hover-revealed on desktop */}
       {!readOnly && (
         <button
           onClick={() => onDelete(item.id)}
-          className="shrink-0 rounded-[var(--radius-sm)] p-1 text-[var(--color-gray-3)] opacity-0 transition-opacity group-hover:opacity-100 hover:bg-[var(--color-error)]/10 hover:text-[var(--color-error)]"
+          aria-label="Delete action item"
+          className="grid min-h-11 min-w-11 shrink-0 place-items-center rounded-[var(--r-sm)] text-[var(--ink-3)] transition-opacity hover:bg-[color-mix(in_oklab,var(--danger)_12%,transparent)] hover:text-[var(--danger)] md:min-h-0 md:min-w-0 md:p-1 md:opacity-0 md:group-hover:opacity-100"
           title="Delete action item"
         >
-          <Trash2 size={14} />
+          <Trash2 size={16} />
         </button>
       )}
     </div>

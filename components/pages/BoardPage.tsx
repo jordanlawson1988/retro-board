@@ -295,7 +295,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
   return (
     <>
       {/* ── Mobile shell (< 768px) ───────────────────────────────── */}
-      <div className="md:hidden">
+      <div className="md:hidden h-[100dvh] overflow-hidden">
         {isJoined ? (
           <MobileBoardShell
             columns={columns}
@@ -319,10 +319,23 @@ export function BoardPage({ boardId }: { boardId: string }) {
             onCombineCards={combineCards}
             onUncombineCard={uncombineCard}
             participants={participants}
+            onlineParticipantIds={onlineParticipantIds}
+            boardCreatorId={board.created_by}
+            onPromoteParticipant={(id) => updateParticipant(id, { is_admin: true })}
+            onDemoteParticipant={(id) => updateParticipant(id, { is_admin: false })}
+            onRemoveParticipant={(id) => removeParticipant(id)}
             onUpdateColumn={updateColumn}
+            boardTitle={board.title}
+            joinCode={board.join_code ?? null}
+            settings={board.settings}
+            onUpdateSettings={updateSettings}
+            actionsOpen={showActionItems}
+            onOpenActionItems={() => setShowActionItems(true)}
+            onCloseActionItems={() => setShowActionItems(false)}
+            onCompleteRetro={() => setShowCompleteModal(true)}
           />
         ) : (
-          <div className="min-h-dvh bg-[var(--bg)] flex items-center justify-center">
+          <div className="flex h-full items-center justify-center bg-[var(--bg)]">
             <p className="text-[var(--ink-4)] text-[13px]">Join the board to participate</p>
           </div>
         )}
@@ -429,10 +442,14 @@ export function BoardPage({ boardId }: { boardId: string }) {
                   className={cn(
                     'flex items-center gap-1.5 rounded-[var(--radius-md)] px-2.5 py-1.5 text-xs font-medium transition-colors',
                     activeColumnFilter === col.id
-                      ? 'text-white shadow-sm'
+                      ? 'text-[var(--color-gray-8)] shadow-sm'
                       : 'bg-[var(--color-surface)] border border-[var(--color-gray-2)] text-[var(--color-gray-5)] hover:border-[var(--color-gray-3)]'
                   )}
-                  style={activeColumnFilter === col.id ? { backgroundColor: col.color } : undefined}
+                  style={
+                    activeColumnFilter === col.id
+                      ? { backgroundColor: `color-mix(in oklab, ${col.color} 22%, var(--bg-elev))` }
+                      : undefined
+                  }
                 >
                   <span className="h-2 w-2 rounded-full" style={{ backgroundColor: col.color }} />
                   {col.title}
@@ -541,6 +558,9 @@ export function BoardPage({ boardId }: { boardId: string }) {
                 isObscured={isObscured}
                 votingEnabled={board.settings.voting_enabled}
                 maxVotesPerParticipant={board.settings.max_votes_per_participant}
+                isCompleted={isCompleted}
+                secretVoting={board.settings.secret_voting}
+                participants={participants}
                 onToggleVote={toggleVote}
               />
             )}
@@ -554,6 +574,9 @@ export function BoardPage({ boardId }: { boardId: string }) {
                 isObscured={isObscured}
                 votingEnabled={board.settings.voting_enabled}
                 maxVotesPerParticipant={board.settings.max_votes_per_participant}
+                isCompleted={isCompleted}
+                secretVoting={board.settings.secret_voting}
+                participants={participants}
                 onToggleVote={toggleVote}
               />
             )}
@@ -584,6 +607,11 @@ export function BoardPage({ boardId }: { boardId: string }) {
           </div>
         </div>
       )}
+
+    </AppShell>
+      </div>
+
+      {/* ── Shared overlays (both shells) ──────────────────────────── */}
 
       {/* Complete Retro Modal */}
       <Modal
@@ -641,8 +669,6 @@ export function BoardPage({ boardId }: { boardId: string }) {
           readOnly={isCompleted}
         />
       )}
-    </AppShell>
-      </div>
     </>
   );
 }

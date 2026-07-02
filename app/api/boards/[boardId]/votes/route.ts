@@ -1,11 +1,14 @@
 import { sql } from '@/lib/db';
 import { ablyServer } from '@/lib/ably-server';
 import { NextResponse } from 'next/server';
+import { rateLimitOr429 } from '@/lib/rate-limit';
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ boardId: string }> }
 ) {
+  const limited = await rateLimitOr429(request, 'vote', 60, 60);
+  if (limited) return limited;
   const { boardId } = await params;
   const { cardId, voterId, voteId } = await request.json();
 

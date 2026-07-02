@@ -13,15 +13,19 @@
  */
 
 import { useState, useMemo, useCallback } from 'react';
+import { StickyNote } from 'lucide-react';
 import { MobileColumnTabs } from './MobileColumnTabs';
 import { MobileVoteTracker } from './MobileVoteTracker';
 import { MobileFAB } from './MobileFAB';
-import { MobileBottomNav, type MobileNavKey } from './MobileBottomNav';
+import { MobileBottomNav } from './MobileBottomNav';
+import { computeMobileNavActive } from '@/lib/mobileNav';
 import { MobileCardComposerSheet } from './MobileCardComposerSheet';
+import { MobileMoreSheet } from './MobileMoreSheet';
+import { ConnectionStatusBanner } from './ConnectionStatusBanner';
 import { RetroCard } from './RetroCard';
 import { ColumnSortMenu } from './ColumnSortMenu';
-import { sortCards } from '@/utils/sortCards';
-import type { Column, Card, Vote, ActionItem, CardReactions, Participant, CardSort } from '@/types';
+import { sortCards, effectiveCardSort } from '@/utils/sortCards';
+import type { Column, Card, Vote, ActionItem, CardReactions, Participant, CardSort, BoardSettings } from '@/types';
 
 interface MobileBoardShellProps {
   // Board state
@@ -47,7 +51,21 @@ interface MobileBoardShellProps {
   onCombineCards: (parentCardId: string, childCardId: string) => void;
   onUncombineCard: (childCardId: string) => void;
   participants: Participant[];
+  onlineParticipantIds: string[];
+  boardCreatorId: string;
+  onPromoteParticipant: (participantId: string) => void;
+  onDemoteParticipant: (participantId: string) => void;
+  onRemoveParticipant: (participantId: string) => void;
   onUpdateColumn?: (columnId: string, updates: { sort_by: CardSort }) => void;
+  // New props wired from BoardPage
+  boardTitle: string;
+  joinCode: string | null;
+  settings: BoardSettings;
+  onUpdateSettings: (settings: Partial<BoardSettings>) => void;
+  actionsOpen: boolean;
+  onOpenActionItems: () => void;
+  onCloseActionItems: () => void;
+  onCompleteRetro: () => void;
 }
 
 export function MobileBoardShell({
@@ -72,7 +90,20 @@ export function MobileBoardShell({
   onCombineCards,
   onUncombineCard,
   participants,
+  onlineParticipantIds,
+  boardCreatorId,
+  onPromoteParticipant,
+  onDemoteParticipant,
+  onRemoveParticipant,
   onUpdateColumn,
+  boardTitle,
+  joinCode,
+  settings,
+  onUpdateSettings,
+  actionsOpen,
+  onOpenActionItems,
+  onCloseActionItems,
+  onCompleteRetro,
 }: MobileBoardShellProps) {
   const sortedColumns = useMemo(
     () => [...columns].sort((a, b) => a.position - b.position),
@@ -82,7 +113,7 @@ export function MobileBoardShell({
   const [activeColumnId, setActiveColumnId] = useState<string>(
     () => sortedColumns[0]?.id ?? ''
   );
-  const [navTab, setNavTab] = useState<MobileNavKey>('board');
+  const [moreOpen, setMoreOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
 
   // Keep activeColumnId valid when columns change (e.g., real-time add/delete)
@@ -107,14 +138,18 @@ export function MobileBoardShell({
     [voteCountByCard]
   );
 
-  // Root cards for the active column (no merged-children in top-level list)
+  // Root cards for the active column (no merged-children in top-level list).
+  // Vote sorting is held back while voting is active so cards don't jump
+  // under the user's finger as votes stream in.
+  const voteSortSuppressed =
+    effectiveCardSort('votes_desc', { votingEnabled, secretVoting, isCompleted }) === 'manual';
   const rootCards = useMemo(
     () => sortCards(
       cards.filter((c) => c.column_id === activeColumn?.id && !c.merged_with),
-      activeColumn?.sort_by ?? 'votes_desc',
+      voteSortSuppressed ? 'manual' : (activeColumn?.sort_by ?? 'votes_desc'),
       voteCountFor
     ),
-    [cards, activeColumn, voteCountFor]
+    [cards, activeColumn, voteCountFor, voteSortSuppressed]
   );
 
   // Votes used by the current participant (derived from store votes array)
@@ -127,6 +162,9 @@ export function MobileBoardShell({
 
   const voteLimitReached = votesUsed >= maxVotesPerParticipant;
   const canMerge = !isCompleted && !boardLocked;
+  // Single source of truth for whether the add-card FAB is shown — reused by
+  // the empty-state copy so it never says "tap +" when there is no +.
+  const fabVisible = !cardCreationDisabled && !isCompleted && !!currentParticipantId;
 
   const [mergeSourceId, setMergeSourceId] = useState<string | null>(null);
 
@@ -138,7 +176,10 @@ export function MobileBoardShell({
   };
 
   return (
-    <div className="flex flex-col min-h-dvh bg-[var(--bg)]">
+    <div className="relative flex flex-col h-full overflow-hidden bg-[var(--bg)]">
+      {/* Connection status banner */}
+      <ConnectionStatusBanner />
+
       {/* Vote tracker row — only shown when voting is enabled and user has joined */}
       {votingEnabled && !!currentParticipantId && (
         <MobileVoteTracker used={votesUsed} total={maxVotesPerParticipant} />
@@ -158,7 +199,7 @@ export function MobileBoardShell({
 
       {/* Merge mode banner */}
       {mergeSourceId && (
-        <div className="flex items-center justify-between bg-[var(--accent-soft)] px-4 py-2 text-sm">
+        <div className="shrink-0 flex items-center justify-between bg-[var(--accent-soft)] px-4 py-2 text-sm">
           <span className="text-[var(--accent)] font-medium text-[13px]">
             Select a card to merge into
           </span>
@@ -174,16 +215,17 @@ export function MobileBoardShell({
 
       {/* Per-column sort control (admin only) */}
       {isAdmin && onUpdateColumn && activeColumn && (
-        <div className="flex items-center justify-end px-4 pt-2">
+        <div className="shrink-0 flex items-center justify-end px-4 pt-2">
           <ColumnSortMenu
             value={activeColumn.sort_by}
             onChange={(next) => onUpdateColumn(activeColumn.id, { sort_by: next })}
+            voteSortSuppressed={voteSortSuppressed}
           />
         </div>
       )}
 
-      {/* Card list for active column */}
-      <div className="flex-1 px-4 pt-3 pb-[136px] flex flex-col gap-2 overflow-y-auto">
+      {/* Card list for active column — the ONLY scroll region on mobile */}
+      <div className="flex-1 min-h-0 px-4 pt-3 pb-[calc(84px+var(--safe-bottom))] flex flex-col gap-2 overflow-y-auto overscroll-contain">
         {rootCards.length > 0 ? (
           rootCards.map((card) => {
             const cardVotes = votes.filter((v) => v.card_id === card.id);
@@ -198,6 +240,7 @@ export function MobileBoardShell({
                 authorId={card.author_id}
                 color={card.color}
                 voteCount={cardVotes.length}
+                votes={votes}
                 hasVoted={hasVoted}
                 isAuthor={card.author_id === currentParticipantId}
                 isObscured={isObscured}
@@ -223,24 +266,62 @@ export function MobileBoardShell({
             );
           })
         ) : (
-          <p className="text-center text-[13px] text-[var(--ink-4)] mt-12">
-            {cardCreationDisabled
-              ? 'Card creation is disabled.'
-              : 'No cards yet — tap + to add one.'}
-          </p>
+          <div className="mt-12 flex flex-col items-center gap-3 text-center">
+            <div className="grid h-12 w-12 place-items-center rounded-full bg-[var(--surface-muted)] text-[var(--ink-4)]">
+              <StickyNote size={22} />
+            </div>
+            <p className="text-[13px] text-[var(--ink-4)]">
+              {cardCreationDisabled
+                ? 'Card creation is disabled.'
+                : isCompleted
+                ? 'No cards in this column.'
+                : fabVisible
+                ? 'No cards yet — tap the + button to add the first one.'
+                : 'No cards yet.'}
+            </p>
+          </div>
         )}
       </div>
 
       {/* FAB — only when card creation is allowed */}
-      {!cardCreationDisabled && !isCompleted && !!currentParticipantId && (
+      {fabVisible && (
         <MobileFAB onClick={() => setComposerOpen(true)} />
       )}
 
-      {/* Bottom nav */}
+      {/* Bottom nav — honest toolbar: active reflects which sheet is open */}
       <MobileBottomNav
-        active={navTab}
-        onSelect={setNavTab}
-        actionBadgeCount={actionItems.length}
+        active={computeMobileNavActive({ moreOpen, actionsOpen })}
+        onSelect={(key) => {
+          if (key === 'board') {
+            setMoreOpen(false);
+            onCloseActionItems();
+          }
+          if (key === 'actions') onOpenActionItems();
+          if (key === 'more') setMoreOpen(true);
+        }}
+        actionBadgeCount={actionItems.filter((i) => i.status !== 'done').length}
+      />
+
+      {/* More sheet */}
+      <MobileMoreSheet
+        open={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        boardTitle={boardTitle}
+        joinCode={joinCode}
+        participants={participants}
+        onlineParticipantIds={onlineParticipantIds}
+        currentParticipantId={currentParticipantId}
+        boardCreatorId={boardCreatorId}
+        onPromoteParticipant={onPromoteParticipant}
+        onDemoteParticipant={onDemoteParticipant}
+        onRemoveParticipant={onRemoveParticipant}
+        isAdmin={isAdmin}
+        isCompleted={isCompleted}
+        settings={settings}
+        onUpdateSettings={onUpdateSettings}
+        actionItemCount={actionItems.length}
+        onToggleActionItems={onOpenActionItems}
+        onCompleteRetro={onCompleteRetro}
       />
 
       {/* Card composer sheet */}

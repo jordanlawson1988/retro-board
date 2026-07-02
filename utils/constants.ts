@@ -22,6 +22,9 @@ export const TIMER_PRESETS = [
 
 export const MAX_COLUMNS = 10;
 
+/** Maximum number of names displayed in voter/reactor popovers before "+N more". */
+export const MAX_PEOPLE_NAMES = 8;
+
 export const COLUMN_COLORS = [
   '#DD0031', '#004F71', '#3EB1C8', '#249E6B',
   '#E33205', '#FFB549', '#994878', '#5D5754',

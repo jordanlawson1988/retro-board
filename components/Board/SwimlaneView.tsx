@@ -4,7 +4,8 @@ import { useState, useMemo, useCallback } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { RetroCard } from './RetroCard';
 import { ColumnSortMenu } from './ColumnSortMenu';
-import { sortCards } from '@/utils/sortCards';
+import { sortCards, effectiveCardSort } from '@/utils/sortCards';
+import { voteTotalsRevealed } from '@/lib/votePillPolicy';
 import type { Column, Card, Vote, Participant, CardSort } from '@/types';
 
 interface SwimlaneViewProps {
@@ -86,7 +87,7 @@ export function SwimlaneView({
         {sortedColumns.map((col) => {
           const colCards = sortCards(
             cards.filter((c) => c.column_id === col.id && !c.merged_with),
-            col.sort_by,
+            effectiveCardSort(col.sort_by, { votingEnabled, secretVoting, isCompleted }),
             voteCountFor
           );
           const isCollapsed = collapsedRows.has(col.id);
@@ -120,7 +121,7 @@ export function SwimlaneView({
                   <span className="rounded-[var(--r-pill)] bg-[var(--bg-elev)] px-2 py-0.5 text-xs font-medium text-[var(--ink-4)]">
                     {colCards.length}
                   </span>
-                  {votingEnabled && !secretVoting && colVoteCount > 0 && (
+                  {colVoteCount > 0 && voteTotalsRevealed(secretVoting, isCompleted) && (
                     <span className="flex items-center gap-1 rounded-[var(--r-pill)] bg-[var(--accent-soft)] px-2 py-0.5 text-xs font-medium text-[var(--accent)]">
                       {colVoteCount} vote{colVoteCount === 1 ? '' : 's'}
                     </span>
@@ -130,6 +131,7 @@ export function SwimlaneView({
                   <ColumnSortMenu
                     value={col.sort_by}
                     onChange={(next) => onUpdateColumn(col.id, { sort_by: next })}
+                    voteSortSuppressed={effectiveCardSort('votes_desc', { votingEnabled, secretVoting, isCompleted }) === 'manual'}
                   />
                 )}
               </div>

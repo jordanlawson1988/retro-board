@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { ArrowUp, ArrowDown } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { VotePill } from './VotePill';
+import { voteTotalsRevealed } from '@/lib/votePillPolicy';
 import type { Column, Card, Vote, Participant } from '@/types';
 
 interface ListViewProps {
@@ -89,6 +90,11 @@ export function ListView({
     return sorted;
   }, [cards, sortField, sortDir, columnMap, voteCountMap]);
 
+  // Votes column stays visible after voting is turned off, as long as there
+  // are totals to show (secret-board totals reveal only at completion).
+  const showVotesColumn =
+    votingEnabled || (votes.length > 0 && voteTotalsRevealed(secretVoting, isCompleted));
+
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
@@ -140,7 +146,7 @@ export function ListView({
                   {sortIcon('author')}
                 </button>
               </th>
-              {votingEnabled && (
+              {showVotesColumn && (
                 <th className="px-4 py-3 text-left">
                   <button
                     onClick={() => handleSort('votes')}
@@ -193,14 +199,15 @@ export function ListView({
                   <td className="px-4 py-3">
                     <span className="text-sm text-[var(--ink-4)]">{card.author_name}</span>
                   </td>
-                  {votingEnabled && (
+                  {showVotesColumn && (
                     <td className="px-4 py-3">
                       <VotePill
                         voteCount={voteCount}
                         voters={votes.filter((v) => v.card_id === card.id)}
                         participants={participants}
                         currentParticipantId={currentParticipantId}
-                        mode={isCompleted ? 'readonly' : 'interactive'}
+                        votingEnabled={votingEnabled}
+                        isCompleted={isCompleted}
                         hasVoted={hasVoted}
                         voteLimitReached={voteLimitReached}
                         onToggleVote={() => onToggleVote(card.id)}
@@ -214,7 +221,7 @@ export function ListView({
             {sortedCards.length === 0 && (
               <tr>
                 <td
-                  colSpan={votingEnabled ? 4 : 3}
+                  colSpan={showVotesColumn ? 4 : 3}
                   className="px-4 py-12 text-center text-sm text-[var(--ink-4)]"
                 >
                   No cards to display

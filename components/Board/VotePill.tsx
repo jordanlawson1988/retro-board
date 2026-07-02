@@ -12,7 +12,8 @@ export interface VotePillProps {
   voters: Vote[];                  // full vote rows for THIS card
   participants: Participant[];
   currentParticipantId: string | null;
-  mode: 'interactive' | 'readonly';
+  votingEnabled: boolean;
+  isCompleted: boolean;
   // Interactive-mode only:
   hasVoted?: boolean;
   voteLimitReached?: boolean;
@@ -26,7 +27,8 @@ export function VotePill({
   voters,
   participants,
   currentParticipantId,
-  mode,
+  votingEnabled,
+  isCompleted,
   hasVoted = false,
   voteLimitReached = false,
   onToggleVote,
@@ -34,7 +36,8 @@ export function VotePill({
 }: VotePillProps) {
   const policy = votePillPolicy({
     voteCount,
-    mode,
+    votingEnabled,
+    isCompleted,
     hasVoted,
     secretVoting,
   });
@@ -89,7 +92,7 @@ export function VotePill({
   }
 
   // Readonly + secret + count > 0 — static count badge, no popover
-  if (mode === 'readonly') {
+  if (!policy.interactive) {
     return (
       <span
         aria-label={policy.ariaLabel}

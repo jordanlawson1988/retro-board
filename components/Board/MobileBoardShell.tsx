@@ -24,7 +24,7 @@ import { MobileMoreSheet } from './MobileMoreSheet';
 import { ConnectionStatusBanner } from './ConnectionStatusBanner';
 import { RetroCard } from './RetroCard';
 import { ColumnSortMenu } from './ColumnSortMenu';
-import { sortCards } from '@/utils/sortCards';
+import { sortCards, effectiveCardSort } from '@/utils/sortCards';
 import type { Column, Card, Vote, ActionItem, CardReactions, Participant, CardSort, BoardSettings } from '@/types';
 
 interface MobileBoardShellProps {
@@ -138,14 +138,18 @@ export function MobileBoardShell({
     [voteCountByCard]
   );
 
-  // Root cards for the active column (no merged-children in top-level list)
+  // Root cards for the active column (no merged-children in top-level list).
+  // Vote sorting is held back while voting is active so cards don't jump
+  // under the user's finger as votes stream in.
+  const voteSortSuppressed =
+    effectiveCardSort('votes_desc', { votingEnabled, secretVoting, isCompleted }) === 'manual';
   const rootCards = useMemo(
     () => sortCards(
       cards.filter((c) => c.column_id === activeColumn?.id && !c.merged_with),
-      activeColumn?.sort_by ?? 'votes_desc',
+      voteSortSuppressed ? 'manual' : (activeColumn?.sort_by ?? 'votes_desc'),
       voteCountFor
     ),
-    [cards, activeColumn, voteCountFor]
+    [cards, activeColumn, voteCountFor, voteSortSuppressed]
   );
 
   // Votes used by the current participant (derived from store votes array)
@@ -215,6 +219,7 @@ export function MobileBoardShell({
           <ColumnSortMenu
             value={activeColumn.sort_by}
             onChange={(next) => onUpdateColumn(activeColumn.id, { sort_by: next })}
+            voteSortSuppressed={voteSortSuppressed}
           />
         </div>
       )}

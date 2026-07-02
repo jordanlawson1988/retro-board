@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { cn } from '@/utils/cn';
 import { VotePill } from './VotePill';
+import { voteTotalsRevealed } from '@/lib/votePillPolicy';
 import type { Column, Card, Vote, Participant } from '@/types';
 
 interface TimelineViewProps {
@@ -145,15 +146,16 @@ export function TimelineView({
                         {card.text}
                       </p>
 
-                      {/* Vote count */}
-                      {votingEnabled && (
+                      {/* Vote count — also shown as totals once voting is off */}
+                      {(votingEnabled || (voteCount > 0 && voteTotalsRevealed(secretVoting, isCompleted))) && (
                         <div className="mt-2 flex items-center">
                           <VotePill
                             voteCount={voteCount}
                             voters={votes.filter((v) => v.card_id === card.id)}
                             participants={participants}
                             currentParticipantId={currentParticipantId}
-                            mode={isCompleted ? 'readonly' : 'interactive'}
+                            votingEnabled={votingEnabled}
+                            isCompleted={isCompleted}
                             hasVoted={hasVoted}
                             voteLimitReached={voteLimitReached}
                             onToggleVote={() => onToggleVote(card.id)}

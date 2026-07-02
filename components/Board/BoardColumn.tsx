@@ -11,7 +11,8 @@ import { SortableCard } from './SortableCard';
 import { AddCardForm } from './AddCardForm';
 import { ColumnSortMenu } from './ColumnSortMenu';
 import { IconButton } from '@/components/common/IconButton';
-import { sortCards } from '@/utils/sortCards';
+import { sortCards, effectiveCardSort } from '@/utils/sortCards';
+import { voteTotalsRevealed } from '@/lib/votePillPolicy';
 import type { Column, Card, Vote, Participant } from '@/types';
 
 interface BoardColumnProps {
@@ -242,6 +243,11 @@ export function BoardColumn({
     return map;
   }, [votes]);
 
+  // While vote sorting is suppressed (voting active / secret pending), nothing
+  // may reorder on incoming votes — children included.
+  const sortCtx = { votingEnabled, secretVoting, isCompleted: !!isCompleted };
+  const voteSortSuppressed = effectiveCardSort('votes_desc', sortCtx) === 'manual';
+
   const childrenByParent = useMemo(() => {
     const map = new Map<string, Card[]>();
     for (const card of cards) {
@@ -251,13 +257,16 @@ export function BoardColumn({
         map.set(card.merged_with, list);
       }
     }
-    // Children always sorted by raw vote count desc (unchanged from prior behavior)
     for (const [key, list] of map) {
-      list.sort((a, b) => (voteCountByCard.get(b.id) || 0) - (voteCountByCard.get(a.id) || 0));
+      if (voteSortSuppressed) {
+        list.sort((a, b) => a.created_at.localeCompare(b.created_at));
+      } else {
+        list.sort((a, b) => (voteCountByCard.get(b.id) || 0) - (voteCountByCard.get(a.id) || 0));
+      }
       map.set(key, list);
     }
     return map;
-  }, [cards, voteCountByCard]);
+  }, [cards, voteCountByCard, voteSortSuppressed]);
 
   const aggregateVotesFor = useCallback(
     (cardId: string) => {
@@ -268,9 +277,10 @@ export function BoardColumn({
     [voteCountByCard, childrenByParent]
   );
 
+  const activeSort = effectiveCardSort(column.sort_by, sortCtx);
   const sortedCards = useMemo(
-    () => sortCards(rootCards, column.sort_by, aggregateVotesFor),
-    [rootCards, column.sort_by, aggregateVotesFor]
+    () => sortCards(rootCards, activeSort, aggregateVotesFor),
+    [rootCards, activeSort, aggregateVotesFor]
   );
 
   const cardIds = useMemo(() => sortedCards.map((c) => c.id), [sortedCards]);
@@ -356,7 +366,7 @@ export function BoardColumn({
           <span className="font-mono tabular-nums text-[12px] text-[var(--ink-4)]">
             {cards.length}
           </span>
-          {votingEnabled && !secretVoting && columnVoteCount > 0 && (
+          {columnVoteCount > 0 && voteTotalsRevealed(secretVoting, !!isCompleted) && (
             <span className="flex items-center gap-1 rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[11px] font-mono tabular-nums text-[var(--accent)]">
               <ThumbsUp size={10} />
               {columnVoteCount}
@@ -367,6 +377,7 @@ export function BoardColumn({
             <ColumnSortMenu
               value={column.sort_by}
               onChange={(next) => onUpdateColumn?.(column.id, { sort_by: next })}
+              voteSortSuppressed={voteSortSuppressed}
             />
           )}
 

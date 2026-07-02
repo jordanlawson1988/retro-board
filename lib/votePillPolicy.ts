@@ -1,6 +1,7 @@
 export interface VotePillPolicyInput {
   voteCount: number;
-  mode: 'interactive' | 'readonly';
+  votingEnabled: boolean;
+  isCompleted: boolean;
   hasVoted: boolean;
   secretVoting: boolean;
 }
@@ -18,12 +19,21 @@ export interface VotePillPolicyOutput {
   ariaLabel: string;
 }
 
-export function votePillPolicy(input: VotePillPolicyInput): VotePillPolicyOutput {
-  const { voteCount, mode, hasVoted, secretVoting } = input;
+/**
+ * Aggregate vote totals (per-card pills, column/lane badges) are public unless
+ * the board uses secret voting and hasn't been completed yet — secret counts
+ * reveal only at completion.
+ */
+export function voteTotalsRevealed(secretVoting: boolean, isCompleted: boolean): boolean {
+  return !secretVoting || isCompleted;
+}
 
-  // Readonly (completed boards)
-  if (mode === 'readonly') {
-    if (voteCount === 0) {
+export function votePillPolicy(input: VotePillPolicyInput): VotePillPolicyOutput {
+  const { voteCount, votingEnabled, isCompleted, hasVoted, secretVoting } = input;
+
+  // Readonly: completed boards, or voting turned off mid-retro (totals stay visible)
+  if (isCompleted || !votingEnabled) {
+    if (voteCount === 0 || !voteTotalsRevealed(secretVoting, isCompleted)) {
       return {
         render: 'none',
         showCount: false,
@@ -51,7 +61,7 @@ export function votePillPolicy(input: VotePillPolicyInput): VotePillPolicyOutput
     };
   }
 
-  // Interactive (active boards)
+  // Interactive (voting on, board active)
   if (secretVoting && hasVoted) {
     return {
       render: 'voted-badge',

@@ -208,19 +208,18 @@ export function RetroCard({
               </div>
 
               <div className="flex items-center gap-1">
-                {votingEnabled && (
-                  <VotePill
-                    voteCount={voteCount}
-                    voters={(votes ?? []).filter((v) => v.card_id === id)}
-                    participants={participants}
-                    currentParticipantId={currentParticipantId ?? null}
-                    mode={isCompleted ? 'readonly' : 'interactive'}
-                    hasVoted={hasVoted}
-                    voteLimitReached={voteLimitReached}
-                    onToggleVote={() => onToggleVote(id)}
-                    secretVoting={secretVoting}
-                  />
-                )}
+                <VotePill
+                  voteCount={voteCount}
+                  voters={(votes ?? []).filter((v) => v.card_id === id)}
+                  participants={participants}
+                  currentParticipantId={currentParticipantId ?? null}
+                  votingEnabled={votingEnabled}
+                  isCompleted={!!isCompleted}
+                  hasVoted={hasVoted}
+                  voteLimitReached={voteLimitReached}
+                  onToggleVote={() => onToggleVote(id)}
+                  secretVoting={secretVoting}
+                />
 
                 {/* Author actions (always visible on touch, hover-revealed ≥sm) */}
                 {isAuthor && !isCompleted && !isMergeSource && !isMergeTarget && (

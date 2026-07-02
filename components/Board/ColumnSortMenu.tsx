@@ -12,6 +12,8 @@ interface ColumnSortMenuProps {
   onChange: (next: CardSort) => void;
   /** Force-hide on mobile / non-admin contexts. */
   disabled?: boolean;
+  /** True while vote sorting is held back (voting active / secret pending) — shows a hint. */
+  voteSortSuppressed?: boolean;
 }
 
 const OPTIONS: { value: CardSort; label: string }[] = [
@@ -20,7 +22,7 @@ const OPTIONS: { value: CardSort; label: string }[] = [
   { value: 'manual', label: 'Manual' },
 ];
 
-export function ColumnSortMenu({ value, onChange, disabled }: ColumnSortMenuProps) {
+export function ColumnSortMenu({ value, onChange, disabled, voteSortSuppressed }: ColumnSortMenuProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -80,6 +82,11 @@ export function ColumnSortMenu({ value, onChange, disabled }: ColumnSortMenuProp
               </button>
             );
           })}
+          {voteSortSuppressed && (
+            <p className="border-t border-[var(--line)] px-3 pb-1.5 pt-2 text-[11px] leading-snug text-[var(--ink-4)]">
+              Vote sorting takes effect when voting ends
+            </p>
+          )}
         </div>
       )}
     </div>

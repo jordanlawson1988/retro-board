@@ -81,10 +81,10 @@ export function VotePill({
             onClick={onTriggerClick}
             onPointerDown={onTriggerPointerDown}
             aria-label={policy.ariaLabel}
-            className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-[var(--surface-muted)] px-2.5 py-2 text-[11px] font-mono tabular-nums text-[var(--ink-4)] cursor-help transition-colors hover:bg-[var(--bg-elev)] sm:min-h-0 sm:px-2 sm:py-0.5"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-[var(--accent-soft)] px-2.5 py-2 text-[11px] font-mono tabular-nums text-[var(--accent)] cursor-help transition-opacity hover:opacity-80 sm:min-h-0 sm:px-2 sm:py-0.5"
           >
             <ThumbsUp size={12} />
-            <span>{voteCount}</span>
+            <span className="text-[13px] font-semibold leading-none">{voteCount}</span>
           </button>
         )}
       />
@@ -96,10 +96,10 @@ export function VotePill({
     return (
       <span
         aria-label={policy.ariaLabel}
-        className="inline-flex items-center gap-1.5 rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[11px] font-mono tabular-nums text-[var(--ink-4)]"
+        className="inline-flex items-center gap-1.5 rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[11px] font-mono tabular-nums text-[var(--accent)]"
       >
         <ThumbsUp size={12} />
-        <span>{voteCount}</span>
+        <span className="text-[13px] font-semibold leading-none">{voteCount}</span>
       </span>
     );
   }
@@ -115,15 +115,16 @@ export function VotePill({
       title={voteLimitReached && !hasVoted ? 'No votes remaining' : undefined}
       className={cn(
         'inline-flex min-h-11 items-center gap-1.5 rounded-full border pl-2.5 pr-3 py-2 font-mono tabular-nums text-[11px] transition-[background-color,color,border-color] duration-150 sm:min-h-0 sm:pl-2 sm:pr-2.5 sm:py-1',
-        hasVoted
+        voteCount > 0
           ? 'bg-[var(--accent-soft)] text-[var(--accent)] border-transparent'
           : voteLimitReached
           ? 'cursor-not-allowed bg-[var(--bg-elev)] text-[var(--ink-5)] border-[var(--line)] opacity-50'
-          : 'bg-[var(--bg-elev)] text-[var(--ink-3)] border-[var(--line)] hover:text-[var(--ink)] hover:border-[var(--line-strong)]'
+          : 'bg-[var(--bg-elev)] text-[var(--ink-3)] border-[var(--line)] hover:text-[var(--ink)] hover:border-[var(--line-strong)]',
+        voteCount > 0 && !hasVoted && voteLimitReached && 'cursor-not-allowed'
       )}
     >
-      <ThumbsUp size={12} />
-      {policy.showCount && <span>{voteCount}</span>}
+      <ThumbsUp size={12} className={cn(hasVoted && 'fill-current')} />
+      {policy.showCount && <span className="text-[13px] font-semibold leading-none">{voteCount}</span>}
     </button>
   );
 }

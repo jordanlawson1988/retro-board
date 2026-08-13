@@ -243,8 +243,8 @@ export function BoardColumn({
     return map;
   }, [votes]);
 
-  // While vote sorting is suppressed (voting active / secret pending), nothing
-  // may reorder on incoming votes — children included.
+  // While vote sorting is suppressed (secret voting pending), nothing may
+  // reorder on incoming votes — children included.
   const sortCtx = { votingEnabled, secretVoting, isCompleted: !!isCompleted };
   const voteSortSuppressed = effectiveCardSort('votes_desc', sortCtx) === 'manual';
 

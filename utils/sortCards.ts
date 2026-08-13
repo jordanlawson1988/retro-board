@@ -7,17 +7,16 @@ export interface SortContext {
 }
 
 /**
- * Vote-based sorts are held back to manual (position) order while they could
- * cause harm: during active voting, live vote events would reorder cards under
- * everyone's cursor; on secret boards, vote order would leak the hidden counts
- * before completion. The reorder happens once, at the deliberate moment voting
- * is turned off (or the board is completed).
+ * Vote-based sorts apply live, including while voting is active — the board
+ * must always read most→least voted (facilitator decision, 2026-08-13; this
+ * supersedes the earlier freeze-during-voting behavior). The one hold-back:
+ * on secret boards, vote order would leak the hidden counts, so cards keep
+ * manual (position) order until the retro is completed.
  */
 export function effectiveCardSort(sortBy: CardSort, ctx: SortContext): CardSort {
   if (sortBy === 'manual') return sortBy;
-  const votingActive = ctx.votingEnabled && !ctx.isCompleted;
   const secretPending = ctx.secretVoting && !ctx.isCompleted;
-  return votingActive || secretPending ? 'manual' : sortBy;
+  return secretPending ? 'manual' : sortBy;
 }
 
 /**

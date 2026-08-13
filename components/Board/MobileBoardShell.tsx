@@ -139,8 +139,8 @@ export function MobileBoardShell({
   );
 
   // Root cards for the active column (no merged-children in top-level list).
-  // Vote sorting is held back while voting is active so cards don't jump
-  // under the user's finger as votes stream in.
+  // Vote sorting applies live; it's held back only on secret boards until
+  // completion (order would leak the hidden counts).
   const voteSortSuppressed =
     effectiveCardSort('votes_desc', { votingEnabled, secretVoting, isCompleted }) === 'manual';
   const rootCards = useMemo(

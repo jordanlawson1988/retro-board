@@ -12,7 +12,7 @@ interface ColumnSortMenuProps {
   onChange: (next: CardSort) => void;
   /** Force-hide on mobile / non-admin contexts. */
   disabled?: boolean;
-  /** True while vote sorting is held back (voting active / secret pending) — shows a hint. */
+  /** True while vote sorting is held back (secret voting pending) — shows a hint. */
   voteSortSuppressed?: boolean;
 }
 
@@ -84,7 +84,7 @@ export function ColumnSortMenu({ value, onChange, disabled, voteSortSuppressed }
           })}
           {voteSortSuppressed && (
             <p className="border-t border-[var(--line)] px-3 pb-1.5 pt-2 text-[11px] leading-snug text-[var(--ink-4)]">
-              Vote sorting takes effect when voting ends
+              Secret voting: vote order applies when the retro is completed
             </p>
           )}
         </div>

@@ -73,9 +73,9 @@ describe('effectiveCardSort', () => {
     expect(effectiveCardSort('manual', ctx({ secretVoting: true }))).toBe('manual');
   });
 
-  it('suppresses vote sorts to manual while voting is active (cards must not jump under the cursor)', () => {
-    expect(effectiveCardSort('votes_desc', ctx({ votingEnabled: true }))).toBe('manual');
-    expect(effectiveCardSort('votes_asc', ctx({ votingEnabled: true }))).toBe('manual');
+  it('applies vote sorts live during active voting (2026-08-13: board always reads most→least voted)', () => {
+    expect(effectiveCardSort('votes_desc', ctx({ votingEnabled: true }))).toBe('votes_desc');
+    expect(effectiveCardSort('votes_asc', ctx({ votingEnabled: true }))).toBe('votes_asc');
   });
 
   it('applies vote sorts once voting is turned off on a normal board (the reveal)', () => {

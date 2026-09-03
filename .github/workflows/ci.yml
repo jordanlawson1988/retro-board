@@ -1,0 +1,10 @@
+name: CI
+on:
+  pull_request:
+  push: {branches: [main, master, develop]}
+jobs:
+  ci:
+    uses: jordanlawson1988/gh-workflows/.github/workflows/node-ci.yml@main
+    with:
+      build-env: |
+        ABLY_API_KEY=ci.dummy:dummy

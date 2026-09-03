@@ -7,6 +7,7 @@ import { AppShell } from '@/components/Layout';
 import { Button, Chip } from '@/components/common';
 import {
   BoardCard,
+  CreateBoardModal,
   RenameBoardModal,
   DeleteBoardDialog,
   ManageMembersModal,
@@ -33,6 +34,8 @@ export function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const { user, isAuthenticated, loading: authLoading } = useAuthStore();
+
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   // Which board (if any) each modal is acting on.
   const [renameTarget, setRenameTarget] = useState<DashboardBoard | null>(null);
@@ -138,7 +141,7 @@ export function DashboardPage() {
             </p>
             <div className="flex items-center justify-between">
               <h1>Your boards</h1>
-              <Button onClick={() => router.push('/?create=true')}>
+              <Button onClick={() => setShowCreateModal(true)}>
                 <Plus size={18} /> New Retro
               </Button>
             </div>
@@ -267,7 +270,7 @@ export function DashboardPage() {
                   <p className="mt-1 text-sm text-[var(--ink-4)]">
                     Create your first retro to get started.
                   </p>
-                  <Button className="mt-4" onClick={() => router.push('/?create=true')}>
+                  <Button className="mt-4" onClick={() => setShowCreateModal(true)}>
                     <Plus size={18} /> Create a Retro
                   </Button>
                 </div>
@@ -278,6 +281,9 @@ export function DashboardPage() {
       </div>
 
       {/* Management modals */}
+      {showCreateModal && (
+        <CreateBoardModal onClose={() => setShowCreateModal(false)} />
+      )}
       {renameTarget && (
         <RenameBoardModal
           key={renameTarget.id}

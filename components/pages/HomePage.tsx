@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Plus, LogIn, Zap, ListChecks, Eye } from 'lucide-react';
 import { AppShell, SiteFooter } from '@/components/Layout';
 import { Button, Input, Textarea, Modal, Pill } from '@/components/common';
@@ -43,6 +43,7 @@ export function HomePage() {
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const createBoard = useBoardStore((s) => s.createBoard);
   const appSettings = useAppSettingsStore((s) => s.settings);
   const fetchAppSettings = useAppSettingsStore((s) => s.fetchSettings);
@@ -50,6 +51,14 @@ export function HomePage() {
   useEffect(() => {
     fetchAppSettings();
   }, [fetchAppSettings]);
+
+  // Deep link from other pages (e.g. dashboard's "New Retro" button) via ?create=true.
+  useEffect(() => {
+    if (searchParams.get('create') === 'true') {
+      setShowCreateModal(true);
+      router.replace('/', { scroll: false });
+    }
+  }, [searchParams, router]);
 
   useEffect(() => {
     if (appSettings?.default_template) {

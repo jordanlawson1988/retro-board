@@ -138,7 +138,7 @@ export function DashboardPage() {
             </p>
             <div className="flex items-center justify-between">
               <h1>Your boards</h1>
-              <Button onClick={() => router.push('/')}>
+              <Button onClick={() => router.push('/?create=true')}>
                 <Plus size={18} /> New Retro
               </Button>
             </div>
@@ -267,7 +267,7 @@ export function DashboardPage() {
                   <p className="mt-1 text-sm text-[var(--ink-4)]">
                     Create your first retro to get started.
                   </p>
-                  <Button className="mt-4" onClick={() => router.push('/')}>
+                  <Button className="mt-4" onClick={() => router.push('/?create=true')}>
                     <Plus size={18} /> Create a Retro
                   </Button>
                 </div>

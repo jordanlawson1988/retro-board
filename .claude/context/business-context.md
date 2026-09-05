@@ -1,12 +1,12 @@
 # Business Context — Retro Board
 
-> Domain knowledge, stakeholder context, and project goals. Last updated: 2026-03-22
+> Domain knowledge, stakeholder context, and project goals. Last updated: 2026-09-04
 
 ## What It Is
 
 **Retro Board** is a real-time retrospective collaboration tool. Teams use it to run retrospective meetings where participants add cards to themed columns, vote on items, discuss action items, and track outcomes — all in real-time.
 
-This is a personal project built by Jordan Lawson. It is not a commercial product.
+Started as a personal project by Jordan Lawson. Since June 2026 it is being commercialized as a paid SaaS; the price was confirmed on 2026-09-04.
 
 ## How It Works
 
@@ -32,12 +32,13 @@ There is no external client or business owner. Jordan builds it, Jordan uses it,
 - Agile/Scrum teams at work
 - F3 groups for workout retrospectives
 - Any group wanting structured feedback
+- Observed organic users (2026): teams in Argentina, the US, Germany, Spain, and Russia, most of whom tried anonymously before signing up
 
 ## Business Model
 
-- **Revenue:** None — this is a free, personal tool
-- **Infrastructure cost:** $0 (Neon free tier, Ably free tier, Vercel Hobby plan)
-- **Monetization potential:** None planned. This is a portfolio project and personal utility.
+- **Revenue:** None yet. Launching at **$4.99/month flat, unlimited boards and unlimited members**, one plan, Paddle as merchant of record. Participants never pay or sign up; only board creators are gated. Free tier = first board free (1-active vs 1-lifetime still to be confirmed).
+- **Infrastructure cost:** about $25/month (Vercel Pro $20, already paid, plus Neon). Net per subscriber after Paddle ≈ $4.24; break-even ≈ 6 subscribers.
+- **Plan of record:** `docs/superpowers/plans/2026-09-03-go-paid-checklist.md` (how to start charging) and `docs/superpowers/specs/2026-09-04-competitive-gap-analysis.md` (what to build so $4.99 is the obvious choice).
 
 ## Why It Exists
 
@@ -56,7 +57,7 @@ Most retro tools (RetroTool, EasyRetro, Reetro) require accounts and have paid t
 
 ## Key Metrics (If Tracked)
 
-Jordan does not currently track usage metrics. If metrics were added, the important ones would be:
+No analytics are installed. Live database counts on 2026-09-03: 8 accounts (4 in the last 30 days), 43 boards (15 in the last 30 days; Jul 18, Aug 15), 73 distinct participants and 206 cards in the last 30 days, 0 subscribers. The metrics worth adding:
 - Boards created per week
 - Average participants per board
 - Card count per retro

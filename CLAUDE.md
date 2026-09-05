@@ -19,10 +19,11 @@ Next.js 16, React 19, Neon, Better Auth, Ably, Tailwind CSS 4. Real-time retro b
 
 ## Branches
 
-`develop` → `main`. Pre-push: `npx tsc --noEmit && npm run build`. No tests.
+`develop` → `main`. Pre-push: `npx tsc --noEmit && npm run build && npm test` (Vitest, 82 tests as of 2026-09-04; no E2E).
 
 ## Context (read on demand)
 
+- `.claude/context/session-handoff.md` — where the last session left off (read first in a new session)
 - `.claude/context/architecture-notes.md` — tech debt inventory
 - `.claude/context/feature-status.md` — feature tracker
 - `AGENTS.md` — subagent guidelines

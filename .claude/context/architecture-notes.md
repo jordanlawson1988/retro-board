@@ -1,17 +1,20 @@
 # Architecture Notes — Retro Board
 
-> Living record of tech debt, architectural decisions, and system health. Last updated: 2026-03-22
+> Living record of tech debt, architectural decisions, and system health. Last updated: 2026-09-04
 
 ## Active Tech Debt
 
 | Issue | Severity | Notes |
 |-------|----------|-------|
-| No test framework configured | **High** | No Vitest, Jest, Playwright, or any test tooling. Zero test coverage on 837-line boardStore. |
+| No E2E tests | **Medium** | Vitest in place (13 files / 82 tests, 2026-09-04). No Playwright; UI changes ship without automated browser verification. `boardStore.ts` and `useBoardChannel` remain largely untested. |
 | `boardStore.ts` at 837 lines | **Medium** | Single file contains all board CRUD, optimistic updates, realtime event handling, and state management. Should be split into domain modules (cards, columns, votes, participants, actions). |
 | `CLAUDE.md` contains stale pre-migration content | **Medium** | Architecture section lists both old Supabase stack AND new Neon/Better Auth/Ably stack. Old references should be removed. |
-| `CONTEXT_SNAPSHOT.md` is entirely stale | **Low** | Dated 2026-02-25, references Vite 7.3, Supabase, react-router-dom. Could be deleted or replaced. |
+| `CONTEXT_SNAPSHOT.md` | **Resolved (pending commit)** | Deleted in the working tree 2026-09. |
 | `README.md` is Vite template boilerplate | **Low** | Default "React + TypeScript + Vite" readme. Should be replaced with actual project README. |
-| `supabase-env-guard.sh` hook still active | **Low** | Pre-tool-use hook in `.claude/settings.local.json` guards against Supabase env mismatches. No longer relevant since Supabase was removed. |
+| `supabase-env-guard.sh` hook | **Resolved (pending commit)** | Deleted in the working tree 2026-09. |
+| Anonymous board creation still allowed on `main` | **High (pre-paywall)** | Paywall bypass until `feature/phase0-billing` ships; that branch is 32 commits behind develop. |
+| Email verification not configured | **Medium** | All users `emailVerified=false`; the billing allowlist matches raw email. Enable via Resend before honoring `free_access`. |
+| Vercel project framework preset = "vite" | **Low** | Stale from the Vite era; Next.js deploys fine regardless. |
 | `.npmrc` bypasses corporate registry | **Low** | `registry=https://registry.npmjs.org/` — exists because Jordan's CFA machine defaults to JFrog Artifactory. |
 
 ## Recent Migration (March 2026)
@@ -49,7 +52,8 @@ The project underwent a major infrastructure migration across 30+ commits on the
 ## Dependency Health
 
 ### Core
-- Next.js 16.2.0, React 19.2.0, TypeScript 5.9.3
+- Next.js 16.2.9, React 19.2.0, TypeScript 5.9.3 (2026-09-04)
+- @upstash/ratelimit 2.0.8 + @upstash/redis 1.38.0 (rate limits), resend 6.12.4 (email), vitest 4.1.7 (tests)
 - @neondatabase/serverless 1.0.2
 - better-auth 1.5.5
 - ably 2.21.0

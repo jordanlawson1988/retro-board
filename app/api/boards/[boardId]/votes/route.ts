@@ -27,6 +27,10 @@ export async function POST(
     voterId = loaded.actor.participantId as string;
   }
 
+  // The card must exist on this board before a vote can reference it.
+  const [cardOnBoard] = await sql`SELECT 1 FROM cards WHERE id = ${cardId} AND board_id = ${boardId}`;
+  if (!cardOnBoard) return NextResponse.json({ error: 'Card not found' }, { status: 404 });
+
   // Check if vote already exists
   const [existingVote] = await sql`
     SELECT * FROM votes WHERE card_id = ${cardId} AND voter_id = ${voterId} AND board_id = ${boardId}

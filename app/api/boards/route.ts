@@ -69,7 +69,10 @@ export async function POST(request: Request) {
       joinCode,
       participantId: participant ? creatorId : null,
     });
-    if (participant) setParticipantCookie(res, id, creatorId);
+    // Always issued: when no participant row was created yet, this cookie is the
+    // creator's claim. The join route turns it into the facilitator participant,
+    // so a creator without an account still ends up as the board's facilitator.
+    setParticipantCookie(res, id, creatorId);
     return res;
   } catch (err) {
     console.error('Failed to create board:', err);

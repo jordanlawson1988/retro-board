@@ -3,7 +3,7 @@ import { ablyServer } from '@/lib/ably-server';
 import { NextResponse } from 'next/server';
 import { nanoid } from 'nanoid';
 import { loadBoardActor, BOARD_NOT_FOUND } from '@/lib/board-actor';
-import { setParticipantCookie } from '@/lib/participant-session';
+import { setParticipantCookie, readParticipantId } from '@/lib/participant-session';
 import { rateLimitOr429 } from '@/lib/rate-limit';
 import { readJsonObject } from '@/lib/request-body';
 import { validateDisplayName, INVALID_BODY } from '@/lib/board-validation';
@@ -86,8 +86,17 @@ export async function POST(
     if (ownershipCheck.length > 0) isAdmin = true;
   }
 
+  // v2 creator claim: board creation issues a signed cookie for boards.created_by.
+  // If that cookie is presented and no participant row exists for it yet (the
+  // loader found none, or we would have returned above), this caller is the
+  // creator and becomes the facilitator under that id.
+  const cookieId = isV2 ? readParticipantId(request, boardId) : null;
+  const isCreatorClaim =
+    isV2 && cookieId !== null && cookieId === loaded.board.created_by && !loaded.actor.participantId;
+  if (isCreatorClaim) isAdmin = true;
+
   // v2 ids are generated here; the client's suggestion is ignored.
-  const newId: string = isV2 ? nanoid() : participantId;
+  const newId: string = isCreatorClaim ? (cookieId as string) : isV2 ? nanoid() : participantId;
 
   const [participant] = await sql`
     INSERT INTO participants (id, board_id, display_name, is_admin, user_id)

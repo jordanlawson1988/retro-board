@@ -144,8 +144,6 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     const boardId = nanoid(10);
     const templateDef = BOARD_TEMPLATES.find((t) => t.id === template);
 
-    const participantId = crypto.randomUUID();
-
     const columns = templateDef && templateDef.columns.length > 0
       ? templateDef.columns.map((col, i) => ({
           id: nanoid(10),
@@ -156,9 +154,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
         }))
       : [];
 
-    const participant = displayName
-      ? { id: participantId, displayName }
-      : undefined;
+    const participant = displayName ? { displayName } : undefined;
 
     const res = await fetch('/api/boards', {
       method: 'POST',
@@ -168,7 +164,6 @@ export const useBoardStore = create<BoardState>((set, get) => ({
         title,
         description,
         template,
-        createdBy: participantId,
         settings: {
           ...DEFAULT_BOARD_SETTINGS,
           ...(useAppSettingsStore?.getState?.()?.settings?.default_board_settings ?? {}),
@@ -183,8 +178,11 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       throw new Error(err.error || 'Failed to create board');
     }
 
+    // The server generated the creator's participant id (and set the cookie).
+    const { participantId } = (await res.json()) as { participantId: string | null };
+
     // Update local state for auto-joined creator
-    if (displayName) {
+    if (displayName && participantId) {
       localStorage.setItem(`retro-pid-${boardId}`, participantId);
       set((state) => ({
         currentParticipantId: participantId,

@@ -117,7 +117,8 @@ export function checkAction(
   const stateResult = checkState(action, actor, state);
   if (!stateResult.ok) return stateResult;
 
-  if (actor.trustVersion === 2) return checkIdentity(action, actor, target);
+  // Fail closed: only an explicit trustVersion of 1 takes the legacy path.
+  if (actor.trustVersion !== 1) return checkIdentity(action, actor, target);
 
   // Rule 3: v1 skips identity rules except board.settings.
   if (action === 'board.settings' && !actor.isFacilitator) {
@@ -135,6 +136,13 @@ export function reactionsChangeOnlyTouches(
   next: CardReactions,
   participantId: string
 ): boolean {
+  // Reject malformed or duplicated input before comparing.
+  if (typeof next !== 'object' || next === null || Array.isArray(next)) return false;
+  for (const ids of Object.values(next)) {
+    if (!Array.isArray(ids)) return false;
+    if (!ids.every((id) => typeof id === 'string')) return false;
+    if (new Set(ids).size !== ids.length) return false;
+  }
   const emojis = new Set([...Object.keys(prev ?? {}), ...Object.keys(next ?? {})]);
   for (const emoji of emojis) {
     const a = new Set(prev?.[emoji] ?? []);

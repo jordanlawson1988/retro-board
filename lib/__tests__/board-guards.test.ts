@@ -199,7 +199,30 @@ describe('v1 boards keep the legacy identity model', () => {
   });
 });
 
+describe('checkAction fail-closed trustVersion', () => {
+  it('an undefined trustVersion still applies identity rules', () => {
+    const actor = {
+      boardId: 'b',
+      trustVersion: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      participantId: 'p9',
+      userId: null,
+      isFacilitator: false,
+    } as BoardActor;
+    const state: BoardState = { archived: false, settings: baseSettings };
+    expect(checkAction('card.edit', actor, state, { authorId: 'p1' }).ok).toBe(false);
+  });
+});
+
 describe('reactionsChangeOnlyTouches', () => {
+  it('rejects duplicates and malformed values without throwing', () => {
+    expect(reactionsChangeOnlyTouches({ '👍': [] }, { '👍': ['p1', 'p1', 'p1'] }, 'p1')).toBe(false);
+    expect(reactionsChangeOnlyTouches({ '👍': ['p1'] }, { '👍': ['p1', 'p1'] }, 'p1')).toBe(false);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(reactionsChangeOnlyTouches({ '👍': [] }, { '👍': 'p1' } as any, 'p1')).toBe(false);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(reactionsChangeOnlyTouches({ '👍': [] }, { '👍': 5 } as any, 'p1')).toBe(false);
+  });
+
   it('adding own id is ok', () => {
     expect(reactionsChangeOnlyTouches({ '👍': ['p2'] }, { '👍': ['p2', 'p1'] }, 'p1')).toBe(true);
   });

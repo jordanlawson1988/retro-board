@@ -5,6 +5,7 @@ import { readParticipantId } from '@/lib/participant-session';
 import { buildActor } from '@/lib/board-write-rules';
 import type { BoardActor, BoardState, GuardResult } from '@/lib/board-guards';
 import type { BoardSettings } from '@/types';
+import { DEFAULT_BOARD_SETTINGS } from '@/utils/constants';
 
 export interface LoadedBoard {
   actor: BoardActor;
@@ -34,7 +35,9 @@ export async function loadBoardActor(
   `;
   if (!row) return null;
 
-  const trustVersion: 1 | 2 = Number(row.trust_version) === 2 ? 2 : 1;
+  const tv = Number(row.trust_version);
+  if (tv !== 1 && tv !== 2) throw new Error(`Invalid trust_version for board ${boardId}`);
+  const trustVersion: 1 | 2 = tv;
 
   const session = await getSessionOrNull();
   const userId = session?.user?.id ?? null;
@@ -62,7 +65,8 @@ export async function loadBoardActor(
     hasAuthority,
   });
 
-  const settings = row.settings as BoardSettings;
+  // Missing keys take the defaults so they never read as "open".
+  const settings: BoardSettings = { ...DEFAULT_BOARD_SETTINGS, ...((row.settings as Partial<BoardSettings> | null) ?? {}) };
   const archivedAt = (row.archived_at as string | null) ?? null;
   return {
     actor,
@@ -79,8 +83,8 @@ export async function loadBoardActor(
 }
 
 /** Convert a guard denial to a response; null when the action is allowed. */
-export function guardResponse(result: GuardResult): NextResponse | null {
-  if (result.ok) return null;
+export function guardResponse(result: GuardResult | null): NextResponse | null {
+  if (!result || result.ok) return null;
   return NextResponse.json({ error: result.error }, { status: result.status });
 }
 

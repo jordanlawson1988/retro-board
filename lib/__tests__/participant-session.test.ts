@@ -26,6 +26,18 @@ describe('participant session token', () => {
     });
   });
 
+  it('dotted participant ids round-trip and cannot be replayed on a dotted board id', () => {
+    const t = signParticipantSession('a', 'b.c');
+    expect(verifyParticipantSession('a', t)).toEqual({ participantId: 'b.c' });
+    expect(verifyParticipantSession('a.b', t)).toBeNull();
+  });
+
+  it('refuses newlines in ids', () => {
+    expect(() => signParticipantSession('a\nb', 'p')).toThrow();
+    expect(() => signParticipantSession('a', 'p\nq')).toThrow();
+    expect(verifyParticipantSession('a\nb', 'p.1.abc')).toBeNull();
+  });
+
   it('rejects another board', () => {
     expect(verifyParticipantSession('b2', signParticipantSession('b1', 'p1'))).toBeNull();
   });

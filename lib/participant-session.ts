@@ -12,8 +12,12 @@ function getSecret(): string {
 }
 
 function sign(boardId: string, participantId: string, issuedAtSec: number): string {
+  // Newline separators keep (a, b.c) and (a.b, c) from colliding.
+  if (boardId.includes('\n') || participantId.includes('\n')) {
+    throw new Error('boardId and participantId must not contain newlines');
+  }
   return createHmac('sha256', getSecret())
-    .update(`${boardId}.${participantId}.${issuedAtSec}`)
+    .update(`${boardId}\n${participantId}\n${issuedAtSec}`)
     .digest('base64url');
 }
 
@@ -48,6 +52,7 @@ export function verifyParticipantSession(
   const iatStr = token.slice(iatDot + 1, sigDot);
   const sig = token.slice(sigDot + 1);
   if (!participantId || !sig || !/^\d+$/.test(iatStr)) return null;
+  if (boardId.includes('\n') || participantId.includes('\n')) return null;
 
   const issuedAt = Number(iatStr);
   if (!Number.isSafeInteger(issuedAt)) return null;

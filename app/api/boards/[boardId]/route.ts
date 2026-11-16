@@ -6,6 +6,8 @@ import { checkAction } from '@/lib/board-guards';
 import { shapeCard, shapeVotes, isRevealingChange, PUBLIC_VIEWER, type ViewBoard } from '@/lib/board-view';
 import { DEFAULT_BOARD_SETTINGS } from '@/utils/constants';
 import type { BoardSettings, Card, Vote } from '@/types';
+import { readJsonObject, isPlainObject } from '@/lib/request-body';
+import { INVALID_BODY } from '@/lib/board-validation';
 import { patchNeedsSettingsGuard, resolveYouAre } from '@/lib/board-write-rules';
 import {
   getSessionOrNull,
@@ -135,7 +137,11 @@ export async function PATCH(
   { params }: { params: Promise<{ boardId: string }> }
 ) {
   const { boardId } = await params;
-  const body = await request.json();
+  const body = await readJsonObject(request);
+  if (!body) return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
+  if (body.settings !== undefined && !isPlainObject(body.settings)) {
+    return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
+  }
 
   let prevSettings: BoardSettings | null = null;
   if (patchNeedsSettingsGuard(body)) {
@@ -195,7 +201,9 @@ export async function POST(
   { params }: { params: Promise<{ boardId: string }> }
 ) {
   const { boardId } = await params;
-  const { action } = await request.json();
+  const body = await readJsonObject(request);
+  if (!body) return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
+  const { action } = body;
   const channel = ablyServer.channels.get(`retro-board:${boardId}`);
 
   if (action === 'complete') {

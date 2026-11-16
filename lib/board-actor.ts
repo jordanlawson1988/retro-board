@@ -17,6 +17,7 @@ export interface LoadedBoard {
     archived_at: string | null;
     deleted_at: string | null;
     owner_id: string | null;
+    created_by: string | null;
   };
 }
 
@@ -30,7 +31,7 @@ export async function loadBoardActor(
   legacyParticipantId?: string | null
 ): Promise<LoadedBoard | null> {
   const [row] = await sql`
-    SELECT id, trust_version, settings, archived_at, deleted_at, owner_id
+    SELECT id, trust_version, settings, archived_at, deleted_at, owner_id, created_by
     FROM boards WHERE id = ${boardId} AND deleted_at IS NULL
   `;
   if (!row) return null;
@@ -78,6 +79,7 @@ export async function loadBoardActor(
       archived_at: archivedAt,
       deleted_at: null,
       owner_id: (row.owner_id as string | null) ?? null,
+      created_by: (row.created_by as string | null) ?? null,
     },
   };
 }

@@ -4,6 +4,9 @@ import { NextResponse } from 'next/server';
 import { rateLimitOr429 } from '@/lib/rate-limit';
 import { loadBoardActor, guardResponse, requireParticipantOn, BOARD_NOT_FOUND } from '@/lib/board-actor';
 import { checkAction } from '@/lib/board-guards';
+import { readJsonObject, isPlainObject } from '@/lib/request-body';
+import { validateActionItemDescription, validateActionItemUpdates, INVALID_BODY } from '@/lib/board-validation';
+
 
 export async function POST(
   request: Request,
@@ -12,8 +15,16 @@ export async function POST(
   const limited = await rateLimitOr429(request, 'action-item', 30, 60);
   if (limited) return limited;
   const { boardId } = await params;
-  const { description, assignee, dueDate, createdBy } = await request.json();
-  const loaded = await loadBoardActor(request, boardId, createdBy);
+  const body = await readJsonObject(request);
+  if (!body) return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
+  const { description, assignee, dueDate, createdBy } = body;
+  const descOk = validateActionItemDescription(description);
+  if (!descOk.ok) return NextResponse.json({ error: descOk.error }, { status: 400 });
+  const optString = (v: unknown) => v === undefined || v === null || typeof v === 'string';
+  if (!optString(assignee) || !optString(dueDate) || !optString(createdBy)) {
+    return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
+  }
+  const loaded = await loadBoardActor(request, boardId, (createdBy as string | null | undefined) ?? null);
   if (!loaded) return BOARD_NOT_FOUND();
   const denied = guardResponse(checkAction('action-item.write', loaded.actor, loaded.state));
   if (denied) return denied;
@@ -38,7 +49,14 @@ export async function PATCH(
   { params }: { params: Promise<{ boardId: string }> }
 ) {
   const { boardId } = await params;
-  const { itemId, updates } = await request.json();
+  const body = await readJsonObject(request);
+  if (!body) return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
+  const { itemId, updates } = body;
+  if (typeof itemId !== 'string' || !isPlainObject(updates)) {
+    return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
+  }
+  const valid = validateActionItemUpdates(updates);
+  if (!valid.ok) return NextResponse.json({ error: valid.error }, { status: 400 });
   const loaded = await loadBoardActor(request, boardId, null);
   if (!loaded) return BOARD_NOT_FOUND();
   const denied = guardResponse(checkAction('action-item.write', loaded.actor, loaded.state));
@@ -70,7 +88,10 @@ export async function DELETE(
   { params }: { params: Promise<{ boardId: string }> }
 ) {
   const { boardId } = await params;
-  const { itemId } = await request.json();
+  const body = await readJsonObject(request);
+  if (!body) return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
+  const { itemId } = body;
+  if (typeof itemId !== 'string') return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
   const loaded = await loadBoardActor(request, boardId, null);
   if (!loaded) return BOARD_NOT_FOUND();
   const denied = guardResponse(checkAction('action-item.write', loaded.actor, loaded.state));

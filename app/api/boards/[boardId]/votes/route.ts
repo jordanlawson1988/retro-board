@@ -4,6 +4,9 @@ import { rateLimitOr429 } from '@/lib/rate-limit';
 import { loadBoardActor, guardResponse, requireParticipantOn, BOARD_NOT_FOUND } from '@/lib/board-actor';
 import { publishVote } from '@/lib/board-publish';
 import { checkAction } from '@/lib/board-guards';
+import { readJsonObject, isPlainObject } from '@/lib/request-body';
+import { INVALID_BODY } from '@/lib/board-validation';
+
 
 export async function POST(
   request: Request,
@@ -12,15 +15,27 @@ export async function POST(
   const limited = await rateLimitOr429(request, 'vote', 60, 60);
   if (limited) return limited;
   const { boardId } = await params;
-  const { cardId, voterId: claimedVoterId, voteId } = await request.json();
+  const body = await readJsonObject(request);
+  if (!body) return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
+  const { cardId, voterId: claimedVoterId, voteId } = body;
+  if (
+    typeof cardId !== 'string' ||
+    (voteId !== undefined && voteId !== null && typeof voteId !== 'string') ||
+    (claimedVoterId !== undefined && claimedVoterId !== null && typeof claimedVoterId !== 'string')
+  ) {
+    return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
+  }
 
-  const loaded = await loadBoardActor(request, boardId, claimedVoterId);
+  const loaded = await loadBoardActor(request, boardId, (claimedVoterId as string | null | undefined) ?? null);
   if (!loaded) return BOARD_NOT_FOUND();
   const denied = guardResponse(checkAction('vote.toggle', loaded.actor, loaded.state));
   if (denied) return denied;
 
   // v2: the voter is the signed-in participant, never the body's claim.
-  let voterId: string = claimedVoterId;
+  let voterId = claimedVoterId as string;
+  if (loaded.board.trust_version !== 2 && !voterId) {
+    return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
+  }
   if (loaded.board.trust_version === 2) {
     const needsJoin = requireParticipantOn(loaded);
     if (needsJoin) return needsJoin;

@@ -6,6 +6,7 @@ import { loadBoardActor, guardResponse, requireParticipantOn, BOARD_NOT_FOUND } 
 import { checkAction, reactionsChangeOnlyTouches } from '@/lib/board-guards';
 import { publishCard } from '@/lib/board-publish';
 import { shapeCard } from '@/lib/board-view';
+import type { CardReactions } from '@/types';
 import { cardPatchActions, firstDenial } from '@/lib/board-write-rules';
 
 function isReactionsShape(v: unknown): boolean {
@@ -14,6 +15,9 @@ function isReactionsShape(v: unknown): boolean {
     (ids) => Array.isArray(ids) && ids.every((id) => typeof id === 'string')
   );
 }
+import { readJsonObject, isPlainObject } from '@/lib/request-body';
+import { validateCardUpdates, isFiniteNumber, INVALID_BODY } from '@/lib/board-validation';
+
 
 export async function POST(
   request: Request,
@@ -22,9 +26,20 @@ export async function POST(
   const limited = await rateLimitOr429(request, 'card-create', 30, 60);
   if (limited) return limited;
   const { boardId } = await params;
-  const { id, columnId, text, authorName, authorId, position } = await request.json();
+  const body = await readJsonObject(request);
+  if (!body) return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
+  const { id, columnId, text, authorName, authorId, position } = body;
+  if (typeof id !== 'string' || typeof columnId !== 'string' || !isFiniteNumber(position)) {
+    return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
+  }
+  if (
+    (authorId !== undefined && authorId !== null && typeof authorId !== 'string') ||
+    (authorName !== undefined && authorName !== null && typeof authorName !== 'string')
+  ) {
+    return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
+  }
 
-  const loaded = await loadBoardActor(request, boardId, authorId);
+  const loaded = await loadBoardActor(request, boardId, authorId ?? null);
   if (!loaded) return BOARD_NOT_FOUND();
   const denied = guardResponse(checkAction('card.create', loaded.actor, loaded.state));
   if (denied) return denied;
@@ -37,6 +52,9 @@ export async function POST(
   }
 
   // v1 boards keep the client-claimed identity; v2 identity comes from the signed session.
+  const [columnOnBoard] = await sql`SELECT 1 FROM columns WHERE id = ${columnId} AND board_id = ${boardId}`;
+  if (!columnOnBoard) return NextResponse.json({ error: 'Column not found' }, { status: 404 });
+
   let cardAuthorId: string | null = authorId ?? null;
   let cardAuthorName: string | null = authorName ?? null;
   if (loaded.board.trust_version === 2) {
@@ -69,10 +87,16 @@ export async function PATCH(
   { params }: { params: Promise<{ boardId: string }> }
 ) {
   const { boardId } = await params;
-  const { cardId, updates } = await request.json();
-  if (!updates || typeof updates !== 'object') {
-    return NextResponse.json({ error: 'Missing updates' }, { status: 400 });
+  const body = await readJsonObject(request);
+  if (!body) return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
+  const { cardId, updates } = body;
+  if (typeof cardId !== 'string' || !isPlainObject(updates)) {
+    return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
   }
+
+  // Validate every field before any write so a bad field cannot leave a partial update.
+  const valid = validateCardUpdates(updates);
+  if (!valid.ok) return NextResponse.json({ error: valid.error }, { status: 400 });
 
   if (updates.reactions !== undefined && !isReactionsShape(updates.reactions)) {
     return NextResponse.json({ error: 'Invalid reactions' }, { status: 400 });
@@ -94,23 +118,22 @@ export async function PATCH(
     const needsJoin = requireParticipantOn(loaded);
     if (needsJoin) return needsJoin;
     if (
-      !reactionsChangeOnlyTouches(existing.reactions, updates.reactions, loaded.actor.participantId as string)
+      !reactionsChangeOnlyTouches(existing.reactions, updates.reactions as CardReactions, loaded.actor.participantId as string)
     ) {
       return NextResponse.json({ error: 'You can only change your own reactions' }, { status: 403 });
     }
   }
 
+  if (typeof updates.column_id === 'string') {
+    const [col] = await sql`SELECT 1 FROM columns WHERE id = ${updates.column_id} AND board_id = ${boardId}`;
+    if (!col) return NextResponse.json({ error: 'Column not found' }, { status: 404 });
+  }
+  if (typeof updates.merged_with === 'string') {
+    const [target] = await sql`SELECT 1 FROM cards WHERE id = ${updates.merged_with} AND board_id = ${boardId}`;
+    if (!target) return NextResponse.json({ error: 'Card not found' }, { status: 404 });
+  }
+
   if (updates.text !== undefined) {
-    if (
-      typeof updates.text !== 'string' ||
-      updates.text.trim().length === 0 ||
-      updates.text.length > 2000
-    ) {
-      return NextResponse.json(
-        { error: 'Card text must be 1–2000 characters' },
-        { status: 400 }
-      );
-    }
     await sql`UPDATE cards SET text = ${updates.text} WHERE id = ${cardId} AND board_id = ${boardId}`;
   }
   if (updates.color !== undefined) {
@@ -143,7 +166,10 @@ export async function DELETE(
   { params }: { params: Promise<{ boardId: string }> }
 ) {
   const { boardId } = await params;
-  const { cardId } = await request.json();
+  const body = await readJsonObject(request);
+  if (!body) return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
+  const { cardId } = body;
+  if (typeof cardId !== 'string') return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
 
   const loaded = await loadBoardActor(request, boardId);
   if (!loaded) return BOARD_NOT_FOUND();

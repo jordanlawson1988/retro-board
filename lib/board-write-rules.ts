@@ -83,3 +83,60 @@ export function firstDenial(
   }
   return null;
 }
+
+export interface YouAre {
+  participantId: string | null;
+  isFacilitator: boolean;
+  joined: boolean;
+}
+
+export interface ResolveYouAreInput {
+  trustVersion: 1 | 2;
+  /** v2: participant resolved from the signed cookie, else null. */
+  actorParticipantId: string | null;
+  actorIsFacilitator: boolean;
+  /** The signed-in user's own participant row on this board (a hint, not identity). */
+  matchedParticipantId: string | null;
+  /** Signed-in owner / facilitator member / system admin. */
+  authorityCanFacilitate: boolean;
+}
+
+/**
+ * Pure: what the board GET tells the viewer about themselves. On v2 the participant is
+ * exactly the cookie's; the user-matched row is only exposed separately as a join hint.
+ */
+export function resolveYouAre(i: ResolveYouAreInput): YouAre {
+  if (i.trustVersion === 2) {
+    return {
+      participantId: i.actorParticipantId,
+      isFacilitator: i.actorIsFacilitator || i.authorityCanFacilitate,
+      joined: i.actorParticipantId !== null,
+    };
+  }
+  return {
+    participantId: i.matchedParticipantId,
+    isFacilitator: i.authorityCanFacilitate,
+    joined: i.matchedParticipantId !== null,
+  };
+}
+
+export const CREATOR_PROTECTED_ERROR = 'The board creator cannot be demoted or removed';
+
+export interface CreatorProtectionInput {
+  change: 'demote' | 'remove';
+  target: { id: string; user_id: string | null };
+  board: { created_by: string | null; owner_id: string | null };
+  actorParticipantId: string | null;
+}
+
+/** Pure: the board creator (or owner account's participant) cannot be demoted, or removed by others. */
+export function checkCreatorProtection(i: CreatorProtectionInput): GuardResult {
+  const isCreator =
+    (i.board.created_by !== null && i.target.id === i.board.created_by) ||
+    (i.board.owner_id !== null && i.target.user_id === i.board.owner_id);
+  if (!isCreator) return { ok: true };
+  if (i.change === 'remove' && i.actorParticipantId !== null && i.actorParticipantId === i.target.id) {
+    return { ok: true };
+  }
+  return { ok: false, status: 403, error: CREATOR_PROTECTED_ERROR };
+}

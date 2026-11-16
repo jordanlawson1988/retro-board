@@ -6,7 +6,7 @@ import { checkAction } from '@/lib/board-guards';
 import { shapeCard, shapeVotes, isRevealingChange, PUBLIC_VIEWER, type ViewBoard } from '@/lib/board-view';
 import { DEFAULT_BOARD_SETTINGS } from '@/utils/constants';
 import type { BoardSettings, Card, Vote } from '@/types';
-import { patchNeedsSettingsGuard } from '@/lib/board-write-rules';
+import { patchNeedsSettingsGuard, resolveYouAre } from '@/lib/board-write-rules';
 import {
   getSessionOrNull,
   assertCanFacilitate,
@@ -95,10 +95,17 @@ export async function GET(
     youCanFacilitate = !!authorityCheck?.has_authority;
   }
 
-  // v2: identity is the signed cookie; a signed-in user's participant match is only a fallback.
-  if (viewBoard.trust_version === 2 && loaded) {
-    if (loaded.actor.participantId) yourParticipantId = loaded.actor.participantId;
-    youCanFacilitate = youCanFacilitate || loaded.actor.isFacilitator;
+  // v2: identity is the signed cookie only. yourParticipantId stays the signed-in user's
+  // own participant row: a hint the client uses to join and obtain a cookie.
+  const youAre = resolveYouAre({
+    trustVersion: viewBoard.trust_version,
+    actorParticipantId: loaded?.actor.participantId ?? null,
+    actorIsFacilitator: loaded?.actor.isFacilitator ?? false,
+    matchedParticipantId: yourParticipantId,
+    authorityCanFacilitate: youCanFacilitate,
+  });
+  if (viewBoard.trust_version === 2) {
+    youCanFacilitate = youAre.isFacilitator;
   }
 
   // Shape for what this viewer is allowed to see. v2 uses the cookie identity only.
@@ -118,7 +125,7 @@ export async function GET(
     participants,
     yourParticipantId,
     youCanFacilitate,
-    youAre: { participantId: yourParticipantId, isFacilitator: youCanFacilitate },
+    youAre,
   });
 }
 

@@ -5,6 +5,8 @@ import {
   participantRemovalAction,
   firstDenial,
   patchNeedsSettingsGuard,
+  resolveYouAre,
+  checkCreatorProtection,
 } from '@/lib/board-write-rules';
 import type { BoardActor, BoardState } from '@/lib/board-guards';
 import type { BoardSettings } from '@/types';
@@ -133,5 +135,91 @@ describe('firstDenial', () => {
   });
   it('returns null for no actions', () => {
     expect(firstDenial([], actor, state)).toBeNull();
+  });
+});
+
+describe('resolveYouAre', () => {
+  const base = {
+    actorParticipantId: null as string | null,
+    actorIsFacilitator: false,
+    matchedParticipantId: null as string | null,
+    authorityCanFacilitate: false,
+  };
+
+  it('v2 with no cookie and a signed-in match is not joined', () => {
+    expect(resolveYouAre({ ...base, trustVersion: 2, matchedParticipantId: 'p-user' })).toEqual({
+      participantId: null,
+      isFacilitator: false,
+      joined: false,
+    });
+  });
+  it('v2 with a cookie uses exactly the cookie participant', () => {
+    expect(
+      resolveYouAre({
+        ...base,
+        trustVersion: 2,
+        actorParticipantId: 'p-cookie',
+        actorIsFacilitator: true,
+        matchedParticipantId: 'p-other',
+      })
+    ).toEqual({ participantId: 'p-cookie', isFacilitator: true, joined: true });
+  });
+  it('v2 signed-in authority without a cookie is a facilitator but not joined', () => {
+    expect(resolveYouAre({ ...base, trustVersion: 2, authorityCanFacilitate: true })).toEqual({
+      participantId: null,
+      isFacilitator: true,
+      joined: false,
+    });
+  });
+  it('v1 uses the matched participant and authority, as before', () => {
+    expect(
+      resolveYouAre({ ...base, trustVersion: 1, matchedParticipantId: 'p-user', authorityCanFacilitate: true })
+    ).toEqual({ participantId: 'p-user', isFacilitator: true, joined: true });
+    expect(resolveYouAre({ ...base, trustVersion: 1 })).toEqual({
+      participantId: null,
+      isFacilitator: false,
+      joined: false,
+    });
+  });
+});
+
+describe('checkCreatorProtection', () => {
+  const board = { created_by: 'p-creator', owner_id: 'u-owner' };
+  const denied = { ok: false, status: 403, error: 'The board creator cannot be demoted or removed' };
+
+  it('blocks demoting the creator participant', () => {
+    expect(
+      checkCreatorProtection({ change: 'demote', target: { id: 'p-creator', user_id: null }, board, actorParticipantId: 'p-admin' })
+    ).toEqual(denied);
+  });
+  it('blocks demoting the owner account participant', () => {
+    expect(
+      checkCreatorProtection({ change: 'demote', target: { id: 'p-x', user_id: 'u-owner' }, board, actorParticipantId: 'p-admin' })
+    ).toEqual(denied);
+  });
+  it('blocks demoting even by oneself', () => {
+    expect(
+      checkCreatorProtection({ change: 'demote', target: { id: 'p-creator', user_id: null }, board, actorParticipantId: 'p-creator' })
+    ).toEqual(denied);
+  });
+  it('blocks removal by someone else but allows leaving', () => {
+    const target = { id: 'p-creator', user_id: null };
+    expect(checkCreatorProtection({ change: 'remove', target, board, actorParticipantId: 'p-admin' })).toEqual(denied);
+    expect(checkCreatorProtection({ change: 'remove', target, board, actorParticipantId: 'p-creator' })).toEqual({ ok: true });
+  });
+  it('allows everything for ordinary participants', () => {
+    const target = { id: 'p-2', user_id: 'u-2' };
+    expect(checkCreatorProtection({ change: 'demote', target, board, actorParticipantId: 'p-admin' })).toEqual({ ok: true });
+    expect(checkCreatorProtection({ change: 'remove', target, board, actorParticipantId: 'p-admin' })).toEqual({ ok: true });
+  });
+  it('a null owner_id never matches a null user_id', () => {
+    expect(
+      checkCreatorProtection({
+        change: 'remove',
+        target: { id: 'p-2', user_id: null },
+        board: { created_by: null, owner_id: null },
+        actorParticipantId: 'p-admin',
+      })
+    ).toEqual({ ok: true });
   });
 });

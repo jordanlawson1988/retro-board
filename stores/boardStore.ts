@@ -15,6 +15,8 @@ const JSON_HEADERS = { 'Content-Type': 'application/json' };
 export interface YouAre {
   participantId: string | null;
   isFacilitator: boolean;
+  /** True when the server resolved a participant for this browser (v2: from the cookie). */
+  joined: boolean;
 }
 
 // Boards where this page session already ran the cookie-establishing join, so a
@@ -251,22 +253,8 @@ export const useBoardStore = create<BoardState>((set, get) => ({
         }
         resolvedParticipantId = null;
       } else {
-        const me = (participants as Participant[]).find((p) => p.id === serverPid);
-        if (me?.user_id && !autoJoinTried.has(boardId)) {
-          // The server reports a participant for a signed-in user, but a response
-          // cannot show whether this browser holds the cookie. Joining again is
-          // idempotent for signed-in users and guarantees the cookie exists.
-          autoJoinTried.add(boardId);
-          if (await postJoin(boardId, me.display_name)) {
-            await get().fetchBoard(boardId);
-            return;
-          }
-          localStorage.removeItem(storageKey);
-          resolvedParticipantId = null;
-        } else {
-          resolvedParticipantId = serverPid;
-          localStorage.setItem(storageKey, serverPid);
-        }
+        resolvedParticipantId = serverPid;
+        localStorage.setItem(storageKey, serverPid);
       }
     } else {
       // v1: prefer the server-resolved participant (matched via the authenticated
@@ -296,7 +284,13 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       participants: participants || [],
       currentParticipantId: resolvedParticipantId,
       youCanFacilitate: !!youCanFacilitate,
-      youAre: youAre ? { participantId: youAre.participantId ?? null, isFacilitator: !!youAre.isFacilitator } : null,
+      youAre: youAre
+        ? {
+            participantId: youAre.participantId ?? null,
+            isFacilitator: !!youAre.isFacilitator,
+            joined: youAre.joined ?? (youAre.participantId ?? null) !== null,
+          }
+        : null,
       loading: false,
     });
   },

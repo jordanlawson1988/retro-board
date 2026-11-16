@@ -2,10 +2,18 @@
 
 import { useChannel } from 'ably/react';
 import { useBoardStore } from '@/stores/boardStore';
+import { mergeIncomingCard } from '@/lib/mergeIncomingCard';
 import type { Card, Column, Vote, Participant, ActionItem } from '@/types';
 
 export function useBoardChannel(boardId: string) {
   const store = useBoardStore;
+
+  // A reveal (or complete/reopen) changes what this viewer may see, but the event
+  // itself carries nothing sensitive. Refetch the shaped board; fetchBoard replaces
+  // cards and votes wholesale, so anything re-hidden is dropped too.
+  const refetchIfAsked = (data: { refetch?: boolean } | undefined) => {
+    if (data?.refetch === true) void store.getState().fetchBoard(boardId);
+  };
 
   useChannel({ channelName: `retro-board:${boardId}` }, (message) => {
     const { name, data } = message;
@@ -19,8 +27,9 @@ export function useBoardChannel(boardId: string) {
         });
         break;
       case 'card-updated':
+        // Ably cards are shaped for nobody; keep our own text/author (see mergeIncomingCard).
         store.setState((state) => ({
-          cards: state.cards.map((c) => c.id === data.card.id ? (data.card as Card) : c),
+          cards: state.cards.map((c) => c.id === data.card.id ? mergeIncomingCard(c, data.card as Card) : c),
         }));
         break;
       case 'card-deleted':
@@ -94,6 +103,7 @@ export function useBoardChannel(boardId: string) {
               }
             : null,
         }));
+        refetchIfAsked(data);
         break;
       case 'board-reopened':
         store.setState((state) => ({
@@ -101,6 +111,7 @@ export function useBoardChannel(boardId: string) {
             ? { ...state.board, archived_at: null, settings: data.settings }
             : null,
         }));
+        refetchIfAsked(data);
         break;
       case 'board-completed':
         store.setState((state) => ({
@@ -108,6 +119,7 @@ export function useBoardChannel(boardId: string) {
             ? { ...state.board, archived_at: data.archivedAt, settings: data.settings }
             : null,
         }));
+        refetchIfAsked(data);
         break;
 
       // Action Items

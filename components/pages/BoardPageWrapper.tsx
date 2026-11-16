@@ -14,6 +14,7 @@ import { Button, Input, Modal } from '@/components/common';
 export function BoardPageWrapper({ boardId }: { boardId: string }) {
   const currentParticipantId = useBoardStore((s) => s.currentParticipantId);
   const board = useBoardStore((s) => s.board);
+  const youAre = useBoardStore((s) => s.youAre);
   const loading = useBoardStore((s) => s.loading);
   const error = useBoardStore((s) => s.error);
   const fetchBoard = useBoardStore((s) => s.fetchBoard);
@@ -121,9 +122,26 @@ export function BoardPageWrapper({ boardId }: { boardId: string }) {
     );
   }
 
-  // Joined: render with Ably
+  // v2 boards: the Ably token route answers 401 without the server's participant
+  // cookie, so wait until a join + refetch has produced youAre.participantId.
+  const serverParticipantId = youAre?.participantId ?? null;
+  if (board.trust_version === 2 && !serverParticipantId) {
+    return (
+      <AppShell>
+        <div className="flex min-h-[60vh] items-center justify-center">
+          <div className="text-center">
+            <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-[var(--color-gray-2)] border-t-[var(--color-navy)]" />
+            <p className="mt-4 text-[var(--color-gray-5)]">Joining board...</p>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
+
+  // Joined: render with Ably. On v2 the server's participant id is the client id.
+  const ablyClientId = board.trust_version === 2 ? (serverParticipantId as string) : currentParticipantId;
   return (
-    <AblyProvider clientId={currentParticipantId} boardId={boardId}>
+    <AblyProvider key={ablyClientId} clientId={ablyClientId} boardId={boardId}>
       <ChannelProvider channelName={`retro-board:${boardId}`}>
         <ChannelProvider channelName={`retro-board:${boardId}:timer`}>
           <BoardPageInner boardId={boardId} />

@@ -4,6 +4,8 @@ import { NextResponse } from 'next/server';
 import { rateLimitOr429 } from '@/lib/rate-limit';
 import { loadBoardActor, guardResponse, requireParticipantOn, BOARD_NOT_FOUND } from '@/lib/board-actor';
 import { checkAction, reactionsChangeOnlyTouches } from '@/lib/board-guards';
+import { publishCard } from '@/lib/board-publish';
+import { shapeCard } from '@/lib/board-view';
 import { cardPatchActions, firstDenial } from '@/lib/board-write-rules';
 
 function isReactionsShape(v: unknown): boolean {
@@ -54,10 +56,12 @@ export async function POST(
     RETURNING *
   `;
 
-  const channel = ablyServer.channels.get(`retro-board:${boardId}`);
-  await channel.publish('card-created', { card });
+  await publishCard(boardId, 'card-created', card as never, loaded.board);
 
-  return NextResponse.json({ card });
+  // The caller gets their own view back (an author sees their own text).
+  return NextResponse.json({
+    card: shapeCard(card as never, loaded.board, { participantId: loaded.actor.participantId }),
+  });
 }
 
 export async function PATCH(
@@ -127,10 +131,11 @@ export async function PATCH(
 
   const [card] = await sql`SELECT * FROM cards WHERE id = ${cardId} AND board_id = ${boardId}`;
 
-  const channel = ablyServer.channels.get(`retro-board:${boardId}`);
-  await channel.publish('card-updated', { card });
+  await publishCard(boardId, 'card-updated', card as never, loaded.board);
 
-  return NextResponse.json({ card });
+  return NextResponse.json({
+    card: shapeCard(card as never, loaded.board, { participantId: loaded.actor.participantId }),
+  });
 }
 
 export async function DELETE(

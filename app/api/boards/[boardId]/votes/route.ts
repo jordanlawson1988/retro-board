@@ -1,8 +1,8 @@
 import { sql } from '@/lib/db';
-import { ablyServer } from '@/lib/ably-server';
 import { NextResponse } from 'next/server';
 import { rateLimitOr429 } from '@/lib/rate-limit';
 import { loadBoardActor, guardResponse, requireParticipantOn, BOARD_NOT_FOUND } from '@/lib/board-actor';
+import { publishVote } from '@/lib/board-publish';
 import { checkAction } from '@/lib/board-guards';
 
 export async function POST(
@@ -32,12 +32,10 @@ export async function POST(
     SELECT * FROM votes WHERE card_id = ${cardId} AND voter_id = ${voterId} AND board_id = ${boardId}
   `;
 
-  const channel = ablyServer.channels.get(`retro-board:${boardId}`);
-
   if (existingVote) {
     // Remove existing vote
     await sql`DELETE FROM votes WHERE id = ${existingVote.id}`;
-    await channel.publish('vote-removed', { voteId: existingVote.id, cardId, voterId });
+    await publishVote(boardId, 'vote-removed', { voteId: existingVote.id, cardId, voterId }, loaded.board);
     return NextResponse.json({ action: 'removed' });
   }
 
@@ -64,7 +62,7 @@ export async function POST(
     RETURNING *
   `;
 
-  await channel.publish('vote-cast', { vote });
+  await publishVote(boardId, 'vote-cast', { vote }, loaded.board);
 
   return NextResponse.json({ action: 'added', vote });
 }

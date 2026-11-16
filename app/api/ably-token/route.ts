@@ -1,28 +1,40 @@
 import { ablyServer } from '@/lib/ably-server';
-import { sql } from '@/lib/db';
 import { NextRequest } from 'next/server';
+import { loadBoardActor } from '@/lib/board-actor';
 
 // Mints a token usable ONLY on the requested board's two channels.
 // Anonymous access is by design (participants have no accounts); the
 // scoping is what prevents cross-board realtime snooping/forgery.
 export async function GET(request: NextRequest) {
-  const clientId = request.nextUrl.searchParams.get('clientId');
+  const queryClientId = request.nextUrl.searchParams.get('clientId');
   const boardId = request.nextUrl.searchParams.get('boardId');
-  if (!clientId || !boardId) {
-    return new Response('Missing clientId or boardId', { status: 400 });
+  if (!boardId) {
+    return new Response('Missing boardId', { status: 400 });
   }
 
-  const [board] = await sql`
-    SELECT 1 AS ok FROM boards WHERE id = ${boardId} AND deleted_at IS NULL
-  `;
-  if (!board) {
+  const loaded = await loadBoardActor(request, boardId);
+  if (!loaded) {
     return new Response('Unknown board', { status: 404 });
+  }
+
+  // v2: the client id is the signed session's participant; the query value is ignored.
+  // v1: the query clientId is still used.
+  let clientId: string;
+  if (loaded.board.trust_version === 2) {
+    if (!loaded.actor.participantId) {
+      return new Response('Join the board first', { status: 401 });
+    }
+    clientId = loaded.actor.participantId;
+  } else {
+    if (!queryClientId) return new Response('Missing clientId', { status: 400 });
+    clientId = queryClientId;
   }
 
   const tokenRequest = await ablyServer.auth.createTokenRequest({
     clientId,
     capability: JSON.stringify({
-      [`retro-board:${boardId}`]: ['subscribe', 'publish', 'presence'],
+      // Clients never publish on the main channel; the server publishes shaped events.
+      [`retro-board:${boardId}`]: ['subscribe', 'presence'],
       [`retro-board:${boardId}:timer`]: ['subscribe', 'publish', 'presence'],
     }),
   });

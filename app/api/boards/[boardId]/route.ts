@@ -3,6 +3,9 @@ import { ablyServer } from '@/lib/ably-server';
 import { NextRequest, NextResponse } from 'next/server';
 import { loadBoardActor, guardResponse, BOARD_NOT_FOUND } from '@/lib/board-actor';
 import { checkAction } from '@/lib/board-guards';
+import { shapeCard, shapeVotes, isRevealingChange, PUBLIC_VIEWER, type ViewBoard } from '@/lib/board-view';
+import { DEFAULT_BOARD_SETTINGS } from '@/utils/constants';
+import type { BoardSettings, Card, Vote } from '@/types';
 import { patchNeedsSettingsGuard } from '@/lib/board-write-rules';
 import {
   getSessionOrNull,
@@ -48,6 +51,14 @@ export async function GET(
     }
   }
 
+  // Resolve the viewer (null for a trashed board, which only its owner/admin can open).
+  const loaded = await loadBoardActor(request, boardId);
+  const viewBoard: ViewBoard = {
+    trust_version: Number(board.trust_version) === 2 ? 2 : 1,
+    settings: loaded?.board.settings ?? { ...DEFAULT_BOARD_SETTINGS, ...(board.settings ?? {}) },
+    archived_at: board.archived_at ?? null,
+  };
+
   const [columns, cards, votes, actionItems, participants] = await Promise.all([
     sql`SELECT * FROM columns WHERE board_id = ${boardId} ORDER BY position`,
     sql`SELECT * FROM cards WHERE board_id = ${boardId} ORDER BY position`,
@@ -84,15 +95,30 @@ export async function GET(
     youCanFacilitate = !!authorityCheck?.has_authority;
   }
 
+  // v2: identity is the signed cookie; a signed-in user's participant match is only a fallback.
+  if (viewBoard.trust_version === 2 && loaded) {
+    if (loaded.actor.participantId) yourParticipantId = loaded.actor.participantId;
+    youCanFacilitate = youCanFacilitate || loaded.actor.isFacilitator;
+  }
+
+  // Shape for what this viewer is allowed to see. v2 uses the cookie identity only.
+  const viewer =
+    viewBoard.trust_version === 2
+      ? loaded
+        ? { participantId: loaded.actor.participantId }
+        : PUBLIC_VIEWER
+      : { participantId: yourParticipantId };
+
   return NextResponse.json({
     board,
     columns,
-    cards,
-    votes,
+    cards: (cards as unknown as Card[]).map((c) => shapeCard(c, viewBoard, viewer)),
+    votes: shapeVotes(votes as unknown as Vote[], viewBoard, viewer),
     actionItems,
     participants,
     yourParticipantId,
     youCanFacilitate,
+    youAre: { participantId: yourParticipantId, isFacilitator: youCanFacilitate },
   });
 }
 
@@ -104,12 +130,14 @@ export async function PATCH(
   const { boardId } = await params;
   const body = await request.json();
 
+  let prevSettings: BoardSettings | null = null;
   if (patchNeedsSettingsGuard(body)) {
     // Settings changes go through the actor so a v2 creator without an account can change them.
     const loaded = await loadBoardActor(request, boardId);
     if (!loaded) return BOARD_NOT_FOUND();
     const denied = guardResponse(checkAction('board.settings', loaded.actor, loaded.state));
     if (denied) return denied;
+    prevSettings = loaded.state.settings;
   } else {
     // Rename / description only: facilitators may still rename a completed board.
     try {
@@ -145,7 +173,10 @@ export async function PATCH(
 
   if (Object.keys(changed).length > 0) {
     const channel = ablyServer.channels.get(`retro-board:${boardId}`);
-    await channel.publish('board-updated', changed);
+    // Revealing hidden cards, votes or authors means clients must refetch shaped data.
+    const nextSettings = { ...DEFAULT_BOARD_SETTINGS, ...(body.settings ?? {}) } as BoardSettings;
+    const refetch = prevSettings !== null && isRevealingChange(prevSettings, nextSettings);
+    await channel.publish('board-updated', refetch ? { ...changed, refetch: true } : changed);
   }
 
   return NextResponse.json({ ok: true });
@@ -167,13 +198,12 @@ export async function POST(
     const denied = guardResponse(checkAction('board.settings', loaded.actor, loaded.state));
     if (denied) return denied;
     const archivedAt = new Date().toISOString();
-    const [board] = await sql`SELECT settings FROM boards WHERE id = ${boardId}`;
-    const settings = { ...board.settings, card_visibility: 'visible', board_locked: true };
+    const settings = { ...loaded.state.settings, card_visibility: 'visible', board_locked: true };
     await sql`
       UPDATE boards SET archived_at = ${archivedAt}, settings = ${JSON.stringify(settings)}
       WHERE id = ${boardId}
     `;
-    await channel.publish('board-completed', { archivedAt, settings });
+    await channel.publish('board-completed', { archivedAt, settings, refetch: true });
     return NextResponse.json({ ok: true });
   }
 
@@ -192,7 +222,7 @@ export async function POST(
       UPDATE boards SET archived_at = NULL, settings = ${JSON.stringify(settings)}
       WHERE id = ${boardId}
     `;
-    await channel.publish('board-reopened', { settings });
+    await channel.publish('board-reopened', { settings, refetch: true });
     return NextResponse.json({ ok: true });
   }
 

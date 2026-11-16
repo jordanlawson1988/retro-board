@@ -1,6 +1,9 @@
 import { sql } from '@/lib/db';
 import { ablyServer } from '@/lib/ably-server';
 import { NextRequest, NextResponse } from 'next/server';
+import { loadBoardActor, guardResponse, BOARD_NOT_FOUND } from '@/lib/board-actor';
+import { checkAction } from '@/lib/board-guards';
+import { patchNeedsSettingsGuard } from '@/lib/board-write-rules';
 import {
   getSessionOrNull,
   assertCanFacilitate,
@@ -99,15 +102,24 @@ export async function PATCH(
   { params }: { params: Promise<{ boardId: string }> }
 ) {
   const { boardId } = await params;
-  try {
-    await assertCanFacilitate(boardId);
-  } catch (e) {
-    const r = authFail(e);
-    if (r) return r;
-    throw e;
-  }
-
   const body = await request.json();
+
+  if (patchNeedsSettingsGuard(body)) {
+    // Settings changes go through the actor so a v2 creator without an account can change them.
+    const loaded = await loadBoardActor(request, boardId);
+    if (!loaded) return BOARD_NOT_FOUND();
+    const denied = guardResponse(checkAction('board.settings', loaded.actor, loaded.state));
+    if (denied) return denied;
+  } else {
+    // Rename / description only: facilitators may still rename a completed board.
+    try {
+      await assertCanFacilitate(boardId);
+    } catch (e) {
+      const r = authFail(e);
+      if (r) return r;
+      throw e;
+    }
+  }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const changed: Record<string, any> = {};
 
@@ -149,13 +161,11 @@ export async function POST(
   const channel = ablyServer.channels.get(`retro-board:${boardId}`);
 
   if (action === 'complete') {
-    try {
-      await assertCanFacilitate(boardId);
-    } catch (e) {
-      const r = authFail(e);
-      if (r) return r;
-      throw e;
-    }
+    // An already completed board returns 409 from the guard.
+    const loaded = await loadBoardActor(request, boardId);
+    if (!loaded) return BOARD_NOT_FOUND();
+    const denied = guardResponse(checkAction('board.settings', loaded.actor, loaded.state));
+    if (denied) return denied;
     const archivedAt = new Date().toISOString();
     const [board] = await sql`SELECT settings FROM boards WHERE id = ${boardId}`;
     const settings = { ...board.settings, card_visibility: 'visible', board_locked: true };

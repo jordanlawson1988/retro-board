@@ -2,6 +2,8 @@ import { sql } from '@/lib/db';
 import { ablyServer } from '@/lib/ably-server';
 import { NextResponse } from 'next/server';
 import { rateLimitOr429 } from '@/lib/rate-limit';
+import { loadBoardActor, guardResponse, requireParticipantOn, BOARD_NOT_FOUND } from '@/lib/board-actor';
+import { checkAction } from '@/lib/board-guards';
 
 export async function POST(
   request: Request,
@@ -10,7 +12,20 @@ export async function POST(
   const limited = await rateLimitOr429(request, 'vote', 60, 60);
   if (limited) return limited;
   const { boardId } = await params;
-  const { cardId, voterId, voteId } = await request.json();
+  const { cardId, voterId: claimedVoterId, voteId } = await request.json();
+
+  const loaded = await loadBoardActor(request, boardId, claimedVoterId);
+  if (!loaded) return BOARD_NOT_FOUND();
+  const denied = guardResponse(checkAction('vote.toggle', loaded.actor, loaded.state));
+  if (denied) return denied;
+
+  // v2: the voter is the signed-in participant, never the body's claim.
+  let voterId: string = claimedVoterId;
+  if (loaded.board.trust_version === 2) {
+    const needsJoin = requireParticipantOn(loaded);
+    if (needsJoin) return needsJoin;
+    voterId = loaded.actor.participantId as string;
+  }
 
   // Check if vote already exists
   const [existingVote] = await sql`
@@ -27,8 +42,7 @@ export async function POST(
   }
 
   // Check vote limit
-  const [board] = await sql`SELECT settings FROM boards WHERE id = ${boardId}`;
-  const settings = board.settings;
+  const settings = loaded.state.settings;
   const maxVotes = settings?.max_votes_per_participant;
 
   if (maxVotes && maxVotes > 0) {

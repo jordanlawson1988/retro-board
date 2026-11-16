@@ -2,6 +2,8 @@ import { sql } from '@/lib/db';
 import { ablyServer } from '@/lib/ably-server';
 import { NextResponse } from 'next/server';
 import { rateLimitOr429 } from '@/lib/rate-limit';
+import { loadBoardActor, guardResponse, requireParticipantOn, BOARD_NOT_FOUND } from '@/lib/board-actor';
+import { checkAction } from '@/lib/board-guards';
 
 export async function POST(
   request: Request,
@@ -11,10 +13,17 @@ export async function POST(
   if (limited) return limited;
   const { boardId } = await params;
   const { description, assignee, dueDate, createdBy } = await request.json();
+  const loaded = await loadBoardActor(request, boardId, createdBy);
+  if (!loaded) return BOARD_NOT_FOUND();
+  const denied = guardResponse(checkAction('action-item.write', loaded.actor, loaded.state));
+  if (denied) return denied;
+  // v2: attribution comes from the signed session (may be null for an unjoined facilitator).
+  const itemCreatedBy: string | null =
+    loaded.board.trust_version === 2 ? loaded.actor.participantId : (createdBy ?? null);
 
   const [item] = await sql`
     INSERT INTO action_items (board_id, description, assignee, due_date, created_by)
-    VALUES (${boardId}, ${description}, ${assignee ?? null}, ${dueDate ?? null}, ${createdBy ?? null})
+    VALUES (${boardId}, ${description}, ${assignee ?? null}, ${dueDate ?? null}, ${itemCreatedBy})
     RETURNING *
   `;
 
@@ -30,6 +39,10 @@ export async function PATCH(
 ) {
   const { boardId } = await params;
   const { itemId, updates } = await request.json();
+  const loaded = await loadBoardActor(request, boardId, null);
+  if (!loaded) return BOARD_NOT_FOUND();
+  const denied = guardResponse(checkAction('action-item.write', loaded.actor, loaded.state));
+  if (denied) return denied;
 
   if (updates.description !== undefined) {
     await sql`UPDATE action_items SET description = ${updates.description} WHERE id = ${itemId} AND board_id = ${boardId}`;
@@ -58,6 +71,10 @@ export async function DELETE(
 ) {
   const { boardId } = await params;
   const { itemId } = await request.json();
+  const loaded = await loadBoardActor(request, boardId, null);
+  if (!loaded) return BOARD_NOT_FOUND();
+  const denied = guardResponse(checkAction('action-item.write', loaded.actor, loaded.state));
+  if (denied) return denied;
 
   await sql`DELETE FROM action_items WHERE id = ${itemId} AND board_id = ${boardId}`;
 

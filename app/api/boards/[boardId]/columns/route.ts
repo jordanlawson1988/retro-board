@@ -2,6 +2,8 @@ import { sql } from '@/lib/db';
 import { ablyServer } from '@/lib/ably-server';
 import { NextResponse } from 'next/server';
 import { isCardSort } from '@/types';
+import { loadBoardActor, guardResponse, requireParticipantOn, BOARD_NOT_FOUND } from '@/lib/board-actor';
+import { checkAction } from '@/lib/board-guards';
 
 export async function POST(
   request: Request,
@@ -9,6 +11,11 @@ export async function POST(
 ) {
   const { boardId } = await params;
   const { id, title, description, color, position } = await request.json();
+  const loaded = await loadBoardActor(request, boardId);
+  if (!loaded) return BOARD_NOT_FOUND();
+  const denied = guardResponse(checkAction('column.write', loaded.actor, loaded.state));
+  if (denied) return denied;
+
 
   const [column] = await sql`
     INSERT INTO columns (id, board_id, title, description, color, position)
@@ -28,6 +35,11 @@ export async function PATCH(
 ) {
   const { boardId } = await params;
   const { columnId, updates } = await request.json();
+  const loaded = await loadBoardActor(request, boardId);
+  if (!loaded) return BOARD_NOT_FOUND();
+  const denied = guardResponse(checkAction('column.write', loaded.actor, loaded.state));
+  if (denied) return denied;
+
 
   if (updates.title !== undefined) {
     await sql`UPDATE columns SET title = ${updates.title} WHERE id = ${columnId} AND board_id = ${boardId}`;
@@ -59,6 +71,11 @@ export async function DELETE(
 ) {
   const { boardId } = await params;
   const { columnId } = await request.json();
+  const loaded = await loadBoardActor(request, boardId);
+  if (!loaded) return BOARD_NOT_FOUND();
+  const denied = guardResponse(checkAction('column.write', loaded.actor, loaded.state));
+  if (denied) return denied;
+
 
   await sql`DELETE FROM columns WHERE id = ${columnId} AND board_id = ${boardId}`;
 

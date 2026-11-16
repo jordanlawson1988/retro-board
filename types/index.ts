@@ -12,6 +12,7 @@ export interface Board {
   created_at: string;
   archived_at: string | null;
   deleted_at: string | null;     // null = live; set when soft-deleted (in Trash)
+  trust_version: 1 | 2;          // 1 = legacy client-trusted identity; 2 = signed participant sessions
 }
 
 /** Board view-model from /api/user/boards: board fields + activity counts + this user's role. */

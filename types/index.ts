@@ -87,8 +87,8 @@ export interface Card {
   column_id: string;
   board_id: string;
   text: string;
-  author_name: string;
-  author_id: string;
+  author_name: string | null;    // null when the server withholds it (anonymous_cards)
+  author_id: string | null;      // null when the server withholds it (anonymous_cards)
   color: string | null;
   position: number;
   merged_with: string | null;
@@ -97,6 +97,8 @@ export interface Card {
   updated_at: string;
   votes?: Vote[];
   vote_count?: number;
+  is_mine?: boolean;             // set by the server shaper (lib/board-view.ts)
+  text_hidden?: boolean;         // true when the server withheld the text from this viewer
 }
 
 // Vote types

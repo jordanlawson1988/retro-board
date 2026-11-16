@@ -44,7 +44,7 @@ export function exportMarkdown(data: ExportData): void {
       for (const card of colCards) {
         const voteCount = votes.filter((v) => v.card_id === card.id).length;
         const voteSuffix = voteCount > 0 ? ` (${voteCount} vote${voteCount !== 1 ? 's' : ''})` : '';
-        lines.push(`- ${card.text}${voteSuffix} — *${card.author_name}*`);
+        lines.push(`- ${card.text}${voteSuffix} — *${card.author_name ?? 'Anonymous'}*`);
       }
     }
     lines.push('');
@@ -84,7 +84,7 @@ export function exportCsv(data: ExportData): void {
 
     for (const card of colCards) {
       const voteCount = votes.filter((v) => v.card_id === card.id).length;
-      lines.push(`${escape(col.title)},${escape(card.text)},${escape(card.author_name)},${voteCount}`);
+      lines.push(`${escape(col.title)},${escape(card.text)},${escape(card.author_name ?? 'Anonymous')},${voteCount}`);
     }
   }
 

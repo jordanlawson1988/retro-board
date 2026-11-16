@@ -76,7 +76,7 @@ export function ListView({
           cmp = a.text.localeCompare(b.text);
           break;
         case 'author':
-          cmp = a.author_name.localeCompare(b.author_name);
+          cmp = (a.author_name ?? 'Anonymous').localeCompare(b.author_name ?? 'Anonymous');
           break;
         case 'votes': {
           const va = voteCountMap.get(a.id) || 0;
@@ -197,7 +197,7 @@ export function ListView({
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className="text-sm text-[var(--ink-4)]">{card.author_name}</span>
+                    <span className="text-sm text-[var(--ink-4)]">{card.author_name ?? 'Anonymous'}</span>
                   </td>
                   {showVotesColumn && (
                     <td className="px-4 py-3">

@@ -15,8 +15,8 @@ const EMOJI_PALETTE = ['👍', '👎', '❤️', '😂', '🎉', '🤔', '🔥',
 interface RetroCardProps {
   id: string;
   text: string;
-  authorName: string;
-  authorId: string;
+  authorName: string | null;
+  authorId: string | null;
   color: string | null;
   voteCount: number;
   hasVoted: boolean;
@@ -189,7 +189,7 @@ export function RetroCard({
 
             <div className="mt-2 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="text-[11px] text-[var(--ink-4)]">{authorName}</span>
+                <span className="text-[11px] text-[var(--ink-4)]">{authorName ?? 'Anonymous'}</span>
 
                 {/* Combined count badge */}
                 {hasChildren && (

@@ -132,7 +132,7 @@ export function TimelineView({
                           </span>
                         )}
                         <span className="text-xs text-[var(--ink-4)]">
-                          {card.author_name}
+                          {card.author_name ?? 'Anonymous'}
                         </span>
                       </div>
 

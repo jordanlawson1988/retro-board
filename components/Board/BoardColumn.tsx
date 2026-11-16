@@ -526,7 +526,7 @@ export function BoardColumn({
                       color={card.color}
                       voteCount={cardVotes.length + childVotes}
                       hasVoted={hasVoted}
-                      isAuthor={card.author_id === currentParticipantId}
+                      isAuthor={card.author_id !== null && card.author_id === currentParticipantId}
                       isObscured={isObscured}
                       votingEnabled={votingEnabled}
                       secretVoting={secretVoting}
@@ -564,7 +564,7 @@ export function BoardColumn({
                       const childHasVoted = votes.some(
                         (v) => v.card_id === child.id && v.voter_id === currentParticipantId
                       );
-                      const isChildAuthor = child.author_id === currentParticipantId;
+                      const isChildAuthor = child.author_id !== null && child.author_id === currentParticipantId;
 
                       const childContent = (
                         <div className="relative">

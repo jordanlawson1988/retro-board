@@ -242,7 +242,7 @@ export function MobileBoardShell({
                 voteCount={cardVotes.length}
                 votes={votes}
                 hasVoted={hasVoted}
-                isAuthor={card.author_id === currentParticipantId}
+                isAuthor={card.author_id !== null && card.author_id === currentParticipantId}
                 isObscured={isObscured}
                 votingEnabled={votingEnabled}
                 secretVoting={secretVoting}

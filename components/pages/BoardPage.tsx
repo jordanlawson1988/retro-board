@@ -269,7 +269,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
           {card.text}
         </p>
         <span className="mt-1 block text-xs text-[var(--ink-4)]">
-          {card.author_name}
+          {card.author_name ?? 'Anonymous'}
         </span>
       </div>
     );

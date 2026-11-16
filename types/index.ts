@@ -111,7 +111,8 @@ export interface Vote {
 }
 
 // Action Item types
-export type ActionItemStatus = 'open' | 'in_progress' | 'done';
+export const ACTION_ITEM_STATUSES = ['open', 'in_progress', 'done'] as const;
+export type ActionItemStatus = (typeof ACTION_ITEM_STATUSES)[number];
 
 export interface ActionItem {
   id: string;

@@ -4,18 +4,38 @@ import { NextResponse } from 'next/server';
 import { nanoid } from 'nanoid';
 import { loadBoardActor, BOARD_NOT_FOUND } from '@/lib/board-actor';
 import { setParticipantCookie } from '@/lib/participant-session';
+import { rateLimitOr429 } from '@/lib/rate-limit';
+import { readJsonObject } from '@/lib/request-body';
+import { validateDisplayName, INVALID_BODY } from '@/lib/board-validation';
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ boardId: string }> }
 ) {
+  const limited = await rateLimitOr429(request, 'board-join', 30, 60);
+  if (limited) return limited;
   const { boardId } = await params;
   // `isAdmin` in the body is deliberately ignored: admin status is decided by the server.
-  const { participantId, displayName } = await request.json();
+  const body = await readJsonObject(request);
+  if (!body) return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
+  const name = validateDisplayName(body.displayName);
+  if (!name.ok) return NextResponse.json({ error: name.error }, { status: 400 });
+  const displayName = name.value;
+  const claimedId = body.participantId;
 
-  const loaded = await loadBoardActor(request, boardId, participantId);
+  const loaded = await loadBoardActor(request, boardId, typeof claimedId === 'string' ? claimedId : null);
   if (!loaded) return BOARD_NOT_FOUND();
   const isV2 = loaded.board.trust_version === 2;
+  // v1 still takes the participant id from the client; v2 generates it below.
+  if (!isV2 && (typeof claimedId !== 'string' || claimedId.length === 0)) {
+    return NextResponse.json({ error: 'Invalid participantId' }, { status: 400 });
+  }
+  const participantId = claimedId as string;
+  // The cookie only exists on v2 boards; v1 never touches participant-session.
+  const withCookie = (res: NextResponse, id: string) => {
+    if (isV2) setParticipantCookie(res, boardId, id);
+    return res;
+  };
   const userId = loaded.actor.userId;
 
   // If authenticated, reuse any existing participant this user has on the board.
@@ -34,9 +54,7 @@ export async function POST(
         WHERE id = ${existing[0].id}
         RETURNING *
       `;
-      const res = NextResponse.json({ participant: reused, reused: true });
-      setParticipantCookie(res, boardId, reused.id);
-      return res;
+      return withCookie(NextResponse.json({ participant: reused, reused: true }), reused.id);
     }
   }
 
@@ -49,9 +67,7 @@ export async function POST(
       RETURNING *
     `;
     if (reused) {
-      const res = NextResponse.json({ participant: reused, reused: true });
-      setParticipantCookie(res, boardId, reused.id);
-      return res;
+      return withCookie(NextResponse.json({ participant: reused, reused: true }), reused.id);
     }
   }
 
@@ -90,7 +106,5 @@ export async function POST(
   const channel = ablyServer.channels.get(`retro-board:${boardId}`);
   await channel.publish('participant-joined', { participant });
 
-  const res = NextResponse.json({ participant, reused: false });
-  setParticipantCookie(res, boardId, participant.id);
-  return res;
+  return withCookie(NextResponse.json({ participant, reused: false }), participant.id);
 }

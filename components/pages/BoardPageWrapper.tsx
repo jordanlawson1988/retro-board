@@ -106,6 +106,7 @@ export function BoardPageWrapper({ boardId }: { boardId: string }) {
               value={participantName}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setParticipantName(e.target.value)}
               onKeyDown={(e: React.KeyboardEvent) => e.key === 'Enter' && handleJoin()}
+              maxLength={50}
               autoFocus
             />
             <div className="flex justify-end gap-3">

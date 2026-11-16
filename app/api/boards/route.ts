@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { getSessionOrNull } from '@/lib/auth-helpers';
 import { generateJoinCode } from '@/lib/join-code';
 import { rateLimitOr429 } from '@/lib/rate-limit';
+import { setParticipantCookie } from '@/lib/participant-session';
 
 export async function POST(request: Request) {
   const limited = await rateLimitOr429(request, 'board-create', 10, 3600);
@@ -25,8 +26,8 @@ export async function POST(request: Request) {
 
     // Insert board with owner_id and join_code
     await sql`
-      INSERT INTO boards (id, title, description, template, created_by, owner_id, join_code, settings)
-      VALUES (${id}, ${title}, ${description}, ${template}, ${createdBy}, ${ownerId}, ${joinCode}, ${JSON.stringify(settings)})
+      INSERT INTO boards (id, title, description, template, created_by, owner_id, join_code, settings, trust_version)
+      VALUES (${id}, ${title}, ${description}, ${template}, ${createdBy}, ${ownerId}, ${joinCode}, ${JSON.stringify(settings)}, 2)
     `;
 
     // Insert columns
@@ -37,11 +38,12 @@ export async function POST(request: Request) {
       `;
     }
 
-    // Insert participant if provided
+    // Insert participant if provided. The creator is always the facilitator;
+    // any isAdmin hint in the body is ignored.
     if (participant) {
       await sql`
         INSERT INTO participants (id, board_id, display_name, is_admin, user_id)
-        VALUES (${participant.id}, ${id}, ${participant.displayName}, ${participant.isAdmin ?? true}, ${ownerId})
+        VALUES (${participant.id}, ${id}, ${participant.displayName}, true, ${ownerId})
       `;
     }
 
@@ -53,7 +55,9 @@ export async function POST(request: Request) {
       `;
     }
 
-    return NextResponse.json({ boardId: id, joinCode });
+    const res = NextResponse.json({ boardId: id, joinCode });
+    if (participant) setParticipantCookie(res, id, participant.id);
+    return res;
   } catch (err) {
     console.error('Failed to create board:', err);
     return NextResponse.json({ error: 'Failed to create board' }, { status: 500 });

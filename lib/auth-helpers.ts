@@ -70,13 +70,11 @@ export class AuthzError extends Error {
   }
 }
 
-async function loadBoardAuthority(
-  boardId: string
-): Promise<BoardAuthority & { userId: string }> {
-  const session = await getSessionOrNull();
-  const userId = session?.user?.id ?? null;
-  if (!userId) throw new AuthzError(401, 'Sign in required');
-
+/** Non-throwing: load a known user's standing on a board (owner / member role / system admin). */
+export async function loadBoardAuthorityFor(
+  boardId: string,
+  userId: string
+): Promise<BoardAuthority> {
   const [row] = await sql`
     SELECT
       (SELECT owner_id FROM boards WHERE id = ${boardId})                                 AS owner_id,
@@ -84,12 +82,22 @@ async function loadBoardAuthority(
       EXISTS (SELECT 1 FROM admin_users WHERE id = ${userId})                              AS is_system_admin
   `;
 
-  const authority = resolveBoardAuthority({
+  return resolveBoardAuthority({
     userId,
     ownerId: (row?.owner_id as string | null) ?? null,
     memberRole: (row?.member_role as string | null) ?? null,
     isSystemAdmin: !!row?.is_system_admin,
   });
+}
+
+async function loadBoardAuthority(
+  boardId: string
+): Promise<BoardAuthority & { userId: string }> {
+  const session = await getSessionOrNull();
+  const userId = session?.user?.id ?? null;
+  if (!userId) throw new AuthzError(401, 'Sign in required');
+
+  const authority = await loadBoardAuthorityFor(boardId, userId);
   return { ...authority, userId };
 }
 

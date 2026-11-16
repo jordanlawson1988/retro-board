@@ -99,7 +99,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       : [];
 
     const participant = displayName
-      ? { id: participantId, displayName, isAdmin: true }
+      ? { id: participantId, displayName }
       : undefined;
 
     const res = await fetch('/api/boards', {
@@ -273,17 +273,12 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
     const participantId = crypto.randomUUID();
 
-    // First joiner (no existing admins) becomes the facilitator. The server
-    // has final say — it may reuse an existing participant, or auto-promote
-    // the caller to admin if they own the board.
-    const { participants: currentParticipants } = get();
-    const hasAdmin = currentParticipants.some((p) => p.is_admin);
-    const isAdmin = !hasAdmin;
-
+    // The server decides identity and admin status: it may reuse an existing
+    // participant, generate a new id, or promote an owner/facilitator.
     const res = await fetch(`/api/boards/${boardId}/join`, {
       method: 'POST',
       headers: JSON_HEADERS,
-      body: JSON.stringify({ participantId, displayName, isAdmin }),
+      body: JSON.stringify({ participantId, displayName }),
     });
 
     if (!res.ok) {

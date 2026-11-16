@@ -15,6 +15,13 @@ if (!file) {
   process.exit(1);
 }
 
+const host = (() => { try { return new URL(DATABASE_URL).host; } catch { return 'unparseable DATABASE_URL'; } })();
+console.log('Target database host:', host);
+if (process.env.NEON_BRANCH !== 'dev' && !process.argv.includes('--prod')) {
+  console.error('Refusing to migrate a non-dev database without --prod');
+  process.exit(1);
+}
+
 const pool = new Pool({ connectionString: DATABASE_URL });
 try {
   const sqlText = readFileSync(file, 'utf-8');

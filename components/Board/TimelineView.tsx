@@ -2,6 +2,8 @@
 
 import { useMemo } from 'react';
 import { cn } from '@/utils/cn';
+import { isMine } from '@/utils/isMine';
+import { displayCardText } from '@/utils/cardText';
 import { VotePill } from './VotePill';
 import { voteTotalsRevealed } from '@/lib/votePillPolicy';
 import type { Column, Card, Vote, Participant } from '@/types';
@@ -113,7 +115,7 @@ export function TimelineView({
                   const hasVoted = votes.some(
                     (v) => v.card_id === card.id && v.voter_id === currentParticipantId
                   );
-                  const blurred = isObscured && card.author_id !== currentParticipantId;
+                  const blurred = (isObscured && !isMine(card, currentParticipantId)) || !!card.text_hidden;
 
                   return (
                     <div
@@ -143,7 +145,7 @@ export function TimelineView({
                           blurred && 'select-none blur-sm'
                         )}
                       >
-                        {card.text}
+                        {displayCardText(card)}
                       </p>
 
                       {/* Vote count — also shown as totals once voting is off */}

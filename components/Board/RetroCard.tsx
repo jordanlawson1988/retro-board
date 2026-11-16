@@ -22,6 +22,8 @@ interface RetroCardProps {
   hasVoted: boolean;
   isAuthor: boolean;
   isObscured: boolean;
+  /** Server withheld the text; `text` is then placeholder filler, always blurred. */
+  textHidden?: boolean;
   votingEnabled: boolean;
   secretVoting: boolean;
   voteLimitReached: boolean;
@@ -56,6 +58,7 @@ export function RetroCard({
   hasVoted,
   isAuthor,
   isObscured,
+  textHidden = false,
   votingEnabled,
   secretVoting,
   voteLimitReached,
@@ -139,14 +142,14 @@ export function RetroCard({
           'bg-[var(--surface)] p-3',
           'shadow-[var(--shadow-xs)] hover:border-[var(--line-strong)] hover:shadow-[var(--shadow-sm)]',
           'transition-[border-color,box-shadow] duration-150',
-          isObscured && !isAuthor && 'select-none',
+          (textHidden || (isObscured && !isAuthor)) && 'select-none',
           colorPickerOpen && 'z-20',
           isMergeSource && 'ring-2 ring-[var(--ink)] opacity-60',
           isMergeTarget && 'cursor-pointer ring-2 ring-dashed ring-[var(--accent)] bg-[var(--accent-soft)] sm:bg-transparent sm:ring-[var(--accent)]/50 sm:hover:ring-[var(--accent)] sm:hover:bg-[var(--accent-soft)]'
         )}
         style={{
           ...borderLeftStyle,
-          filter: isObscured && !isAuthor ? 'blur(6px)' : 'blur(0px)',
+          filter: textHidden || (isObscured && !isAuthor) ? 'blur(6px)' : 'blur(0px)',
         }}
       >
         {isEditing ? (
@@ -185,7 +188,12 @@ export function RetroCard({
           </div>
         ) : (
           <>
-            <p className="whitespace-pre-wrap text-[16px] leading-[1.45] text-[var(--ink)]">{text}</p>
+            <p
+              data-testid={textHidden ? 'card-text-hidden' : undefined}
+              className="whitespace-pre-wrap text-[16px] leading-[1.45] text-[var(--ink)]"
+            >
+              {text}
+            </p>
 
             <div className="mt-2 flex items-center justify-between">
               <div className="flex items-center gap-2">

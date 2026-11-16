@@ -5,6 +5,8 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 import { RetroCard } from './RetroCard';
 import { ColumnSortMenu } from './ColumnSortMenu';
 import { sortCards, effectiveCardSort } from '@/utils/sortCards';
+import { isMine } from '@/utils/isMine';
+import { displayCardText } from '@/utils/cardText';
 import { voteTotalsRevealed } from '@/lib/votePillPolicy';
 import type { Column, Card, Vote, Participant, CardSort } from '@/types';
 
@@ -149,13 +151,14 @@ export function SwimlaneView({
                           <RetroCard
                             key={card.id}
                             id={card.id}
-                            text={card.text}
+                            text={displayCardText(card)}
+                            textHidden={card.text_hidden}
                             authorName={card.author_name}
                             authorId={card.author_id}
                             color={card.color}
                             voteCount={cardVotes.length}
                             hasVoted={hasVoted}
-                            isAuthor={card.author_id !== null && card.author_id === currentParticipantId}
+                            isAuthor={isMine(card, currentParticipantId)}
                             isObscured={isObscured}
                             votingEnabled={votingEnabled}
                             secretVoting={secretVoting}

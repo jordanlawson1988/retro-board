@@ -47,7 +47,8 @@ function isLockable(action: BoardAction): boolean {
 
 /** Rule 1: board state. Applies to every board, v1 and v2. */
 function checkState(action: BoardAction, actor: BoardActor, state: BoardState): GuardResult {
-  if (state.archived) return deny(409, 'Board is completed');
+  // Leaving stays possible on a completed board so people can still remove themselves.
+  if (state.archived && action !== 'participant.leave') return deny(409, 'Board is completed');
   if (state.settings.board_locked && !actor.isFacilitator && isLockable(action)) {
     return deny(409, 'Board is locked');
   }

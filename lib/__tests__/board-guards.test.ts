@@ -44,14 +44,30 @@ describe('BOARD_ACTIONS contract', () => {
     expect(checkAction(a, facilitator, state(), target)).toEqual({ ok: true });
   });
 
-  it.each([...BOARD_ACTIONS])('%s is 409 on an archived board', (a) => {
+  const ARCHIVED_EXEMPT = ['participant.leave'];
+  const archivedBlocked = BOARD_ACTIONS.filter((a) => !ARCHIVED_EXEMPT.includes(a));
+
+  it.each([...archivedBlocked])('%s is 409 on an archived board', (a) => {
     const r = checkAction(a, facilitator, state({ archived: true }), target);
     expect(r).toEqual({ ok: false, status: 409, error: 'Board is completed' });
   });
 
-  it.each([...BOARD_ACTIONS])('%s is 409 on an archived v1 board too', (a) => {
+  it.each([...archivedBlocked])('%s is 409 on an archived v1 board too', (a) => {
     const r = checkAction(a, actor({ trustVersion: 1 }), state({ archived: true }), target);
     expect(r).toMatchObject({ ok: false, status: 409 });
+  });
+
+  it('participant.leave is allowed on an archived board (v1 and v2)', () => {
+    expect(checkAction('participant.leave', actor(), state({ archived: true }), target)).toEqual({ ok: true });
+    expect(
+      checkAction('participant.leave', actor({ trustVersion: 1 }), state({ archived: true }), target)
+    ).toEqual({ ok: true });
+  });
+
+  it('participant.leave on an archived v2 board still requires leaving as yourself', () => {
+    expect(
+      checkAction('participant.leave', actor(), state({ archived: true }), { participantId: 'someone-else' })
+    ).toMatchObject({ ok: false, status: 403 });
   });
 });
 

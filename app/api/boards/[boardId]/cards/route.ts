@@ -112,11 +112,14 @@ export async function PATCH(
     return NextResponse.json({ error: 'Invalid reactions' }, { status: 400 });
   }
 
+  // No recognised field means nothing to write; without this no guard would run at all.
+  const actions = cardPatchActions(updates);
+  if (actions.length === 0) return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
+
   const loaded = await loadBoardActor(request, boardId);
   if (!loaded) return BOARD_NOT_FOUND();
 
   const { actor } = loaded;
-  const actions = cardPatchActions(updates);
   // The author rule needs the card's author, which the UPDATE checks itself (author_id = actor),
   // so the guards here assume the actor owns the card and the real check is in the statement.
   const denied = guardResponse(
@@ -130,6 +133,7 @@ export async function PATCH(
     isV2 && actions.includes('card.edit') && !actor.isFacilitator ? actor.participantId : null;
 
   // Reactions: apply only the ACTOR's change to the row's current value, inside the UPDATE.
+  // Other ids in the submitted map are ignored (never written), so a stale map is not an error.
   // v1 requests carry no actor id (the client sends none), so they keep the replace behaviour.
   let reactionsMode: 'none' | 'merge' | 'replace' = 'none';
   let wanted: string[] = [];
@@ -156,7 +160,6 @@ export async function PATCH(
   }
   const actorId = actor.participantId;
   const wantedJson = JSON.stringify(wanted);
-  const submittedJson = JSON.stringify(submitted);
   const has = (k: string) => updates[k] !== undefined;
 
   let card;
@@ -198,13 +201,6 @@ export async function PATCH(
           ELSE reactions END
       WHERE id = ${cardId} AND board_id = ${boardId}
         AND (${authorOnly}::text IS NULL OR author_id = ${authorOnly}::text)
-        AND (${reactionsMode}::text <> 'merge' OR NOT EXISTS (
-          SELECT 1
-          FROM jsonb_each(${submittedJson}::jsonb) AS s(emoji, ids),
-               jsonb_array_elements_text(s.ids) AS sid(id)
-          WHERE sid.id <> ${actorId}::text
-            AND NOT jsonb_exists(COALESCE(cards.reactions -> s.emoji, '[]'::jsonb), sid.id)
-        ))
       RETURNING *
     `;
   } catch (err) {
@@ -214,17 +210,11 @@ export async function PATCH(
   }
 
   if (!card) {
-    // No row matched: the card is missing, or one of the in-statement guards refused it.
-    // With no author or reaction condition in play, a miss can only mean the card is missing.
-    if (authorOnly === null && reactionsMode !== 'merge') {
-      return NextResponse.json({ error: 'Card not found' }, { status: 404 });
-    }
+    // No row matched: the card is missing, or the author condition refused it.
+    if (authorOnly === null) return NextResponse.json({ error: 'Card not found' }, { status: 404 });
     const [existing] = await sql`SELECT author_id FROM cards WHERE id = ${cardId} AND board_id = ${boardId}`;
     if (!existing) return NextResponse.json({ error: 'Card not found' }, { status: 404 });
-    if (authorOnly !== null && existing.author_id !== authorOnly) {
-      return NextResponse.json({ error: AUTHOR_ONLY }, { status: 403 });
-    }
-    return NextResponse.json({ error: REACTIONS_FOREIGN }, { status: 403 });
+    return NextResponse.json({ error: AUTHOR_ONLY }, { status: 403 });
   }
 
   await publishCard(boardId, 'card-updated', card as never, loaded.board);

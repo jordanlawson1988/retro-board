@@ -35,7 +35,7 @@ function ctxRow(over: Record<string, unknown> = {}) {
     id: 'b1', title: 'T', trust_version: 2, settings: { ...DEFAULT_BOARD_SETTINGS }, archived_at: null, deleted_at: null,
     owner_id: 'owner', created_by: null,
     cp_id: 'p1', cp_is_admin: true, cp_display_name: 'Ann', claimed_exists: false,
-    member_role: null, is_member: false, is_system_admin: false, user_participant_id: null,
+    member_role: null, is_member: false, is_system_admin: false, session_live: true, user_participant_id: null,
     ...over,
   };
 }
@@ -88,6 +88,46 @@ describe('board PATCH round-trip budget: 2 statements (context + one UPDATE)', (
     const res = await boardPatch(req('', { settings: { card_visibility: 'visible' } }), ctx);
     expect(res.status).toBe(409);
     expect(mocks.sql).toHaveBeenCalledTimes(1);
+  });
+
+  it('settings UPDATE re-checks board state in the statement itself', async () => {
+    mocks.sql.mockResolvedValueOnce([ctxRow()]).mockResolvedValueOnce([{ title: 'T', description: null, settings: DEFAULT_BOARD_SETTINGS }]);
+    await boardPatch(req('', { settings: { voting_enabled: true } }), ctx);
+    const text = (mocks.sql.mock.calls[1][0] as string[]).join('?');
+    expect(text).toContain('archived_at IS NULL AND deleted_at IS NULL');
+  });
+
+  it('settings write loses a race with completion: zero rows then 409 Board is completed, nothing published', async () => {
+    mocks.sql
+      .mockResolvedValueOnce([ctxRow()])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ archived_at: '2026-01-01', deleted_at: null }]);
+    const res = await boardPatch(req('', { settings: { voting_enabled: true } }), ctx);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: 'Board is completed' });
+    expect(mocks.sql).toHaveBeenCalledTimes(3);
+    expect(mocks.publish).not.toHaveBeenCalled();
+  });
+
+  it('settings write loses a race with trash or purge: 404', async () => {
+    mocks.sql.mockResolvedValueOnce([ctxRow()]).mockResolvedValueOnce([]).mockResolvedValueOnce([{ archived_at: null, deleted_at: '2026-01-01' }]);
+    expect((await boardPatch(req('', { settings: { voting_enabled: true } }), ctx)).status).toBe(404);
+    mocks.sql.mockResolvedValueOnce([ctxRow()]).mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    expect((await boardPatch(req('', { settings: { voting_enabled: true } }), ctx)).status).toBe(404);
+    expect(mocks.publish).not.toHaveBeenCalled();
+  });
+
+  it('title/description-only PATCH still works on completed and trashed boards (state not enforced)', async () => {
+    mocks.session.mockResolvedValue({ user: { id: 'owner' } });
+    for (const over of [{ archived_at: '2026-01-01' }, { deleted_at: '2026-01-01' }]) {
+      mocks.sql.mockClear();
+      mocks.sql.mockResolvedValueOnce([ctxRow(over)]).mockResolvedValueOnce([{ title: 'New', description: null, settings: DEFAULT_BOARD_SETTINGS }]);
+      const res = await boardPatch(req('', { title: 'New' }), ctx);
+      expect(res.status).toBe(200);
+      expect(mocks.sql).toHaveBeenCalledTimes(2);
+      // The state condition is bound false for a title-only patch, so it cannot filter the row.
+      expect(mocks.sql.mock.calls[1].slice(1)).toContain(false);
+    }
   });
 
   it('title + description rename: one context query and one UPDATE for both fields', async () => {

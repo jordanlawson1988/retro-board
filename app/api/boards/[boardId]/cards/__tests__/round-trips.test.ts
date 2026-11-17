@@ -34,7 +34,7 @@ function ctxRow(over: Record<string, unknown> = {}) {
     id: 'b1', trust_version: 2, settings: { card_visibility: 'visible' }, archived_at: null, deleted_at: null,
     owner_id: 'owner', created_by: null,
     cp_id: 'p1', cp_is_admin: false, cp_display_name: 'Ann', claimed_exists: false,
-    member_role: null, is_member: false, is_system_admin: false, user_participant_id: null,
+    member_role: null, is_member: false, is_system_admin: false, session_live: true, user_participant_id: null,
     ...over,
   };
 }
@@ -158,11 +158,37 @@ describe('card PATCH', () => {
     expect(mocks.sql).toHaveBeenCalledTimes(1);
   });
 
-  it('v2 reaction adding someone else: zero rows then 403 (not 404)', async () => {
-    mocks.sql.mockResolvedValueOnce([ctxRow()]).mockResolvedValueOnce([]).mockResolvedValueOnce([{ author_id: 'p1' }]);
-    const res = await PATCH(req('PATCH', { cardId: 'c1', updates: { reactions: { '👍': ['p7'] } } }), ctx);
-    expect(res.status).toBe(403);
-    expect((await res.json()).error).toBe('You can only change your own reactions');
+  it('v2 reaction map listing someone else: not refused; only the actor is merged, foreign ids are never bound as the actor', async () => {
+    mocks.sql.mockResolvedValueOnce([ctxRow()]).mockResolvedValueOnce([cardRow]);
+    const res = await PATCH(req('PATCH', { cardId: 'c1', updates: { reactions: { '👍': ['p1', 'p7'], '🎉': ['p7'] } } }), ctx);
+    expect(res.status).toBe(200);
+    expect(mocks.sql).toHaveBeenCalledTimes(2);
+    const values = callValues(1);
+    expect(values).toContain(JSON.stringify(['👍']));
+    expect(callText(1)).not.toMatch(/sid\.id <> /);
+  });
+
+  it('v2 stale map (still lists a reactor who just left) is a 200 even when zero rows would have matched the old guard', async () => {
+    mocks.sql.mockResolvedValueOnce([ctxRow()]).mockResolvedValueOnce([{ ...cardRow, reactions: { '👍': ['p1'] } }]);
+    const res = await PATCH(req('PATCH', { cardId: 'c1', updates: { reactions: { '👍': ['p2', 'p1'] } } }), ctx);
+    expect(res.status).toBe(200);
+  });
+
+  it('v2 reaction on a missing card is 404 (no 403 follow-up read)', async () => {
+    mocks.sql.mockResolvedValueOnce([ctxRow()]).mockResolvedValueOnce([]);
+    const res = await PATCH(req('PATCH', { cardId: 'nope', updates: { reactions: { '👍': ['p1'] } } }), ctx);
+    expect(res.status).toBe(404);
+    expect(mocks.sql).toHaveBeenCalledTimes(2);
+  });
+
+  it('empty updates: 400 with zero database calls (no write, no publish)', async () => {
+    for (const updates of [{}, { unknown_field: 1 }, { text: undefined }]) {
+      const res = await PATCH(req('PATCH', { cardId: 'c1', updates }), ctx);
+      expect(res.status).toBe(400);
+      expect(typeof (await res.json()).error).toBe('string');
+    }
+    expect(mocks.sql).not.toHaveBeenCalled();
+    expect(mocks.publish).not.toHaveBeenCalled();
   });
 
   it('v1 reaction (no actor id): keeps replace behaviour', async () => {

@@ -37,6 +37,7 @@ function ctxRow(over: Record<string, unknown> = {}) {
     member_role: null,
     is_member: false,
     is_system_admin: false,
+    session_live: true,
     user_participant_id: null,
     ...over,
   };
@@ -139,6 +140,69 @@ describe('loadBoardActor single query', () => {
   });
 });
 
+describe('loadBoardActor revoked sessions (cookie cache must not outlive the session row)', () => {
+  const fullRow = () =>
+    ctxRow({
+      owner_id: 'u1', cp_id: 'p1', cp_is_admin: true, cp_display_name: 'Ann',
+      member_role: 'owner', is_member: true, is_system_admin: true, user_participant_id: 'pu',
+    });
+
+  it('live session keeps authority, member and participant data; token and user id are bound parameters', async () => {
+    mocks.session.mockResolvedValue({ user: { id: 'u1' }, session: { token: 'tok' } });
+    mocks.sql.mockResolvedValue([fullRow()]);
+    const l = await loadBoardActor(req, 'b1');
+    expect(mocks.sql).toHaveBeenCalledTimes(1);
+    expect(l?.userId).toBe('u1');
+    expect(l?.authority).toEqual({ isOwner: true, canFacilitate: true, isSystemAdmin: true });
+    expect(l?.userParticipantId).toBe('pu');
+    expect(l?.userIsMember).toBe(true);
+    const text = (mocks.sql.mock.calls[0][0] as string[]).join('?');
+    expect(text).toMatch(/FROM session\s+WHERE token = \?/);
+    expect(text).toContain('"userId"');
+    expect(text).toContain('"expiresAt" > now()');
+    expect(mocks.sql.mock.calls[0].slice(1)).toContain('tok');
+  });
+
+  it('session row missing or expired: treated exactly as anonymous, still one query', async () => {
+    mocks.session.mockResolvedValue({ user: { id: 'u1' }, session: { token: 'tok' } });
+    mocks.pid.mockReturnValue('p1');
+    mocks.sql.mockResolvedValue([{ ...fullRow(), session_live: false }]);
+    const l = await loadBoardActor(req, 'b1');
+    expect(mocks.sql).toHaveBeenCalledTimes(1);
+    expect(l?.userId).toBeNull();
+    expect(l?.authority).toBeNull();
+    expect(l?.memberRole).toBeNull();
+    expect(l?.userParticipantId).toBeNull();
+    expect(l?.userIsMember).toBe(false);
+    expect(l?.actor).toMatchObject({ userId: null, isFacilitator: true /* cookie participant is_admin, unaffected */ });
+  });
+
+  it('revoked session does not strip the v2 signed participant cookie', async () => {
+    mocks.session.mockResolvedValue({ user: { id: 'u1' }, session: { token: 'tok' } });
+    mocks.pid.mockReturnValue('p1');
+    mocks.sql.mockResolvedValue([{ ...ctxRow({ cp_id: 'p1', cp_is_admin: false, cp_display_name: 'Ann' }), session_live: false }]);
+    const l = await loadBoardActor(req, 'b1');
+    expect(l?.participant).toEqual({ id: 'p1', is_admin: false, display_name: 'Ann' });
+    expect(l?.actor).toMatchObject({ participantId: 'p1', userId: null, isFacilitator: false });
+  });
+
+  it('signed-in user whose cached session carries no token fails closed (null token parameter)', async () => {
+    mocks.session.mockResolvedValue({ user: { id: 'u1' } });
+    mocks.sql.mockResolvedValue([{ ...fullRow(), session_live: false }]);
+    const l = await loadBoardActor(req, 'b1');
+    expect(l?.userId).toBeNull();
+    expect(mocks.sql.mock.calls[0].slice(1)).toContain(null);
+  });
+
+  it('anonymous caller: null token and user parameters, no error, session check ignored', async () => {
+    mocks.sql.mockResolvedValue([{ ...ctxRow(), session_live: false }]);
+    const l = await loadBoardActor(req, 'b1');
+    expect(l?.userId).toBeNull();
+    expect(l?.authority).toBeNull();
+    expect(mocks.sql).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('boardAccessFrom mirrors decideBoardAccess for every truth-table row', () => {
   const none: BoardAccessInput = {
     archived: false,
@@ -163,6 +227,7 @@ describe('boardAccessFrom mirrors decideBoardAccess for every truth-table row', 
         is_member: i.userIsMember,
         member_role: i.userIsMember ? 'participant' : null,
         is_system_admin: i.userIsSystemAdmin,
+        session_live: true,
         user_participant_id: i.userMatchedParticipant ? 'pu' : null,
       }),
     ]);

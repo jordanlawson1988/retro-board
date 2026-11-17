@@ -31,7 +31,7 @@ function ctxRow(over: Record<string, unknown> = {}) {
     id: 'b1', title: 'T', trust_version: 2, settings: {}, archived_at: null, deleted_at: null,
     owner_id: 'owner', created_by: null,
     cp_id: null, cp_is_admin: null, cp_display_name: null, claimed_exists: false,
-    member_role: null, is_member: false, is_system_admin: false, user_participant_id: null,
+    member_role: null, is_member: false, is_system_admin: false, session_live: true, user_participant_id: null,
     ...over,
   };
 }

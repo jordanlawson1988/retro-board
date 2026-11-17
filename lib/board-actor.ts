@@ -46,8 +46,9 @@ export interface LoadBoardActorOptions {
 
 /**
  * Resolve who is acting on a board in ONE database round-trip (plus the cookie-cached
- * session read). Returns null when the board does not exist, or is in Trash unless
- * `includeDeleted`. On v2 the participant comes only from the signed cookie; on v1 the
+ * session read). The same query confirms the session row is still live, so a revoked session
+ * is anonymous at once even though the cached cookie is still valid. Returns null when the
+ * board does not exist, or is in Trash unless `includeDeleted`. On v2 the participant comes only from the signed cookie; on v1 the
  * cookie is ignored and the claimed id is never trusted on v2.
  */
 export async function loadBoardActor(
@@ -57,7 +58,10 @@ export async function loadBoardActor(
   options: LoadBoardActorOptions = {}
 ): Promise<LoadedBoard | null> {
   const session = await getSessionOrNull();
-  const userId: string | null = session?.user?.id ?? null;
+  // From the signed, cached session cookie: NOT proof the session still exists. The query below
+  // checks the session row; until it says live, this id carries no authority (see `userId`).
+  const cachedUserId: string | null = session?.user?.id ?? null;
+  const sessionToken: string | null = session?.session?.token ?? null;
   // Read before the query whatever the trust version; ignored below unless the board is v2.
   const cookieId = readParticipantId(request, boardId);
   const claimedId = options.claimedParticipantId ?? null;
@@ -67,16 +71,24 @@ export async function loadBoardActor(
     SELECT b.*,
       cp.id AS cp_id, cp.is_admin AS cp_is_admin, cp.display_name AS cp_display_name,
       EXISTS (SELECT 1 FROM participants WHERE id = ${claimedId} AND board_id = b.id) AS claimed_exists,
-      (SELECT role FROM board_members WHERE board_id = b.id AND user_id = ${userId}) AS member_role,
-      EXISTS (SELECT 1 FROM board_members WHERE board_id = b.id AND user_id = ${userId}) AS is_member,
-      EXISTS (SELECT 1 FROM admin_users WHERE id = ${userId}) AS is_system_admin,
-      (SELECT id FROM participants WHERE board_id = b.id AND user_id = ${userId}
+      (SELECT role FROM board_members WHERE board_id = b.id AND user_id = ${cachedUserId}) AS member_role,
+      EXISTS (SELECT 1 FROM board_members WHERE board_id = b.id AND user_id = ${cachedUserId}) AS is_member,
+      EXISTS (SELECT 1 FROM admin_users WHERE id = ${cachedUserId}) AS is_system_admin,
+      EXISTS (SELECT 1 FROM session WHERE token = ${sessionToken} AND "userId" = ${cachedUserId}
+        AND "expiresAt" > now()) AS session_live,
+      (SELECT id FROM participants WHERE board_id = b.id AND user_id = ${cachedUserId}
         ORDER BY is_admin DESC, joined_at ASC LIMIT 1) AS user_participant_id
     FROM boards b
     LEFT JOIN participants cp ON cp.id = ${cookieId} AND cp.board_id = b.id
     WHERE b.id = ${boardId} AND (${includeDeleted}::boolean OR b.deleted_at IS NULL)
   `;
   if (!row) return null;
+
+  // The cookie cache can outlive a revoked or expired session by up to its maxAge. Without a live
+  // session row the caller is anonymous: no user id, authority, membership or user participant.
+  // The v2 participant cookie is independent of the account session and is left alone.
+  const sessionLive = cachedUserId !== null && row.session_live === true;
+  const userId: string | null = sessionLive ? cachedUserId : null;
 
   const tv = Number(row.trust_version);
   if (tv !== 1 && tv !== 2) throw new Error(`Invalid trust_version for board ${boardId}`);
@@ -110,8 +122,8 @@ export async function loadBoardActor(
     hasAuthority: authority?.canFacilitate ?? false,
   });
 
-  const { cp_id, cp_is_admin, cp_display_name, claimed_exists, member_role, is_member, is_system_admin, user_participant_id, ...boardRow } = row;
-  void cp_id; void cp_is_admin; void cp_display_name; void member_role; void is_system_admin;
+  const { cp_id, cp_is_admin, cp_display_name, claimed_exists, member_role, is_member, is_system_admin, session_live, user_participant_id, ...boardRow } = row;
+  void cp_id; void cp_is_admin; void cp_display_name; void member_role; void is_system_admin; void session_live;
 
   // Missing keys take the defaults so they never read as "open".
   const settings: BoardSettings = { ...DEFAULT_BOARD_SETTINGS, ...((row.settings as Partial<BoardSettings> | null) ?? {}) };
@@ -132,9 +144,9 @@ export async function loadBoardActor(
     userId,
     authority,
     participant,
-    userParticipantId: (user_participant_id as string | null) ?? null,
-    userIsMember: !!is_member,
-    memberRole: (row.member_role as string | null) ?? null,
+    userParticipantId: sessionLive ? ((user_participant_id as string | null) ?? null) : null,
+    userIsMember: sessionLive && !!is_member,
+    memberRole: sessionLive ? ((row.member_role as string | null) ?? null) : null,
     claimedParticipantExists: trustVersion === 1 && !!claimed_exists,
   };
 }

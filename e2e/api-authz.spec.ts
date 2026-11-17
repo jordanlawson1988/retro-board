@@ -10,6 +10,7 @@ import {
   legacyUpdate,
   cookieValue,
   withRawCookie,
+  cardUpdatedAt,
 } from './helpers';
 
 const contexts: APIRequestContext[] = [];
@@ -175,24 +176,58 @@ test.describe('v2 board: identity comes from the signed cookie only', () => {
     expect(after).toEqual([aId]);
   });
 
-  test('reactions: touching another participant\'s id is 403, your own is fine', async ({ playwright, baseURL }) => {
+  test('reactions: another participant\'s id in the submitted map is ignored, your own is applied', async ({ playwright, baseURL }) => {
     const { a, b, aId, bId, boardId, columnId } = await boardWithAliceAndBob(playwright, baseURL!, { card_visibility: 'visible' });
     const card = newCardBody(columnId);
     expect((await a.post(`/api/boards/${boardId}/cards`, { data: card })).status()).toBe(200);
+    const stored = async (viewer: APIRequestContext) =>
+      (await getBoard(viewer, boardId)).cards.find((c: { id: string }) => c.id === card.id).reactions;
+
+    // Forged: Bob submits only Alice's id. Accepted, but nothing is stored for Alice, and Bob gains nothing.
     const forged = await b.patch(`/api/boards/${boardId}/cards`, {
       data: { cardId: card.id, updates: { reactions: { '👍': [aId] } } },
     });
-    expect(forged.status()).toBe(403);
+    expect(forged.status()).toBe(200);
+    expect(await stored(a)).toEqual({});
+
+    // Forged plus own: only Bob's own id lands.
     const both = await b.patch(`/api/boards/${boardId}/cards`, {
-      data: { cardId: card.id, updates: { reactions: { '👍': [aId, bId] } } },
+      data: { cardId: card.id, updates: { reactions: { '👍': [aId, bId], '🎉': [aId] } } },
     });
-    expect(both.status()).toBe(403);
-    const own = await b.patch(`/api/boards/${boardId}/cards`, {
-      data: { cardId: card.id, updates: { reactions: { '👍': [bId] } } },
-    });
-    expect(own.status()).toBe(200);
-    const stored = (await getBoard(a, boardId)).cards.find((c: { id: string }) => c.id === card.id);
-    expect(stored.reactions).toEqual({ '👍': [bId] });
+    expect(both.status()).toBe(200);
+    expect(await stored(a)).toEqual({ '👍': [bId] });
+    expect(await stored(b)).toEqual({ '👍': [bId] });
+
+    // Alice really reacts; Bob then submits a map that forges Alice under a second emoji.
+    expect((await a.patch(`/api/boards/${boardId}/cards`, {
+      data: { cardId: card.id, updates: { reactions: { '👍': [bId, aId] } } },
+    })).status()).toBe(200);
+    expect((await b.patch(`/api/boards/${boardId}/cards`, {
+      data: { cardId: card.id, updates: { reactions: { '👍': [bId], '❤️': [aId] } } },
+    })).status()).toBe(200);
+    // Alice's real reaction is untouched, no forged entry appeared, Bob's own is kept.
+    expect(await stored(a)).toEqual({ '👍': [bId, aId] });
+  });
+
+  test('card PATCH with no recognised updates is 400 and writes nothing, even on a completed board', async ({ playwright, baseURL }) => {
+    const { a, boardId, columnId } = await boardWithAliceAndBob(playwright, baseURL!, { card_visibility: 'visible' });
+    const anon = await identity(playwright, baseURL!);
+    const card = newCardBody(columnId);
+    expect((await a.post(`/api/boards/${boardId}/cards`, { data: card })).status()).toBe(200);
+    const before = await cardUpdatedAt(boardId, card.id);
+    expect(before).not.toBeNull();
+
+    for (const updates of [{}, { unknown_field: 1 }]) {
+      const res = await anon.patch(`/api/boards/${boardId}/cards`, { data: { cardId: card.id, updates } });
+      expect(res.status()).toBe(400);
+      expect(typeof (await res.json()).error).toBe('string');
+    }
+    expect(await cardUpdatedAt(boardId, card.id)).toBe(before);
+
+    expect((await a.post(`/api/boards/${boardId}`, { data: { action: 'complete' } })).status()).toBe(200);
+    const done = await anon.patch(`/api/boards/${boardId}/cards`, { data: { cardId: card.id, updates: {} } });
+    expect(done.status()).toBe(400);
+    expect(await cardUpdatedAt(boardId, card.id)).toBe(before);
   });
 
   test('after complete: card POST is 409, votes are 409, and the board is read-only', async ({ playwright, baseURL }) => {

@@ -176,7 +176,8 @@ export async function PATCH(
     // system admin), read from the same one-query context. Facilitators may still rename a
     // completed or trashed board. Not destructive, so the cached session is enough here.
     const loaded = await loadBoardActor(request, boardId, null, { includeDeleted: true });
-    if (!loaded || !loaded.userId) {
+    if (!loaded) return BOARD_NOT_FOUND();
+    if (!loaded.userId) {
       return NextResponse.json({ error: 'Sign in required' }, { status: 401 });
     }
     if (!loaded.authority?.canFacilitate) {
@@ -197,9 +198,21 @@ export async function PATCH(
       settings = CASE WHEN ${settingsPatch !== null}::boolean
         THEN settings || ${JSON.stringify(settingsPatch ?? {})}::jsonb ELSE settings END
     WHERE id = ${boardId}
+      AND (NOT ${settingsPatch !== null}::boolean OR (archived_at IS NULL AND deleted_at IS NULL))
     RETURNING title, description, settings
   `;
-  if (!row) return BOARD_NOT_FOUND();
+  if (!row) {
+    // A settings write re-checks board state in the statement. On a miss, say why. Title and
+    // description edits carry no state condition, so for them a miss only means the board is gone.
+    if (settingsPatch !== null) {
+      const [now] = await sql`SELECT archived_at, deleted_at FROM boards WHERE id = ${boardId}`;
+      if (now && !now.deleted_at && now.archived_at) {
+        // Same response checkAction('board.settings') gives for a completed board.
+        return NextResponse.json({ error: 'Board is completed' }, { status: 409 });
+      }
+    }
+    return BOARD_NOT_FOUND();
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const changed: Record<string, any> = {};
@@ -236,11 +249,15 @@ export async function POST(
     const denied = guardResponse(checkAction('board.settings', loaded.actor, loaded.state));
     if (denied) return denied;
     const archivedAt = new Date().toISOString();
-    const settings = { ...loaded.state.settings, card_visibility: 'visible', board_locked: true };
-    await sql`
-      UPDATE boards SET archived_at = ${archivedAt}, settings = ${JSON.stringify(settings)}
+    // Merge in the database so a settings change committed since the load is not undone.
+    const [done] = await sql`
+      UPDATE boards SET archived_at = ${archivedAt},
+        settings = settings || '{"card_visibility":"visible","board_locked":true}'::jsonb
       WHERE id = ${boardId}
+      RETURNING settings
     `;
+    if (!done) return BOARD_NOT_FOUND();
+    const settings = { ...DEFAULT_BOARD_SETTINGS, ...(done.settings as Partial<BoardSettings>) };
     await channel.publish('board-completed', { archivedAt, settings, refetch: true });
     return NextResponse.json({ ok: true });
   }
@@ -254,12 +271,13 @@ export async function POST(
       throw e;
     }
     // Clear archived_at and unlock; leave card_visibility as-is (facilitator can re-hide).
-    const [board] = await sql`SELECT settings FROM boards WHERE id = ${boardId}`;
-    const settings = { ...board.settings, board_locked: false };
-    await sql`
-      UPDATE boards SET archived_at = NULL, settings = ${JSON.stringify(settings)}
+    const [board] = await sql`
+      UPDATE boards SET archived_at = NULL, settings = settings || '{"board_locked":false}'::jsonb
       WHERE id = ${boardId}
+      RETURNING settings
     `;
+    if (!board) return BOARD_NOT_FOUND();
+    const settings = board.settings;
     await channel.publish('board-reopened', { settings, refetch: true });
     return NextResponse.json({ ok: true });
   }

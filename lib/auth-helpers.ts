@@ -19,7 +19,8 @@ export async function getSessionOrNull() {
 /**
  * Like getSessionOrNull but bypasses the signed cookie cache and reads the session from the
  * database, so a revoked session is rejected immediately. Use for privileged decisions
- * (system admin, board ownership, anything that needs a signed-in user).
+ * (system admin, board ownership, anything that needs a signed-in user). Board routes that use
+ * `loadBoardActor` instead get the same guarantee from its session-row check in the context query.
  */
 export async function getFreshSession() {
   try {

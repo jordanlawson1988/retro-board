@@ -63,4 +63,26 @@ test.describe('reactions are applied per person, not as a wholesale replace', ()
     stored = (await getBoard(a, board.boardId)).cards.find((c: { id: string }) => c.id === card.id);
     expect(stored.reactions).toEqual({ '👍': [bId] });
   });
+
+  test('a stale map that still lists someone who just removed their reaction is applied, not refused', async ({ playwright, baseURL }) => {
+    const a = await playwright.request.newContext({ baseURL: baseURL! });
+    const b = await playwright.request.newContext({ baseURL: baseURL! });
+    contexts.push(a, b);
+    const board = await createBoard(a, { settings: { card_visibility: 'visible' } });
+    const aId: string = (await (await apiJoin(a, board.boardId, 'Alice')).json()).participant.id;
+    const bId: string = (await (await apiJoin(b, board.boardId, 'Bob')).json()).participant.id;
+    const card = newCardBody(board.columnId);
+    await a.post(`/api/boards/${board.boardId}/cards`, { data: card });
+
+    // Bob reacts; Alice's page loads and shows Bob's reaction.
+    expect((await b.patch(`/api/boards/${board.boardId}/cards`, { data: { cardId: card.id, updates: { reactions: { '👍': [bId] } } } })).status()).toBe(200);
+    // Bob removes it. Alice's page has not seen that yet.
+    expect((await b.patch(`/api/boards/${board.boardId}/cards`, { data: { cardId: card.id, updates: { reactions: {} } } })).status()).toBe(200);
+    // Alice reacts from her stale view, which still lists Bob.
+    const res = await a.patch(`/api/boards/${board.boardId}/cards`, { data: { cardId: card.id, updates: { reactions: { '👍': [bId, aId] } } } });
+    expect(res.status()).toBe(200);
+
+    const stored = (await getBoard(b, board.boardId)).cards.find((c: { id: string }) => c.id === card.id);
+    expect(stored.reactions).toEqual({ '👍': [aId] });
+  });
 });

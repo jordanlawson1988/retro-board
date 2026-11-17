@@ -250,3 +250,13 @@ export async function setArchivedDirect(boardId: string, archived: boolean): Pro
     : await db`UPDATE boards SET archived_at = NULL WHERE id = ${boardId} AND title = ${`e2e ${boardId}`} RETURNING id`;
   if (rows.length !== 1) throw new Error(`setArchivedDirect touched ${rows.length} rows`);
 }
+
+/** A card's `updated_at` straight from the dev database (ISO string), or null if absent. Read-only. */
+export async function cardUpdatedAt(boardId: string, cardId: string): Promise<string | null> {
+  const url = process.env.DATABASE_URL ?? '';
+  if (process.env.NEON_BRANCH !== 'dev') throw new Error('cardUpdatedAt refuses to run unless NEON_BRANCH=dev');
+  if (url.includes('ep-delicate-star')) throw new Error('cardUpdatedAt refuses to run against the production host');
+  const db = neon(url);
+  const rows = await db`SELECT updated_at FROM cards WHERE id = ${cardId} AND board_id = ${boardId}`;
+  return rows.length === 1 ? new Date(rows[0].updated_at as string).toISOString() : null;
+}

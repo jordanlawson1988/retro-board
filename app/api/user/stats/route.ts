@@ -19,14 +19,16 @@ export async function GET() {
   const [stats] = await sql`
     SELECT
       (
-        SELECT COUNT(*)::int FROM boards b
+        SELECT COUNT(*)::int FROM (
+          SELECT id FROM boards WHERE owner_id = ${userId}
+          UNION
+          SELECT board_id FROM board_members WHERE user_id = ${userId}
+          UNION
+          SELECT board_id FROM participants WHERE user_id = ${userId}
+        ) mine
+        JOIN boards b ON b.id = mine.id
         WHERE b.archived_at IS NULL
           AND b.deleted_at IS NULL
-          AND (
-            b.owner_id = ${userId}
-            OR EXISTS (SELECT 1 FROM participants p WHERE p.board_id = b.id AND p.user_id = ${userId})
-            OR EXISTS (SELECT 1 FROM board_members bm WHERE bm.board_id = b.id AND bm.user_id = ${userId})
-          )
       ) AS active_boards,
       (
         SELECT COUNT(*)::int FROM cards

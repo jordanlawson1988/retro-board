@@ -5,6 +5,8 @@ import { useDroppable, useDraggable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { ThumbsUp, Trash2, Palette, Unlink, Merge, MoreHorizontal } from 'lucide-react';
 import { cn } from '@/utils/cn';
+import { isMine } from '@/utils/isMine';
+import { displayCardText } from '@/utils/cardText';
 import { COLUMN_COLORS } from '@/utils/constants';
 import { RetroCard } from './RetroCard';
 import { SortableCard } from './SortableCard';
@@ -520,13 +522,14 @@ export function BoardColumn({
                   <div className="relative">
                     <RetroCard
                       id={card.id}
-                      text={card.text}
+                      text={displayCardText(card)}
+                      textHidden={card.text_hidden}
                       authorName={card.author_name}
                       authorId={card.author_id}
                       color={card.color}
                       voteCount={cardVotes.length + childVotes}
                       hasVoted={hasVoted}
-                      isAuthor={card.author_id === currentParticipantId}
+                      isAuthor={isMine(card, currentParticipantId)}
                       isObscured={isObscured}
                       votingEnabled={votingEnabled}
                       secretVoting={secretVoting}
@@ -564,7 +567,7 @@ export function BoardColumn({
                       const childHasVoted = votes.some(
                         (v) => v.card_id === child.id && v.voter_id === currentParticipantId
                       );
-                      const isChildAuthor = child.author_id === currentParticipantId;
+                      const isChildAuthor = isMine(child, currentParticipantId);
 
                       const childContent = (
                         <div className="relative">
@@ -584,7 +587,8 @@ export function BoardColumn({
                           <div className="[&_>_div]:p-2 [&_>_div]:text-xs [&_p]:text-xs">
                             <RetroCard
                               id={child.id}
-                              text={child.text}
+                              text={displayCardText(child)}
+                              textHidden={child.text_hidden}
                               authorName={child.author_name}
                               authorId={child.author_id}
                               color={child.color}

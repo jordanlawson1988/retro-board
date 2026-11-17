@@ -34,43 +34,55 @@ export async function GET(request: NextRequest) {
     `;
   } else if (filter === 'active') {
     boards = await sql`
-      SELECT DISTINCT b.*,
+      SELECT b.*,
         (SELECT COUNT(*)::int FROM cards WHERE board_id = b.id) AS card_count,
         (SELECT COUNT(*)::int FROM participants WHERE board_id = b.id) AS participant_count,
         (SELECT COUNT(*)::int FROM action_items WHERE board_id = b.id) AS action_count,
         CASE WHEN b.owner_id = ${userId} THEN 'owner' ELSE bm.role END AS user_role
-      FROM boards b
+      FROM (
+        SELECT id FROM boards WHERE owner_id = ${userId}
+        UNION
+        SELECT board_id FROM board_members WHERE user_id = ${userId}
+      ) mine
+      JOIN boards b ON b.id = mine.id
       LEFT JOIN board_members bm ON b.id = bm.board_id AND bm.user_id = ${userId}
-      WHERE (b.owner_id = ${userId} OR bm.user_id = ${userId})
-        AND b.archived_at IS NULL
+      WHERE b.archived_at IS NULL
         AND b.deleted_at IS NULL
       ORDER BY b.created_at DESC
     `;
   } else if (filter === 'completed') {
     boards = await sql`
-      SELECT DISTINCT b.*,
+      SELECT b.*,
         (SELECT COUNT(*)::int FROM cards WHERE board_id = b.id) AS card_count,
         (SELECT COUNT(*)::int FROM participants WHERE board_id = b.id) AS participant_count,
         (SELECT COUNT(*)::int FROM action_items WHERE board_id = b.id) AS action_count,
         CASE WHEN b.owner_id = ${userId} THEN 'owner' ELSE bm.role END AS user_role
-      FROM boards b
+      FROM (
+        SELECT id FROM boards WHERE owner_id = ${userId}
+        UNION
+        SELECT board_id FROM board_members WHERE user_id = ${userId}
+      ) mine
+      JOIN boards b ON b.id = mine.id
       LEFT JOIN board_members bm ON b.id = bm.board_id AND bm.user_id = ${userId}
-      WHERE (b.owner_id = ${userId} OR bm.user_id = ${userId})
-        AND b.archived_at IS NOT NULL
+      WHERE b.archived_at IS NOT NULL
         AND b.deleted_at IS NULL
       ORDER BY b.archived_at DESC
     `;
   } else {
     boards = await sql`
-      SELECT DISTINCT b.*,
+      SELECT b.*,
         (SELECT COUNT(*)::int FROM cards WHERE board_id = b.id) AS card_count,
         (SELECT COUNT(*)::int FROM participants WHERE board_id = b.id) AS participant_count,
         (SELECT COUNT(*)::int FROM action_items WHERE board_id = b.id) AS action_count,
         CASE WHEN b.owner_id = ${userId} THEN 'owner' ELSE bm.role END AS user_role
-      FROM boards b
+      FROM (
+        SELECT id FROM boards WHERE owner_id = ${userId}
+        UNION
+        SELECT board_id FROM board_members WHERE user_id = ${userId}
+      ) mine
+      JOIN boards b ON b.id = mine.id
       LEFT JOIN board_members bm ON b.id = bm.board_id AND bm.user_id = ${userId}
-      WHERE (b.owner_id = ${userId} OR bm.user_id = ${userId})
-        AND b.deleted_at IS NULL
+      WHERE b.deleted_at IS NULL
       ORDER BY b.created_at DESC
     `;
   }

@@ -1,13 +1,33 @@
 'use client';
 
-import { useChannel } from 'ably/react';
+import { useEffect, useMemo } from 'react';
+import { useAbly, useChannel } from 'ably/react';
+import { createCoalescedRunner } from '@/lib/coalescedRunner';
 import { useBoardStore } from '@/stores/boardStore';
+import { mergeIncomingCard } from '@/lib/mergeIncomingCard';
 import type { Card, Column, Vote, Participant, ActionItem } from '@/types';
 
 export function useBoardChannel(boardId: string) {
   const store = useBoardStore;
 
-  useChannel({ channelName: `retro-board:${boardId}` }, (message) => {
+  // A reveal (or complete/reopen) changes what this viewer may see, but the event
+  // itself carries nothing sensitive. Refetch the shaped board; fetchBoard replaces
+  // cards and votes wholesale, so anything re-hidden is dropped too.
+  const refetchIfAsked = (data: { refetch?: boolean } | undefined) => {
+    if (data?.refetch === true) void store.getState().fetchBoard(boardId);
+  };
+
+  // Ably does not replay what was published before we attached, so anything between the
+  // initial GET and the attach (or during a gap without continuity) is lost. Refetch the
+  // server-shaped board then. Coalesced: one in flight, bursts collapse to one trailing run.
+  const refetchBoard = useMemo(
+    () => createCoalescedRunner(() => store.getState().fetchBoard(boardId)),
+    [store, boardId]
+  );
+
+  const ably = useAbly();
+
+  const { channel } = useChannel({ channelName: `retro-board:${boardId}` }, (message) => {
     const { name, data } = message;
 
     switch (name) {
@@ -19,8 +39,9 @@ export function useBoardChannel(boardId: string) {
         });
         break;
       case 'card-updated':
+        // Ably cards are shaped for nobody; keep our own text/author (see mergeIncomingCard).
         store.setState((state) => ({
-          cards: state.cards.map((c) => c.id === data.card.id ? (data.card as Card) : c),
+          cards: state.cards.map((c) => c.id === data.card.id ? mergeIncomingCard(c, data.card as Card) : c),
         }));
         break;
       case 'card-deleted':
@@ -94,6 +115,7 @@ export function useBoardChannel(boardId: string) {
               }
             : null,
         }));
+        refetchIfAsked(data);
         break;
       case 'board-reopened':
         store.setState((state) => ({
@@ -101,6 +123,7 @@ export function useBoardChannel(boardId: string) {
             ? { ...state.board, archived_at: null, settings: data.settings }
             : null,
         }));
+        refetchIfAsked(data);
         break;
       case 'board-completed':
         store.setState((state) => ({
@@ -108,6 +131,7 @@ export function useBoardChannel(boardId: string) {
             ? { ...state.board, archived_at: data.archivedAt, settings: data.settings }
             : null,
         }));
+        refetchIfAsked(data);
         break;
 
       // Action Items
@@ -131,4 +155,28 @@ export function useBoardChannel(boardId: string) {
         break;
     }
   });
+  useEffect(() => {
+    // 'attached' fires on first attach; 'update' on an attached->attached change.
+    // resumed === true means Ably guarantees no message was missed, so nothing to do.
+    const onChange = (change: { resumed: boolean }) => {
+      if (!change.resumed) refetchBoard();
+    };
+    channel.on('attached', onChange);
+    channel.on('update', onChange);
+    // Already attached before this effect ran: the initial GET may predate the attach.
+    if (channel.state === 'attached') refetchBoard();
+
+    const onConnection = (change: { previous: string; current: string }) => {
+      if (change.current === 'connected' && (change.previous === 'suspended' || change.previous === 'failed')) {
+        refetchBoard();
+      }
+    };
+    ably.connection.on(onConnection);
+
+    return () => {
+      channel.off('attached', onChange);
+      channel.off('update', onChange);
+      ably.connection.off(onConnection);
+    };
+  }, [channel, ably, refetchBoard]);
 }

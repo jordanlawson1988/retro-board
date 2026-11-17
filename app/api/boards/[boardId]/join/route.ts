@@ -14,7 +14,7 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ boardId: string }> }
 ) {
-  const limited = await rateLimitOr429(request, 'board-join', 30, 60);
+  const limited = await rateLimitOr429(request, 'board-join', 120, 60);
   if (limited) return limited;
   const { boardId } = await params;
   // `isAdmin` in the body is deliberately ignored: admin status is decided by the server.

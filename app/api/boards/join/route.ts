@@ -7,7 +7,7 @@ import { BOARD_ACCESS, BOARD_COMPLETED_ERROR } from '@/lib/constants/board-acces
 import { rateLimitOr429 } from '@/lib/rate-limit';
 
 export async function POST(request: Request) {
-  const limited = await rateLimitOr429(request, 'join', 10, 60);
+  const limited = await rateLimitOr429(request, 'join', 30, 60);
   if (limited) return limited;
   try {
     const { joinCode } = await request.json();

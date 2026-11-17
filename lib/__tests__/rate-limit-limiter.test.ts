@@ -93,16 +93,24 @@ describe('rateLimitOr429 with a configured limiter', () => {
     expect(h.limitMock).toHaveBeenCalledWith('unknown');
   });
 
-  it('builds one limiter per (name, limit, window): sliding window, prefix rl:<name>, reused on later calls', async () => {
+  it('builds one limiter per (name, limit, window): sliding window, prefix rl:<env>:<name>, reused on later calls', async () => {
     h.limitMock.mockResolvedValue({ success: true });
     const { rateLimitOr429 } = await load();
     await rateLimitOr429(req('1.1.1.1'), 'board-create', 10, 3600);
     await rateLimitOr429(req('2.2.2.2'), 'board-create', 10, 3600);
     await rateLimitOr429(req('1.1.1.1'), 'vote', 60, 60);
-    expect(h.constructed.map((c) => c.prefix)).toEqual(['rl:board-create', 'rl:vote']);
+    expect(h.constructed.map((c) => c.prefix)).toEqual(['rl:local:board-create', 'rl:local:vote']);
     expect(h.slidingWindow).toHaveBeenCalledWith(10, '3600 s');
     expect(h.slidingWindow).toHaveBeenCalledWith(60, '60 s');
     expect(h.fromEnv).toHaveBeenCalledTimes(1); // one shared Redis client
+  });
+
+  it('namespaces counters by VERCEL_ENV so production and preview never share a bucket', async () => {
+    h.limitMock.mockResolvedValue({ success: true });
+    vi.stubEnv('VERCEL_ENV', 'preview');
+    const { rateLimitOr429 } = await load();
+    await rateLimitOr429(req('1.1.1.1'), 'vote', 600, 60);
+    expect(h.constructed.map((c) => c.prefix)).toEqual(['rl:preview:vote']);
   });
 
   it('different route names do not share a bucket (different prefixes)', async () => {
@@ -188,12 +196,12 @@ describe('wiring: each guarded route calls the limiter first (static assertion)'
   const read = (rel: string) => readFileSync(join(root, rel), 'utf8');
 
   const routes: Array<{ file: string; name: string; limit: number; window: number }> = [
-    { file: 'app/api/boards/join/route.ts', name: 'join', limit: 10, window: 60 },
+    { file: 'app/api/boards/join/route.ts', name: 'join', limit: 30, window: 60 },
     { file: 'app/api/boards/route.ts', name: 'board-create', limit: 10, window: 3600 },
-    { file: 'app/api/boards/[boardId]/join/route.ts', name: 'board-join', limit: 30, window: 60 },
-    { file: 'app/api/boards/[boardId]/cards/route.ts', name: 'card-create', limit: 30, window: 60 },
-    { file: 'app/api/boards/[boardId]/votes/route.ts', name: 'vote', limit: 60, window: 60 },
-    { file: 'app/api/boards/[boardId]/action-items/route.ts', name: 'action-item', limit: 30, window: 60 },
+    { file: 'app/api/boards/[boardId]/join/route.ts', name: 'board-join', limit: 120, window: 60 },
+    { file: 'app/api/boards/[boardId]/cards/route.ts', name: 'card-create', limit: 240, window: 60 },
+    { file: 'app/api/boards/[boardId]/votes/route.ts', name: 'vote', limit: 600, window: 60 },
+    { file: 'app/api/boards/[boardId]/action-items/route.ts', name: 'action-item', limit: 120, window: 60 },
   ];
 
   it.each(routes)('$file: POST limits "$name" at $limit / $window s, before any other work', ({ file, name, limit, window }) => {

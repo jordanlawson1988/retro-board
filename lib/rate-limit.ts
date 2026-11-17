@@ -24,7 +24,9 @@ function getLimiter(name: string, limit: number, windowSec: number): Ratelimit |
     limiter = new Ratelimit({
       redis,
       limiter: Ratelimit.slidingWindow(limit, `${windowSec} s`),
-      prefix: `rl:${name}`,
+      // Environments share one Upstash database (free tier allows one), so counters are
+      // namespaced by environment: production and preview never count against each other.
+      prefix: `rl:${process.env.VERCEL_ENV || 'local'}:${name}`,
     });
     limiters.set(key, limiter);
   }

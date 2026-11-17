@@ -2,11 +2,20 @@ import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 
 let redis: Redis | null = null;
+let warnedUnconfigured = false;
 const limiters = new Map<string, Ratelimit>();
 
 function getLimiter(name: string, limit: number, windowSec: number): Ratelimit | null {
   if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
-    return null; // not configured (local dev / tests) — fail open
+    // Not configured (local dev / tests) — fail open. In production that means NO rate limiting,
+    // so say so once per process instead of failing silently.
+    if (process.env.NODE_ENV === 'production' && !warnedUnconfigured) {
+      warnedUnconfigured = true;
+      console.warn(
+        '[rate-limit] UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN are not set: rate limiting is DISABLED (failing open).'
+      );
+    }
+    return null;
   }
   if (!redis) redis = Redis.fromEnv();
   const key = `${name}:${limit}:${windowSec}`;

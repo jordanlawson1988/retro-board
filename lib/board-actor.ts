@@ -31,6 +31,8 @@ export interface LoadedBoard {
   userParticipantId: string | null;
   /** The signed-in user has any board_members row on this board. */
   userIsMember: boolean;
+  /** The signed-in user's board_members role on this board, or null. */
+  memberRole?: string | null;
   /** v1 only: the claimed participant id exists on this board. Always false on v2. */
   claimedParticipantExists: boolean;
 }
@@ -132,6 +134,7 @@ export async function loadBoardActor(
     participant,
     userParticipantId: (user_participant_id as string | null) ?? null,
     userIsMember: !!is_member,
+    memberRole: (row.member_role as string | null) ?? null,
     claimedParticipantExists: trustVersion === 1 && !!claimed_exists,
   };
 }

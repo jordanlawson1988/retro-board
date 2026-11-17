@@ -369,3 +369,67 @@ Order matters: 011 must be on production **before** deploying this branch's code
 - **Round-trip latency from Vercel.** Only measured from a laptop (about 30 ms). The Vercel function region relative to Neon us-east-1 was not checked.
 - **Better Auth's exact per-call query count.** Treated as 1 to 2 queries per `getSession` without cookie cache; not traced at runtime.
 - **Index usage counters** (`pg_stat_user_indexes`) on dev reflect mostly e2e traffic since the compute last started, not real usage. Confirm unused-index drops (P5) against production counters.
+
+## 12. Migration 013: participant uniqueness and the migration ledger
+
+File: `scripts/migrations/013_participant_uniqueness_and_ledger.sql`. Closes F6 / P4, P10 and R8. Written like 012: one explicit transaction, `SET LOCAL lock_timeout = '5s'`, idempotent, aborts unless 012 is present (it checks `boards_trust_version_check` and `uq_participants_id_board_id`).
+
+1. **Dedupe** participants per `(board_id, user_id)` where `user_id IS NOT NULL`. Keeper = the row the app already picks (`is_admin DESC, joined_at ASC`, then `id ASC`). Set-based through a temp map `removed_id -> keep_id`, so it handles any number of groups. It repoints `cards.author_id`, `votes.voter_id`, `action_items.created_by`, `boards.created_by` and the ids inside `cards.reactions` (de-duplicated within each array). Where kept and removed rows voted on the same card (or two removed rows did), one vote survives (the keeper's own, else the oldest) and the rest are deleted so `UNIQUE (card_id, voter_id)` holds. It asserts that no removed row is admin while the keeper is not. `participants` is locked `SHARE ROW EXCLUSIVE` first so no new duplicate can commit before the index exists. Side effect: the `cards.updated_at` trigger fires for cards it repoints.
+2. **Index** `uq_participants_board_user` on `participants (board_id, user_id) WHERE user_id IS NOT NULL`. The join route upserts against it, so two simultaneous joins by one account produce one participant.
+3. **Ledger** `schema_migrations(version text primary key, applied_at timestamptz default now())`, backfilled for each of 002 to 012 that the database demonstrably has, plus 013. Detection: 002 `boards.owner_id` and `participants.user_id`; 003 tables `board_members` and `board_invites` and `boards.visibility`; 004 `boards.join_code`; 005 `cards.reactions`; 006 `action_items.created_by`; 007 `board_members_invited_by_fkey` with ON DELETE SET NULL; 008 `boards.deleted_at`; 009 `columns.sort_by`; 010 tables `subscriptions` and `free_access`; 011 `boards.trust_version`; 012 `votes_card_id_board_id_fkey`, `boards_trust_version_check` and `idx_votes_board_id_voter_id`. A version that cannot be detected is not inserted. `scripts/run-one.mjs` now records a file's numeric prefix after it applies, when the table exists (`scripts/migration-ledger.mjs`; the `--prod` gate is untouched).
+
+**Dev result (2026-11-17):** one group (board `fMQV6sJkOE`, 3 rows) merged into `4207ace3-4ed2-4573-b8f9-b4f3f93f5073`; 0 votes dropped, 0 reaction references; re-run 3 times with no change. Also exercised on a synthetic board (admin keeper, id-tiebreak keeper, vote collisions, reaction de-dupe) inside a rolled-back transaction.
+
+### Production pre-check for 013 (read-only; run before applying, do not skip)
+
+```sql
+-- 1. Duplicate groups (expect 1 group; the keeper is the first id)
+SELECT board_id, user_id, count(*) AS rows,
+       array_agg(id ORDER BY is_admin DESC, joined_at ASC, id ASC) AS ids_keeper_first
+FROM participants
+WHERE user_id IS NOT NULL
+GROUP BY board_id, user_id
+HAVING count(*) > 1;
+
+-- 2. Per group: what would be repointed and how many votes would be dropped.
+WITH ranked AS (
+  SELECT id, board_id, user_id,
+         first_value(id) OVER w AS keep_id,
+         row_number()    OVER w AS rn
+  FROM participants WHERE user_id IS NOT NULL
+  WINDOW w AS (PARTITION BY board_id, user_id ORDER BY is_admin DESC, joined_at ASC, id ASC)
+), m AS (SELECT id AS removed_id, keep_id, board_id, user_id FROM ranked WHERE rn > 1),
+vv AS (
+  SELECT v.id, v.card_id, m2.board_id, m2.user_id,
+         row_number() OVER (PARTITION BY v.card_id, COALESCE(m.keep_id, v.voter_id)
+                            ORDER BY (m.removed_id IS NULL) DESC, v.created_at, v.id) AS rn
+  FROM votes v
+  LEFT JOIN m ON m.removed_id = v.voter_id
+  JOIN (SELECT removed_id AS pid, board_id, user_id FROM m
+        UNION SELECT keep_id, board_id, user_id FROM m) m2 ON m2.pid = v.voter_id
+)
+SELECT g.board_id, g.user_id,
+  (SELECT count(*) FROM m WHERE m.board_id = g.board_id AND m.user_id = g.user_id)              AS rows_removed,
+  (SELECT count(*) FROM cards c JOIN m ON m.removed_id = c.author_id
+     WHERE m.board_id = g.board_id AND m.user_id = g.user_id)                                    AS cards_repointed,
+  (SELECT count(*) FROM votes v JOIN m ON m.removed_id = v.voter_id
+     WHERE m.board_id = g.board_id AND m.user_id = g.user_id)                                    AS votes_on_removed_rows,
+  (SELECT count(*) FROM vv WHERE vv.rn > 1 AND vv.board_id = g.board_id AND vv.user_id = g.user_id) AS votes_that_would_collide_and_be_deleted,
+  (SELECT count(*) FROM action_items a JOIN m ON m.removed_id = a.created_by
+     WHERE m.board_id = g.board_id AND m.user_id = g.user_id)                                    AS action_items_repointed,
+  (SELECT count(*) FROM boards b JOIN m ON m.removed_id = b.created_by
+     WHERE m.board_id = g.board_id AND m.user_id = g.user_id)                                    AS boards_created_by_repointed,
+  (SELECT count(*) FROM cards c, jsonb_each(c.reactions) e, jsonb_array_elements_text(e.value) t
+     WHERE c.board_id = g.board_id AND jsonb_typeof(e.value) = 'array'
+       AND t IN (SELECT removed_id FROM m WHERE m.board_id = g.board_id AND m.user_id = g.user_id)) AS reaction_refs_repointed
+FROM (SELECT DISTINCT board_id, user_id FROM m) g;
+
+-- 3. Ledger state (expect: table absent before 013)
+SELECT to_regclass('public.schema_migrations');
+```
+
+Record the ids and counts, take a Neon restore point, then apply 013 with the runner (`--prod` only with explicit sign-off). After applying: zero duplicate groups, `uq_participants_board_user` exists, and `schema_migrations` lists 002 to 013 (010 only if its tables exist).
+
+### R8 result: join round-trips
+
+Every join path is now at most 2 database round-trips (loader plus one write). Signed-in new joiner 5 to 2, signed-in returning 3 to 2, anonymous unchanged at 2. The participant upsert and the `board_members` upsert are one `sqlTransaction`, so a failure can no longer leave a participant without membership.

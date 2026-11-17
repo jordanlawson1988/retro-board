@@ -2,6 +2,7 @@
 // Usage: node --env-file=.env.local scripts/run-one.mjs <path-to-sql>
 import { readFileSync } from 'fs';
 import { Pool } from '@neondatabase/serverless';
+import { recordMigration } from './migration-ledger.mjs';
 
 const file = process.argv[2];
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -27,8 +28,17 @@ try {
   const sqlText = readFileSync(file, 'utf-8');
   const client = await pool.connect();
   await client.query(sqlText);
-  client.release();
   console.log('Applied', file);
+  // Ledger (013): record the file's numeric prefix when schema_migrations exists.
+  try {
+    const version = await recordMigration(client, file);
+    if (version) console.log('Recorded migration', version, 'in schema_migrations');
+  } catch (err) {
+    console.error('Applied, but recording in schema_migrations failed:', err.message);
+    process.exitCode = 1;
+  } finally {
+    client.release();
+  }
 } catch (err) {
   console.error('Migration failed:', err.message);
   process.exit(1);

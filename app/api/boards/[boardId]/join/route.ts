@@ -1,4 +1,4 @@
-import { sql } from '@/lib/db';
+import { sql, sqlTransaction } from '@/lib/db';
 import { ablyServer } from '@/lib/ably-server';
 import { NextResponse } from 'next/server';
 import { nanoid } from 'nanoid';
@@ -51,22 +51,16 @@ export async function POST(
     }
   }
 
-  // If authenticated, reuse any existing participant this user has on the board.
-  // Prefer admin record when multiple exist (handles pre-resolver multi-device joins).
-  if (userId) {
-    const existing = await sql`
-      SELECT * FROM participants
-      WHERE board_id = ${boardId} AND user_id = ${userId}
-      ORDER BY is_admin DESC, joined_at ASC
-      LIMIT 1
+  // A signed-in user reuses the participant they already have on this board (admin first,
+  // then oldest), resolved by loadBoardActor in its single query. One UPDATE, no re-query.
+  if (userId && loaded.userParticipantId) {
+    const [reused] = await sql`
+      UPDATE participants
+      SET display_name = ${displayName}, last_seen = now()
+      WHERE id = ${loaded.userParticipantId} AND board_id = ${boardId}
+      RETURNING *
     `;
-    if (existing.length > 0) {
-      const [reused] = await sql`
-        UPDATE participants
-        SET display_name = ${displayName}, last_seen = now()
-        WHERE id = ${existing[0].id}
-        RETURNING *
-      `;
+    if (reused) {
       return withCookie(NextResponse.json({ participant: reused, reused: true }), reused.id);
     }
   }
@@ -93,19 +87,15 @@ export async function POST(
     if (reused) return NextResponse.json({ participant: reused, reused: true });
   }
 
-  // Owner/facilitator auto-promotion: only from the server-side ownership
-  // standing of a signed-in user, never from the request body.
+  // Owner/facilitator auto-promotion: only from the server-side standing of a signed-in
+  // user (computed by loadBoardActor), never from the request body. A system admin who is
+  // neither owner nor owner/facilitator member is not promoted.
   let isAdmin = false;
   if (userId) {
-    const ownershipCheck = await sql`
-      SELECT 1 FROM boards WHERE id = ${boardId} AND owner_id = ${userId}
-      UNION ALL
-      SELECT 1 FROM board_members
-      WHERE board_id = ${boardId} AND user_id = ${userId}
-        AND role IN ('owner', 'facilitator')
-      LIMIT 1
-    `;
-    if (ownershipCheck.length > 0) isAdmin = true;
+    isAdmin =
+      loaded.authority?.isOwner === true ||
+      loaded.memberRole === 'owner' ||
+      loaded.memberRole === 'facilitator';
   }
 
   // v2 creator claim: board creation issues a signed cookie for boards.created_by.
@@ -120,18 +110,35 @@ export async function POST(
   // v2 ids are generated here; the client's suggestion is ignored.
   const newId: string = isCreatorClaim ? (cookieId as string) : isV2 ? nanoid() : participantId;
 
-  const [participant] = await sql`
-    INSERT INTO participants (id, board_id, display_name, is_admin, user_id)
-    VALUES (${newId}, ${boardId}, ${displayName}, ${isAdmin}, ${userId})
-    RETURNING *
-  `;
-
+  let participant: Record<string, unknown> & { id: string };
   if (userId) {
-    await sql`
-      INSERT INTO board_members (board_id, user_id, role)
-      VALUES (${boardId}, ${userId}, ${isAdmin ? 'facilitator' : 'participant'})
-      ON CONFLICT (board_id, user_id) DO NOTHING
-    `;
+    // Participant and membership are one atomic transaction. The upsert targets the partial
+    // unique index uq_participants_board_user (013), so two simultaneous joins by the same
+    // account produce one participant; the loser gets the winner's row back.
+    const [upserted] = (await sqlTransaction((txn) => [
+      txn`
+        INSERT INTO participants (id, board_id, display_name, is_admin, user_id)
+        VALUES (${newId}, ${boardId}, ${displayName}, ${isAdmin}, ${userId})
+        ON CONFLICT (board_id, user_id) WHERE user_id IS NOT NULL
+        DO UPDATE SET display_name = EXCLUDED.display_name, last_seen = now()
+        RETURNING *
+      `,
+      txn`
+        INSERT INTO board_members (board_id, user_id, role)
+        VALUES (${boardId}, ${userId}, ${isAdmin ? 'facilitator' : 'participant'})
+        ON CONFLICT (board_id, user_id) DO NOTHING
+      `,
+    ])) as unknown as Record<string, unknown>[][];
+    participant = upserted[0] as typeof participant;
+    if (participant.id !== newId) {
+      return withCookie(NextResponse.json({ participant, reused: true }), participant.id);
+    }
+  } else {
+    [participant] = (await sql`
+      INSERT INTO participants (id, board_id, display_name, is_admin, user_id)
+      VALUES (${newId}, ${boardId}, ${displayName}, ${isAdmin}, ${null})
+      RETURNING *
+    `) as unknown as (typeof participant)[];
   }
 
   const channel = ablyServer.channels.get(`retro-board:${boardId}`);

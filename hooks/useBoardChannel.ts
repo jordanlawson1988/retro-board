@@ -1,6 +1,8 @@
 'use client';
 
-import { useChannel } from 'ably/react';
+import { useEffect, useMemo } from 'react';
+import { useAbly, useChannel } from 'ably/react';
+import { createCoalescedRunner } from '@/lib/coalescedRunner';
 import { useBoardStore } from '@/stores/boardStore';
 import { mergeIncomingCard } from '@/lib/mergeIncomingCard';
 import type { Card, Column, Vote, Participant, ActionItem } from '@/types';
@@ -15,7 +17,17 @@ export function useBoardChannel(boardId: string) {
     if (data?.refetch === true) void store.getState().fetchBoard(boardId);
   };
 
-  useChannel({ channelName: `retro-board:${boardId}` }, (message) => {
+  // Ably does not replay what was published before we attached, so anything between the
+  // initial GET and the attach (or during a gap without continuity) is lost. Refetch the
+  // server-shaped board then. Coalesced: one in flight, bursts collapse to one trailing run.
+  const refetchBoard = useMemo(
+    () => createCoalescedRunner(() => store.getState().fetchBoard(boardId)),
+    [store, boardId]
+  );
+
+  const ably = useAbly();
+
+  const { channel } = useChannel({ channelName: `retro-board:${boardId}` }, (message) => {
     const { name, data } = message;
 
     switch (name) {
@@ -143,4 +155,28 @@ export function useBoardChannel(boardId: string) {
         break;
     }
   });
+  useEffect(() => {
+    // 'attached' fires on first attach; 'update' on an attached->attached change.
+    // resumed === true means Ably guarantees no message was missed, so nothing to do.
+    const onChange = (change: { resumed: boolean }) => {
+      if (!change.resumed) refetchBoard();
+    };
+    channel.on('attached', onChange);
+    channel.on('update', onChange);
+    // Already attached before this effect ran: the initial GET may predate the attach.
+    if (channel.state === 'attached') refetchBoard();
+
+    const onConnection = (change: { previous: string; current: string }) => {
+      if (change.current === 'connected' && (change.previous === 'suspended' || change.previous === 'failed')) {
+        refetchBoard();
+      }
+    };
+    ably.connection.on(onConnection);
+
+    return () => {
+      channel.off('attached', onChange);
+      channel.off('update', onChange);
+      ably.connection.off(onConnection);
+    };
+  }, [channel, ably, refetchBoard]);
 }

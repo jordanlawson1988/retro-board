@@ -222,6 +222,8 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     const res = await fetch(`/api/boards/${boardId}`);
 
     if (!res.ok) {
+      // A transient server failure during a background refresh must not blank a loaded board.
+      if (isRefresh && res.status >= 500) return;
       const err = await res.json();
       set({ loading: false, error: err.error || 'Board not found' });
       return;

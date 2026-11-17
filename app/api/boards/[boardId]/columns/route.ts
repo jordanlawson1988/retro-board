@@ -5,7 +5,8 @@ import { isCardSort } from '@/types';
 import { loadBoardActor, guardResponse, requireParticipantOn, BOARD_NOT_FOUND } from '@/lib/board-actor';
 import { checkAction } from '@/lib/board-guards';
 import { readJsonObject, isPlainObject } from '@/lib/request-body';
-import { validateColumnFields, isFiniteNumber, INVALID_BODY } from '@/lib/board-validation';
+import { validateColumnFields, validateClientId, isFiniteNumber, INVALID_BODY } from '@/lib/board-validation';
+import { isUniqueViolation } from '@/lib/pg-errors';
 
 
 export async function POST(
@@ -16,9 +17,10 @@ export async function POST(
   const body = await readJsonObject(request);
   if (!body) return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
   const { id, title, description, color, position } = body;
+  const idCheck = validateClientId(id, 'column id');
+  if (!idCheck.ok) return NextResponse.json({ error: idCheck.error }, { status: 400 });
   const fields = validateColumnFields({ title, description, color });
   if (
-    typeof id !== 'string' ||
     typeof title !== 'string' ||
     typeof color !== 'string' ||
     !isFiniteNumber(position) ||
@@ -32,11 +34,19 @@ export async function POST(
   if (denied) return denied;
 
 
-  const [column] = await sql`
-    INSERT INTO columns (id, board_id, title, description, color, position)
-    VALUES (${id}, ${boardId}, ${title}, ${description ?? null}, ${color}, ${position})
-    RETURNING *
-  `;
+  let column;
+  try {
+    [column] = await sql`
+      INSERT INTO columns (id, board_id, title, description, color, position)
+      VALUES (${id}, ${boardId}, ${title}, ${description ?? null}, ${color}, ${position})
+      RETURNING *
+    `;
+  } catch (err) {
+    if (isUniqueViolation(err, ['columns_pkey'])) {
+      return NextResponse.json({ error: 'Column id already exists' }, { status: 409 });
+    }
+    throw err;
+  }
 
   const channel = ablyServer.channels.get(`retro-board:${boardId}`);
   await channel.publish('column-created', { column });

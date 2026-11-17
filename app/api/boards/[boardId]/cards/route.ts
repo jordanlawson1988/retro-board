@@ -16,11 +16,13 @@ function isReactionsShape(v: unknown): boolean {
   );
 }
 import { readJsonObject, isPlainObject } from '@/lib/request-body';
-import { validateCardUpdates, isFiniteNumber, INVALID_BODY } from '@/lib/board-validation';
+import { validateCardUpdates, validateClientId, isFiniteNumber, INVALID_BODY } from '@/lib/board-validation';
+import { isUniqueViolation } from '@/lib/pg-errors';
 
 const REACTIONS_FOREIGN = 'You can only change your own reactions';
 const AUTHOR_ONLY = 'Only the author can change this card';
 const COLUMN_FKS = ['cards_column_id_board_id_fkey', 'cards_column_id_fkey'];
+const CARD_PKEY = ['cards_pkey'];
 const MERGE_FKS = ['cards_merged_with_board_id_fkey', 'cards_merged_with_fkey'];
 
 /** A Postgres foreign-key violation (23503) on one of the named constraints (NeonDbError.code / .constraint). */
@@ -39,7 +41,9 @@ export async function POST(
   const body = await readJsonObject(request);
   if (!body) return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
   const { id, columnId, text, authorName, authorId, position } = body;
-  if (typeof id !== 'string' || typeof columnId !== 'string' || !isFiniteNumber(position)) {
+  const idCheck = validateClientId(id, 'card id');
+  if (!idCheck.ok) return NextResponse.json({ error: idCheck.error }, { status: 400 });
+  if (typeof columnId !== 'string' || !isFiniteNumber(position)) {
     return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
   }
   if (
@@ -81,6 +85,7 @@ export async function POST(
     `;
   } catch (err) {
     if (isFkViolation(err, COLUMN_FKS)) return NextResponse.json({ error: 'Column not found' }, { status: 404 });
+    if (isUniqueViolation(err, CARD_PKEY)) return NextResponse.json({ error: 'Card id already exists' }, { status: 409 });
     throw err;
   }
 

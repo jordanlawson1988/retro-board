@@ -19,6 +19,21 @@ const DISPLAY_NAME_ERROR = `Display name must be 1–${DISPLAY_NAME_MAX} charact
 const CARD_TEXT_ERROR = `Card text must be 1–${TEXT_MAX} characters`;
 export const INVALID_BODY = 'Invalid request body';
 
+/** Longest id accepted for boards and for client-generated card/column ids. */
+export const ID_MAX_LENGTH = 64;
+const CLIENT_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+
+/**
+ * A client-generated id (card, column): 1 to ID_MAX_LENGTH characters from the URL-safe set
+ * that nanoid and uuid produce (A-Z a-z 0-9 _ -).
+ */
+export function validateClientId(v: unknown, label = 'id'): Validation {
+  if (typeof v !== 'string' || v.length < 1 || v.length > ID_MAX_LENGTH || !CLIENT_ID_PATTERN.test(v)) {
+    return bad(`Invalid ${label}`);
+  }
+  return OK;
+}
+
 export function isFiniteNumber(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v);
 }
@@ -144,7 +159,7 @@ const MAX_COLUMNS = 20;
 export function validateNewBoard(
   b: Record<string, unknown>
 ): { ok: true; value: NewBoardInput } | { ok: false; error: string } {
-  if (!isString(b.id) || b.id.length < 1 || b.id.length > 64) return { ok: false, error: 'Invalid board id' };
+  if (!isString(b.id) || b.id.length < 1 || b.id.length > ID_MAX_LENGTH) return { ok: false, error: 'Invalid board id' };
   if (!isString(b.title) || b.title.trim().length === 0) return { ok: false, error: 'Title is required' };
   if (b.description !== undefined && !isStringOrNull(b.description)) return { ok: false, error: 'Invalid description' };
   if (!isString(b.template)) return { ok: false, error: 'Invalid template' };
@@ -156,6 +171,7 @@ export function validateNewBoard(
     if (
       !isPlainObject(c) ||
       !isString(c.id) ||
+      !validateClientId(c.id).ok ||
       !isString(c.title) ||
       !isString(c.color) ||
       !isFiniteNumber(c.position) ||

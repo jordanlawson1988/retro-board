@@ -357,6 +357,17 @@ test.describe('v2 board: creator claim', () => {
 });
 
 test.describe('input validation', () => {
+  test('card ids: a repeated id is 409, an over-long id is 400', async ({ playwright, baseURL }) => {
+    const { a, boardId, columnId } = await boardWithAliceAndBob(playwright, baseURL!);
+    const body = newCardBody(columnId);
+    expect((await a.post(`/api/boards/${boardId}/cards`, { data: body })).status()).toBe(200);
+    const dup = await a.post(`/api/boards/${boardId}/cards`, { data: body });
+    expect(dup.status()).toBe(409);
+    expect(typeof (await dup.json()).error).toBe('string');
+    const long = await a.post(`/api/boards/${boardId}/cards`, { data: { ...newCardBody(columnId), id: 'x'.repeat(65) } });
+    expect(long.status()).toBe(400);
+  });
+
   const badBodies: Record<string, string> = {
     'truncated JSON': '{"displayName": ',
     'not JSON': 'hello',

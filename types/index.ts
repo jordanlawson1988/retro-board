@@ -34,7 +34,7 @@ export interface DashboardBoard {
   card_count: number;
   participant_count: number;
   action_count: number;
-  user_role: string;
+  user_role: BoardUserRole;
 }
 
 export type BoardTemplate =
@@ -195,18 +195,26 @@ export interface User {
   createdAt?: Date | string;
 }
 
-// Board membership
-export const BOARD_MEMBER_ROLES = ['owner', 'facilitator', 'participant', 'viewer'] as const;
+// Board membership.
+// Ownership lives in ONE place: boards.owner_id. board_members never stores an owner
+// (migration 014 enforces it with a CHECK); the owner is not a board_members row at all.
+// BOARD_OWNER_ROLE is a derived, display-only label computed from boards.owner_id.
+export const BOARD_MEMBER_ROLES = ['facilitator', 'participant', 'viewer'] as const;
 export type BoardMemberRole = (typeof BOARD_MEMBER_ROLES)[number];
 export function isBoardMemberRole(v: unknown): v is BoardMemberRole {
   return typeof v === 'string' && (BOARD_MEMBER_ROLES as readonly string[]).includes(v);
 }
+export const BOARD_OWNER_ROLE = 'owner' as const;
+/** What a signed-in user is on a board: the derived owner label, or their stored member role. */
+export type BoardUserRole = typeof BOARD_OWNER_ROLE | BoardMemberRole;
 
+/** One row of GET /api/boards/[boardId]/members. The owner row is derived from boards.owner_id. */
 export interface BoardMember {
-  id: string;
+  /** board_members.id; null for the derived owner row. */
+  id: string | null;
   board_id: string;
   user_id: string;
-  role: BoardMemberRole;
+  role: BoardUserRole;
   invited_by: string | null;
   joined_at: string;
   // Joined from user table for display

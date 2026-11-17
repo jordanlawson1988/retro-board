@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import type { MouseEvent } from 'react';
 import { MoreHorizontal, Pencil, Trash2, RotateCcw, Users, KeyRound, LogOut } from 'lucide-react';
 import { IconButton } from '@/components/common';
+import { BOARD_OWNER_ROLE } from '@/types';
 import type { DashboardBoard } from '@/types';
 
 interface BoardCardMenuProps {
@@ -27,7 +28,7 @@ export function BoardCardMenu({
 }: BoardCardMenuProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const isOwner = board.user_role === 'owner';
+  const isOwner = board.user_role === BOARD_OWNER_ROLE;
   const isCompleted = !!board.archived_at;
 
   useEffect(() => {

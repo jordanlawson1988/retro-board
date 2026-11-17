@@ -3,11 +3,12 @@
 import { useState, useEffect } from 'react';
 import { Trash2 } from 'lucide-react';
 import { Modal, Button } from '@/components/common';
-import { BOARD_MEMBER_ROLES } from '@/types';
+import { BOARD_MEMBER_ROLES, BOARD_OWNER_ROLE } from '@/types';
 import type { DashboardBoard, BoardMember } from '@/types';
 
-// Owner cannot be reassigned here (transfer-ownership is out of scope).
-const ASSIGNABLE_ROLES = BOARD_MEMBER_ROLES.filter((r) => r !== 'owner');
+// Every stored member role is assignable. The owner is not a member role: it comes from
+// boards.owner_id and cannot be reassigned here (transfer-ownership is out of scope).
+const ASSIGNABLE_ROLES = BOARD_MEMBER_ROLES;
 
 export function ManageMembersModal({
   board,
@@ -69,7 +70,7 @@ export function ManageMembersModal({
       ) : (
         <ul className="flex flex-col divide-y divide-[var(--line)]">
           {members.map((m) => {
-            const isOwnerRole = m.role === 'owner';
+            const isOwnerRole = m.role === BOARD_OWNER_ROLE;
             return (
               <li key={m.user_id} className="flex items-center justify-between gap-3 py-3">
                 <div className="min-w-0">

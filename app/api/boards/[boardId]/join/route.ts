@@ -93,9 +93,7 @@ export async function POST(
   let isAdmin = false;
   if (userId) {
     isAdmin =
-      loaded.authority?.isOwner === true ||
-      loaded.memberRole === 'owner' ||
-      loaded.memberRole === 'facilitator';
+      loaded.authority?.isOwner === true || loaded.memberRole === 'facilitator';
   }
 
   // v2 creator claim: board creation issues a signed cookie for boards.created_by.
@@ -123,11 +121,16 @@ export async function POST(
         DO UPDATE SET display_name = EXCLUDED.display_name, last_seen = now()
         RETURNING *
       `,
-      txn`
+      // The owner is boards.owner_id and never gets a board_members row.
+      ...(loaded.authority?.isOwner === true
+        ? []
+        : [
+            txn`
         INSERT INTO board_members (board_id, user_id, role)
         VALUES (${boardId}, ${userId}, ${isAdmin ? 'facilitator' : 'participant'})
         ON CONFLICT (board_id, user_id) DO NOTHING
       `,
+          ]),
     ])) as unknown as Record<string, unknown>[][];
     participant = upserted[0] as typeof participant;
     if (participant.id !== newId) {

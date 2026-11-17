@@ -65,12 +65,13 @@ export interface BoardAuthority {
 
 /**
  * Pure decision: given a user's standing on a board, what can they do?
- * Owner OR system admin OR a member with role owner/facilitator may facilitate.
+ * Owner (boards.owner_id, the only place ownership is stored) OR system admin OR a
+ * facilitator member may facilitate.
  */
 export function resolveBoardAuthority(i: BoardAuthorityInput): BoardAuthority {
   const isOwner = i.ownerId !== null && i.ownerId === i.userId;
   const canFacilitate =
-    isOwner || i.isSystemAdmin || i.memberRole === 'owner' || i.memberRole === 'facilitator';
+    isOwner || i.isSystemAdmin || i.memberRole === 'facilitator';
   return { isOwner, canFacilitate, isSystemAdmin: i.isSystemAdmin };
 }
 

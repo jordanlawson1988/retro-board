@@ -163,14 +163,25 @@ describe('join: signed-in', () => {
     await call();
     expect(roundTrips()).toBe(2);
     expect(txCalls[0].values[3]).toBe(true);
-    expect(txCalls[1].values).toContain('facilitator');
+    // Ownership is boards.owner_id only: the owner gets no board_members row.
+    expect(txCalls).toHaveLength(1);
+    expect(txCalls.some((c) => c.text.includes('board_members'))).toBe(false);
   });
 
-  it.each(['owner', 'facilitator'])('board_members role %s is promoted', async (role) => {
-    arrange(boardRow({ member_role: role, is_member: true }));
+  it('board_members role facilitator is promoted and stored as facilitator', async () => {
+    arrange(boardRow({ member_role: 'facilitator', is_member: true }));
     arrangeTx([[{ id: 'NEW', is_admin: true }], []]);
     await call();
     expect(txCalls[0].values[3]).toBe(true);
+    expect(txCalls[1].values).toContain('facilitator');
+  });
+
+  it("a leftover board_members role 'owner' (not boards.owner_id) is not promoted", async () => {
+    arrange(boardRow({ member_role: 'owner', is_member: true }));
+    arrangeTx([[{ id: 'NEW' }], []]);
+    await call();
+    expect(txCalls[0].values[3]).toBe(false);
+    expect(txCalls[1].values).toContain('participant');
   });
 
   it('plain member and system admin (not owner/facilitator) are not promoted', async () => {

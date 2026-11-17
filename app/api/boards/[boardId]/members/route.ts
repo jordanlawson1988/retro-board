@@ -1,7 +1,7 @@
 import { sql } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionOrNull, assertBoardOwner, assertCanFacilitate, authzErrorResponse } from '@/lib/auth-helpers';
-import { isBoardMemberRole } from '@/types';
+import { BOARD_OWNER_ROLE, isBoardMemberRole } from '@/types';
 
 function authFail(e: unknown): NextResponse | null {
   const r = authzErrorResponse(e);
@@ -20,12 +20,26 @@ export async function GET(
     return NextResponse.json({ error: 'Sign in required' }, { status: 401 });
   }
 
+  // The owner row is derived from boards.owner_id (the only place ownership is stored).
+  // The filter on board_members also hides pre-014 leftovers (an 'owner' role row, or any
+  // row for the owner), so the owner is listed exactly once on either side of that migration.
   const members = await sql`
-    SELECT bm.*, u.email AS user_email, u.name AS user_name
+    SELECT * FROM (
+    SELECT NULL::text AS id, b.id AS board_id, b.owner_id AS user_id, ${BOARD_OWNER_ROLE}::text AS role,
+           NULL::text AS invited_by, b.created_at AS joined_at, u.email AS user_email, u.name AS user_name
+    FROM boards b
+    JOIN "user" u ON u.id = b.owner_id
+    WHERE b.id = ${boardId}
+    UNION ALL
+    SELECT bm.id::text, bm.board_id, bm.user_id, bm.role, bm.invited_by, bm.joined_at, u.email, u.name
     FROM board_members bm
+    JOIN boards b ON b.id = bm.board_id
     JOIN "user" u ON bm.user_id = u.id
     WHERE bm.board_id = ${boardId}
-    ORDER BY bm.joined_at ASC
+      AND bm.role <> ${BOARD_OWNER_ROLE}
+      AND bm.user_id IS DISTINCT FROM b.owner_id
+    ) m
+    ORDER BY (m.role = ${BOARD_OWNER_ROLE}) DESC, m.joined_at ASC
   `;
 
   // Facilitators/owners see emails; plain members see names only;
@@ -72,11 +86,18 @@ export async function POST(
     return NextResponse.json({ error: 'Invalid role' }, { status: 400 });
   }
 
-  await sql`
+  // The owner is boards.owner_id, never a member row: the insert selects nothing for them.
+  const written = await sql`
     INSERT INTO board_members (board_id, user_id, role, invited_by)
-    VALUES (${boardId}, ${userId}, ${finalRole}, ${requesterId})
-    ON CONFLICT (board_id, user_id) DO UPDATE SET role = ${finalRole}
+    SELECT b.id, ${userId}, ${finalRole}, ${requesterId}
+    FROM boards b
+    WHERE b.id = ${boardId} AND b.owner_id IS DISTINCT FROM ${userId}
+    ON CONFLICT (board_id, user_id) DO UPDATE SET role = EXCLUDED.role
+    RETURNING user_id
   `;
+  if (written.length === 0) {
+    return NextResponse.json({ error: "The board owner's role cannot be changed" }, { status: 400 });
+  }
 
   return NextResponse.json({ ok: true });
 }

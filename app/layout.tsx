@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
+import { ThemeScript } from '@/components/ThemeScript';
 import '@/styles/index.css';
 
 const geistSans = Geist({
@@ -48,11 +49,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       className={`${geistSans.variable} ${geistMono.variable}`}
     >
       <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('retro-theme');if(t==='light'||t==='dark'||t==='system')document.documentElement.setAttribute('data-theme',t)}catch(e){}})()`,
-          }}
-        />
+        <ThemeScript />
       </head>
       <body>{children}</body>
     </html>

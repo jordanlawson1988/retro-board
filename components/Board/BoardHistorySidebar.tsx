@@ -23,10 +23,17 @@ function formatRelativeDate(isoDate: string): string {
 }
 
 export function BoardHistorySidebar() {
-  const [entries, setEntries] = useState<BoardHistoryEntry[]>(() => getBoardHistory());
+  const [entries, setEntries] = useState<BoardHistoryEntry[]>([]);
   const [open, setOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+
+  // localStorage is client-only: read it after mount so the first client render
+  // matches the server HTML (which has no history).
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setEntries(getBoardHistory());
+  }, []);
 
   // Close on outside click
   useEffect(() => {

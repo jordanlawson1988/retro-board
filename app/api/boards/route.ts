@@ -25,7 +25,8 @@ export async function POST(request: Request) {
     // The server owns the creator's participant id; the client's suggestion is ignored.
     const creatorId = nanoid();
 
-    // Board, columns, creator participant and owner membership commit together or not at all.
+    // Board, columns and creator participant commit together or not at all. Ownership is
+    // boards.owner_id alone; the owner gets no board_members row.
     // The join code is generated per attempt; a collision on uq_boards_join_code rolls the whole
     // transaction back and retries with a new code (no pre-check round-trip).
     // The creator is always the facilitator; any isAdmin hint in the body is ignored.
@@ -46,14 +47,6 @@ export async function POST(request: Request) {
               txn`
               INSERT INTO participants (id, board_id, display_name, is_admin, user_id)
               VALUES (${creatorId}, ${id}, ${participant.displayName}, true, ${ownerId})
-            `,
-            ]
-          : []),
-        ...(ownerId
-          ? [
-              txn`
-              INSERT INTO board_members (board_id, user_id, role)
-              VALUES (${id}, ${ownerId}, 'owner')
             `,
             ]
           : []),

@@ -18,7 +18,7 @@ export interface BoardAccessInput {
   /** The signed-in user has a participants.user_id row on this board. */
   userMatchedParticipant: boolean;
   userIsOwner: boolean;
-  /** Any board_members row (participant, facilitator or owner). */
+  /** Any board_members row (facilitator, participant or viewer). The owner is userIsOwner. */
   userIsMember: boolean;
   userIsSystemAdmin: boolean;
 }

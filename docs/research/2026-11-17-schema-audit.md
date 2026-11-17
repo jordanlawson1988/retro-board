@@ -433,3 +433,15 @@ Record the ids and counts, take a Neon restore point, then apply 013 with the ru
 ### R8 result: join round-trips
 
 Every join path is now at most 2 database round-trips (loader plus one write). Signed-in new joiner 5 to 2, signed-in returning 3 to 2, anonymous unchanged at 2. The participant upsert and the `board_members` upsert are one `sqlTransaction`, so a failure can no longer leave a participant without membership.
+
+## 13. Ownership in one place (P11, decided 2026-11-17)
+
+Decision: `boards.owner_id` is the only place ownership is stored.
+
+- `board_members.role` no longer accepts `'owner'` (migration `014_single_owner_source.sql` replaces the CHECK). The owner has no `board_members` row.
+- Code: board creation no longer inserts an owner member row; a joining owner gets no member row; `resolveBoardAuthority` and the join route ignore a member role of `'owner'`; `GET /members` derives the owner row from `boards.owner_id`; `POST /members` cannot target the owner or store `'owner'`.
+- The `'owner'` string that the dashboard and members list show is derived (`BOARD_OWNER_ROLE`), never read from `board_members`.
+- Pre-check, dev and production, 2026-11-17: 26 owned boards, 26 `board_members` rows, all 26 are `role = 'owner'` for exactly `boards.owner_id`. 0 owner-role rows for a non-owner, 0 owned boards without the row. 014 therefore deletes 26 redundant rows on each and changes nothing else.
+- Deploy order: code first, then 014. Older code writes an `'owner'` row on every signed-in board creation, which the new CHECK rejects. The new code is correct on both sides of 014.
+- Not changed: `boards.created_by` is the creator's participant id (needed for boards made without an account); it is a different fact from account ownership. The remaining P11 items (`board_invites`, `board_retention_days`, `admin_users.email`) are still open.
+

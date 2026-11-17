@@ -63,23 +63,21 @@ export async function PATCH(
   if (denied) return denied;
 
 
-  if (updates.title !== undefined) {
-    await sql`UPDATE columns SET title = ${updates.title} WHERE id = ${columnId} AND board_id = ${boardId}`;
-  }
-  if (updates.color !== undefined) {
-    await sql`UPDATE columns SET color = ${updates.color} WHERE id = ${columnId} AND board_id = ${boardId}`;
-  }
-  if (updates.description !== undefined) {
-    await sql`UPDATE columns SET description = ${updates.description} WHERE id = ${columnId} AND board_id = ${boardId}`;
-  }
-  if (updates.sort_by !== undefined) {
-    if (!isCardSort(updates.sort_by)) {
-      return NextResponse.json({ error: 'Invalid sort_by' }, { status: 400 });
-    }
-    await sql`UPDATE columns SET sort_by = ${updates.sort_by} WHERE id = ${columnId} AND board_id = ${boardId}`;
+  if (updates.sort_by !== undefined && !isCardSort(updates.sort_by)) {
+    return NextResponse.json({ error: 'Invalid sort_by' }, { status: 400 });
   }
 
-  const [column] = await sql`SELECT * FROM columns WHERE id = ${columnId} AND board_id = ${boardId}`;
+  // One atomic statement: provided fields are written, the rest keep their value.
+  const has = (k: string) => updates[k] !== undefined;
+  const [column] = await sql`
+    UPDATE columns SET
+      title = CASE WHEN ${has('title')}::boolean THEN ${updates.title ?? null}::text ELSE title END,
+      color = CASE WHEN ${has('color')}::boolean THEN ${updates.color ?? null}::text ELSE color END,
+      description = CASE WHEN ${has('description')}::boolean THEN ${updates.description ?? null}::text ELSE description END,
+      sort_by = CASE WHEN ${has('sort_by')}::boolean THEN ${updates.sort_by ?? null}::text ELSE sort_by END
+    WHERE id = ${columnId} AND board_id = ${boardId}
+    RETURNING *
+  `;
 
   const channel = ablyServer.channels.get(`retro-board:${boardId}`);
   await channel.publish('column-updated', { column });

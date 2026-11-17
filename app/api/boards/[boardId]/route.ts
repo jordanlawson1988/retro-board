@@ -7,7 +7,7 @@ import { shapeCard, shapeVotes, isRevealingChange, PUBLIC_VIEWER, type ViewBoard
 import { DEFAULT_BOARD_SETTINGS } from '@/utils/constants';
 import type { BoardSettings, Card, Vote } from '@/types';
 import { readJsonObject, isPlainObject } from '@/lib/request-body';
-import { INVALID_BODY } from '@/lib/board-validation';
+import { INVALID_BODY, validateSettingsPatch } from '@/lib/board-validation';
 import { patchNeedsSettingsGuard, resolveYouAre } from '@/lib/board-write-rules';
 import { boardAccessFrom } from '@/lib/board-access-loader';
 import { BOARD_ACCESS } from '@/lib/constants/board-access';
@@ -136,6 +136,7 @@ export async function GET(
 }
 
 // Rename / settings update. Facilitator (owner/facilitator/admin) only.
+// Two statements in total: the context query (loadBoardActor) and one UPDATE ... RETURNING.
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ boardId: string }> }
@@ -147,6 +148,21 @@ export async function PATCH(
     return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
   }
 
+  // Validate everything before touching the database.
+  const hasTitle = typeof body.title === 'string';
+  const title = hasTitle ? (body.title as string).trim() : null;
+  if (hasTitle && !title) {
+    return NextResponse.json({ error: 'Title cannot be empty' }, { status: 400 });
+  }
+  const hasDescription = body.description !== undefined;
+  const description = body.description === null || body.description === undefined ? null : String(body.description);
+  let settingsPatch: Partial<BoardSettings> | null = null;
+  if (body.settings !== undefined) {
+    const valid = validateSettingsPatch(body.settings as Record<string, unknown>);
+    if (!valid.ok) return NextResponse.json({ error: valid.error }, { status: 400 });
+    settingsPatch = valid.value;
+  }
+
   let prevSettings: BoardSettings | null = null;
   if (patchNeedsSettingsGuard(body)) {
     // Settings changes go through the actor so a v2 creator without an account can change them.
@@ -156,45 +172,48 @@ export async function PATCH(
     if (denied) return denied;
     prevSettings = loaded.state.settings;
   } else {
-    // Rename / description only: facilitators may still rename a completed board.
-    try {
-      await assertCanFacilitate(boardId);
-    } catch (e) {
-      const r = authFail(e);
-      if (r) return r;
-      throw e;
+    // Rename / description only: signed-in facilitator authority (owner, facilitator member,
+    // system admin), read from the same one-query context. Facilitators may still rename a
+    // completed or trashed board. Not destructive, so the cached session is enough here.
+    const loaded = await loadBoardActor(request, boardId, null, { includeDeleted: true });
+    if (!loaded || !loaded.userId) {
+      return NextResponse.json({ error: 'Sign in required' }, { status: 401 });
+    }
+    if (!loaded.authority?.canFacilitate) {
+      return NextResponse.json({ error: 'Facilitator access required' }, { status: 403 });
     }
   }
+
+  if (!hasTitle && !hasDescription && settingsPatch === null) {
+    return NextResponse.json({ ok: true });
+  }
+
+  // One atomic statement. Settings merge key by key (nested values such as `timer` are replaced
+  // whole per top-level key), so concurrent changes to different keys cannot undo each other.
+  const [row] = await sql`
+    UPDATE boards SET
+      title = CASE WHEN ${hasTitle}::boolean THEN ${title}::text ELSE title END,
+      description = CASE WHEN ${hasDescription}::boolean THEN ${description}::text ELSE description END,
+      settings = CASE WHEN ${settingsPatch !== null}::boolean
+        THEN settings || ${JSON.stringify(settingsPatch ?? {})}::jsonb ELSE settings END
+    WHERE id = ${boardId}
+    RETURNING title, description, settings
+  `;
+  if (!row) return BOARD_NOT_FOUND();
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const changed: Record<string, any> = {};
+  if (hasTitle) changed.title = row.title;
+  if (hasDescription) changed.description = row.description;
+  // Clients replace their settings with the event's, so publish the merged result, not the patch.
+  if (settingsPatch !== null) changed.settings = row.settings;
 
-  if (typeof body.title === 'string') {
-    const title = body.title.trim();
-    if (!title) {
-      return NextResponse.json({ error: 'Title cannot be empty' }, { status: 400 });
-    }
-    await sql`UPDATE boards SET title = ${title} WHERE id = ${boardId}`;
-    changed.title = title;
-  }
-
-  if (body.description !== undefined) {
-    const description = body.description === null ? null : String(body.description);
-    await sql`UPDATE boards SET description = ${description} WHERE id = ${boardId}`;
-    changed.description = description;
-  }
-
-  if (body.settings !== undefined) {
-    await sql`UPDATE boards SET settings = ${JSON.stringify(body.settings)} WHERE id = ${boardId}`;
-    changed.settings = body.settings;
-  }
-
-  if (Object.keys(changed).length > 0) {
-    const channel = ablyServer.channels.get(`retro-board:${boardId}`);
-    // Revealing hidden cards, votes or authors means clients must refetch shaped data.
-    const nextSettings = { ...DEFAULT_BOARD_SETTINGS, ...(body.settings ?? {}) } as BoardSettings;
-    const refetch = prevSettings !== null && isRevealingChange(prevSettings, nextSettings);
-    await channel.publish('board-updated', refetch ? { ...changed, refetch: true } : changed);
-  }
+  const channel = ablyServer.channels.get(`retro-board:${boardId}`);
+  // Revealing hidden cards, votes or authors means clients must refetch shaped data. Compare the
+  // loaded settings with the MERGED result, never with the partial patch.
+  const nextSettings = { ...DEFAULT_BOARD_SETTINGS, ...(row.settings as Partial<BoardSettings>) } as BoardSettings;
+  const refetch = prevSettings !== null && isRevealingChange(prevSettings, nextSettings);
+  await channel.publish('board-updated', refetch ? { ...changed, refetch: true } : changed);
 
   return NextResponse.json({ ok: true });
 }

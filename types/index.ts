@@ -16,6 +16,7 @@ export interface Board {
 }
 
 export type { BoardAccess } from '@/lib/constants/board-access';
+import type { CardVisibility, TimerStatus } from '@/lib/constants/board-settings';
 
 /** What the board GET returns as `board` to someone locked out of a completed board. */
 export type ClosedBoardStub = Pick<Board, 'id' | 'title' | 'archived_at' | 'trust_version'>;
@@ -47,7 +48,7 @@ export type BoardView = 'grid' | 'swimlane' | 'list' | 'timeline';
 export type ConnectionStatus = 'connected' | 'disconnected' | 'reconnected' | 'polling';
 
 export interface BoardSettings {
-  card_visibility: 'hidden' | 'visible';
+  card_visibility: CardVisibility;
   voting_enabled: boolean;
   max_votes_per_participant: number;
   secret_voting: boolean;
@@ -61,7 +62,7 @@ export interface BoardSettings {
 export interface TimerState {
   duration: number; // total seconds
   remaining: number; // seconds remaining
-  status: 'idle' | 'running' | 'paused' | 'expired';
+  status: TimerStatus;
   started_at: string | null;
 }
 

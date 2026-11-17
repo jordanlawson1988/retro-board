@@ -332,7 +332,9 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     const res = await fetch(`/api/boards/${board.id}`, {
       method: 'PATCH',
       headers: JSON_HEADERS,
-      body: JSON.stringify({ settings: newSettings }),
+      // Only the keys this action changed: the server merges them, so a concurrent change to a
+      // different key (a co-facilitator's reveal, say) is never overwritten by our stale copy.
+      body: JSON.stringify({ settings: settingsUpdate }),
     });
 
     if (!res.ok) {

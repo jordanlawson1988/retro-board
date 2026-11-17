@@ -71,20 +71,17 @@ export async function PATCH(
   const denied = guardResponse(checkAction('action-item.write', loaded.actor, loaded.state));
   if (denied) return denied;
 
-  if (updates.description !== undefined) {
-    await sql`UPDATE action_items SET description = ${updates.description} WHERE id = ${itemId} AND board_id = ${boardId}`;
-  }
-  if (updates.assignee !== undefined) {
-    await sql`UPDATE action_items SET assignee = ${updates.assignee} WHERE id = ${itemId} AND board_id = ${boardId}`;
-  }
-  if (updates.due_date !== undefined) {
-    await sql`UPDATE action_items SET due_date = ${updates.due_date} WHERE id = ${itemId} AND board_id = ${boardId}`;
-  }
-  if (updates.status !== undefined) {
-    await sql`UPDATE action_items SET status = ${updates.status} WHERE id = ${itemId} AND board_id = ${boardId}`;
-  }
-
-  const [item] = await sql`SELECT * FROM action_items WHERE id = ${itemId} AND board_id = ${boardId}`;
+  // One atomic statement: provided fields are written, the rest keep their value.
+  const has = (k: string) => updates[k] !== undefined;
+  const [item] = await sql`
+    UPDATE action_items SET
+      description = CASE WHEN ${has('description')}::boolean THEN ${updates.description ?? null}::text ELSE description END,
+      assignee = CASE WHEN ${has('assignee')}::boolean THEN ${updates.assignee ?? null}::text ELSE assignee END,
+      due_date = CASE WHEN ${has('due_date')}::boolean THEN ${updates.due_date ?? null}::date ELSE due_date END,
+      status = CASE WHEN ${has('status')}::boolean THEN ${updates.status ?? null}::text ELSE status END
+    WHERE id = ${itemId} AND board_id = ${boardId}
+    RETURNING *
+  `;
   if (!item) return ITEM_NOT_FOUND();
 
   const channel = ablyServer.channels.get(`retro-board:${boardId}`);

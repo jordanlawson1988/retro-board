@@ -1,5 +1,13 @@
 import { ACTION_ITEM_STATUSES } from '@/types';
+import type { BoardSettings } from '@/types';
 import { isPlainObject } from '@/lib/request-body';
+import {
+  CARD_VISIBILITIES,
+  TIMER_STATUSES,
+  MAX_VOTES_PER_PARTICIPANT_RANGE,
+  TIMER_MAX_SECONDS,
+  HIGHLIGHTED_ID_MAX,
+} from '@/lib/constants/board-settings';
 
 export type Validation = { ok: true } | { ok: false; error: string };
 const OK: Validation = { ok: true };
@@ -71,6 +79,53 @@ export function validateColumnFields(u: Record<string, unknown>): Validation {
   if (u.color !== undefined && !isString(u.color)) return bad('Invalid color');
   if (u.description !== undefined && !isStringOrNull(u.description)) return bad('Invalid description');
   return OK;
+}
+
+const isBool = (v: unknown): v is boolean => typeof v === 'boolean';
+const isSecondsIn = (v: unknown): boolean => isFiniteNumber(v) && v >= 0 && v <= TIMER_MAX_SECONDS;
+
+function validTimer(v: unknown): boolean {
+  if (!isPlainObject(v)) return false;
+  const keys = Object.keys(v);
+  const allowed = ['duration', 'remaining', 'status', 'started_at'];
+  return (
+    keys.length === allowed.length &&
+    keys.every((k) => allowed.includes(k)) &&
+    isSecondsIn(v.duration) &&
+    isSecondsIn(v.remaining) &&
+    (TIMER_STATUSES as readonly unknown[]).includes(v.status) &&
+    (v.started_at === null || (typeof v.started_at === 'string' && !Number.isNaN(Date.parse(v.started_at))))
+  );
+}
+
+/**
+ * One checker per key of BoardSettings. Typing the table by the interface means a new setting
+ * fails to compile until it is listed here; the unit test then proves every default passes.
+ */
+const SETTING_CHECKS: { [K in keyof BoardSettings]: (v: unknown) => boolean } = {
+  card_visibility: (v) => (CARD_VISIBILITIES as readonly unknown[]).includes(v),
+  voting_enabled: isBool,
+  max_votes_per_participant: (v) =>
+    Number.isInteger(v) &&
+    (v as number) >= MAX_VOTES_PER_PARTICIPANT_RANGE.min &&
+    (v as number) <= MAX_VOTES_PER_PARTICIPANT_RANGE.max,
+  secret_voting: isBool,
+  board_locked: isBool,
+  card_creation_disabled: isBool,
+  anonymous_cards: isBool,
+  timer: validTimer,
+  highlighted_card_id: (v) => v === null || (typeof v === 'string' && v.length > 0 && v.length <= HIGHLIGHTED_ID_MAX),
+};
+
+/** Validate a board settings PATCH: only known top-level keys, each with a valid value. */
+export function validateSettingsPatch(
+  p: Record<string, unknown>
+): { ok: true; value: Partial<BoardSettings> } | { ok: false; error: string } {
+  for (const key of Object.keys(p)) {
+    if (!Object.prototype.hasOwnProperty.call(SETTING_CHECKS, key)) return { ok: false, error: `Unknown setting: ${key}` };
+    if (!SETTING_CHECKS[key as keyof BoardSettings](p[key])) return { ok: false, error: `Invalid value for setting: ${key}` };
+  }
+  return { ok: true, value: p as Partial<BoardSettings> };
 }
 
 export interface NewBoardInput {

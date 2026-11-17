@@ -44,11 +44,13 @@ export async function PATCH(
     if (!protectedDenial.ok) return guardResponse(protectedDenial)!;
   }
 
-  if (updates.is_admin !== undefined) {
-    await sql`UPDATE participants SET is_admin = ${updates.is_admin} WHERE id = ${participantId} AND board_id = ${boardId}`;
-  }
-
-  const [participant] = await sql`SELECT * FROM participants WHERE id = ${participantId} AND board_id = ${boardId}`;
+  // One atomic statement (a no-op write when nothing was provided, which still returns the row).
+  const [participant] = await sql`
+    UPDATE participants SET
+      is_admin = CASE WHEN ${updates.is_admin !== undefined}::boolean THEN ${updates.is_admin ?? null}::boolean ELSE is_admin END
+    WHERE id = ${participantId} AND board_id = ${boardId}
+    RETURNING *
+  `;
 
   const channel = ablyServer.channels.get(`retro-board:${boardId}`);
   await channel.publish('participant-updated', { participant });

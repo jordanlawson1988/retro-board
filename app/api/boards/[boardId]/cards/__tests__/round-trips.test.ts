@@ -56,6 +56,29 @@ beforeEach(() => {
 });
 
 describe('card POST', () => {
+  it('rejects an over-long or malformed id with 400 before touching the database', async () => {
+    for (const id of ['x'.repeat(65), '', 'a b']) {
+      const res = await POST(req('POST', { id, columnId: 'col1', text: 'hi', position: 1 }), ctx);
+      expect(res.status).toBe(400);
+      expect(typeof (await res.json()).error).toBe('string');
+    }
+    expect(mocks.sql).not.toHaveBeenCalled();
+  });
+
+  it('duplicate card id (23505 on cards_pkey) is 409', async () => {
+    const dup = Object.assign(new Error('dup'), { code: '23505', constraint: 'cards_pkey' });
+    mocks.sql.mockResolvedValueOnce([ctxRow()]).mockRejectedValueOnce(dup);
+    const res = await POST(req('POST', { id: 'c1', columnId: 'col1', text: 'hi', position: 1 }), ctx);
+    expect(res.status).toBe(409);
+    expect(typeof (await res.json()).error).toBe('string');
+  });
+
+  it('a unique violation on another constraint still propagates', async () => {
+    const other = Object.assign(new Error('dup'), { code: '23505', constraint: 'something_else' });
+    mocks.sql.mockResolvedValueOnce([ctxRow()]).mockRejectedValueOnce(other);
+    await expect(POST(req('POST', { id: 'c1', columnId: 'col1', text: 'hi', position: 1 }), ctx)).rejects.toBe(other);
+  });
+
   it('v2: context query + one INSERT, name from the cookie participant', async () => {
     mocks.sql.mockResolvedValueOnce([ctxRow()]).mockResolvedValueOnce([cardRow]);
     const res = await POST(req('POST', { id: 'c1', columnId: 'col1', text: 'hi', position: 1 }), ctx);

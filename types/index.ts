@@ -15,6 +15,11 @@ export interface Board {
   trust_version: 1 | 2;          // 1 = legacy client-trusted identity; 2 = signed participant sessions
 }
 
+export type { BoardAccess } from '@/lib/constants/board-access';
+
+/** What the board GET returns as `board` to someone locked out of a completed board. */
+export type ClosedBoardStub = Pick<Board, 'id' | 'title' | 'archived_at' | 'trust_version'>;
+
 /** Board view-model from /api/user/boards: board fields + activity counts + this user's role. */
 export interface DashboardBoard {
   id: string;

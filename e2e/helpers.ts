@@ -234,3 +234,19 @@ export async function waitForRealtime(cap: Capture, boardId: string, sinceFrame 
     )
     .toBe(true);
 }
+
+/**
+ * Set or clear archived_at on ONE board we created (any trust version). Same dev-only guard.
+ * Stands in for complete/reopen when the caller has no owner account: the real reopen
+ * action needs a signed-in owner and sign-up is behind a CAPTCHA.
+ */
+export async function setArchivedDirect(boardId: string, archived: boolean): Promise<void> {
+  const url = process.env.DATABASE_URL ?? '';
+  if (process.env.NEON_BRANCH !== 'dev') throw new Error('setArchivedDirect refuses to run unless NEON_BRANCH=dev');
+  if (url.includes('ep-delicate-star')) throw new Error('setArchivedDirect refuses to run against the production host');
+  const db = neon(url);
+  const rows = archived
+    ? await db`UPDATE boards SET archived_at = now() WHERE id = ${boardId} AND title = ${`e2e ${boardId}`} RETURNING id`
+    : await db`UPDATE boards SET archived_at = NULL WHERE id = ${boardId} AND title = ${`e2e ${boardId}`} RETURNING id`;
+  if (rows.length !== 1) throw new Error(`setArchivedDirect touched ${rows.length} rows`);
+}

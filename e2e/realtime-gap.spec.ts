@@ -29,7 +29,7 @@ test('events published between the board GET and the Ably attach are not lost', 
   });
 
   const boardGet = pageB.waitForResponse(
-    (r) => r.url().endsWith(`/api/boards/${boardId}`) && r.request().method() === 'GET'
+    (r) => new URL(r.url()).pathname === `/api/boards/${boardId}` && r.request().method() === 'GET'
   );
   await pageB.reload();
   await boardGet;

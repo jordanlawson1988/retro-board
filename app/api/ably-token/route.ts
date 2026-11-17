@@ -1,6 +1,8 @@
 import { ablyServer } from '@/lib/ably-server';
 import { NextRequest } from 'next/server';
 import { loadBoardActor } from '@/lib/board-actor';
+import { loadBoardAccess } from '@/lib/board-access-loader';
+import { BOARD_ACCESS, BOARD_COMPLETED_ERROR } from '@/lib/constants/board-access';
 
 // Mints a token usable ONLY on the requested board's two channels.
 // Anonymous access is by design (participants have no accounts); the
@@ -28,6 +30,22 @@ export async function GET(request: NextRequest) {
   } else {
     if (!queryClientId) return new Response('Missing clientId', { status: 400 });
     clientId = queryClientId;
+  }
+
+  // A completed board follows the same allowed-viewer rule as the board GET. On v1 the
+  // claimed clientId is the identity (best effort, see lib/board-access.ts).
+  if (loaded.board.archived_at) {
+    const decision = await loadBoardAccess({
+      boardId,
+      trustVersion: loaded.board.trust_version,
+      archived: true,
+      userId: loaded.actor.userId,
+      cookieParticipantId: loaded.board.trust_version === 2 ? loaded.actor.participantId : null,
+      claimedParticipantId: loaded.board.trust_version === 1 ? clientId : null,
+    });
+    if (decision.access === BOARD_ACCESS[1]) {
+      return new Response(BOARD_COMPLETED_ERROR, { status: 403 });
+    }
   }
 
   const tokenRequest = await ablyServer.auth.createTokenRequest({

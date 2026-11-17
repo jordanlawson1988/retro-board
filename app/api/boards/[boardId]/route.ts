@@ -9,6 +9,8 @@ import type { BoardSettings, Card, Vote } from '@/types';
 import { readJsonObject, isPlainObject } from '@/lib/request-body';
 import { INVALID_BODY } from '@/lib/board-validation';
 import { patchNeedsSettingsGuard, resolveYouAre } from '@/lib/board-write-rules';
+import { loadBoardAccess } from '@/lib/board-access-loader';
+import { BOARD_ACCESS } from '@/lib/constants/board-access';
 import {
   getSessionOrNull,
   assertCanFacilitate,
@@ -60,6 +62,39 @@ export async function GET(
     settings: loaded?.board.settings ?? { ...DEFAULT_BOARD_SETTINGS, ...(board.settings ?? {}) },
     archived_at: board.archived_at ?? null,
   };
+
+  // Who may see this board's content and action items (Rules A and B). One shared decision.
+  // v1 limitation: identity is the claimed `pid` query value, so on legacy boards anyone who
+  // knows a participant id passes as that participant. v2 ignores `pid` entirely.
+  const claimedPid = request.nextUrl.searchParams.get('pid');
+  const access = await loadBoardAccess({
+    boardId,
+    trustVersion: viewBoard.trust_version,
+    archived: !!viewBoard.archived_at,
+    userId,
+    cookieParticipantId: viewBoard.trust_version === 2 ? (loaded?.actor.participantId ?? null) : null,
+    claimedParticipantId: viewBoard.trust_version === 1 && claimedPid ? claimedPid.slice(0, 200) : null,
+  });
+
+  if (access.access === BOARD_ACCESS[1]) {
+    return NextResponse.json({
+      access: access.access,
+      board: {
+        id: board.id,
+        title: board.title,
+        archived_at: board.archived_at,
+        trust_version: viewBoard.trust_version,
+      },
+      columns: [],
+      cards: [],
+      votes: [],
+      actionItems: [],
+      participants: [],
+      yourParticipantId: null,
+      youCanFacilitate: false,
+      youAre: { participantId: null, isFacilitator: false, joined: false },
+    });
+  }
 
   const [columns, cards, votes, actionItems, participants] = await Promise.all([
     sql`SELECT * FROM columns WHERE board_id = ${boardId} ORDER BY position`,
@@ -123,8 +158,10 @@ export async function GET(
     columns,
     cards: (cards as unknown as Card[]).map((c) => shapeCard(c, viewBoard, viewer)),
     votes: shapeVotes(votes as unknown as Vote[], viewBoard, viewer),
-    actionItems,
+    // Rule A: action items only for people who are part of the board.
+    actionItems: access.canViewDetail ? actionItems : [],
     participants,
+    access: access.access,
     yourParticipantId,
     youCanFacilitate,
     youAre,

@@ -59,8 +59,11 @@ async function addItem(ctx: APIRequestContext, boardId: string, extra: Record<st
   return (await res.json()).item as { id: string; description: string; status: string; created_by: string | null; board_id: string };
 }
 
-async function items(ctx: APIRequestContext, boardId: string) {
-  return (await getBoard(ctx, boardId)).actionItems as Array<{
+/** Read action items from the board GET. `legacyPid` is the claimed participant id (v1 boards only). */
+async function items(ctx: APIRequestContext, boardId: string, legacyPid?: string) {
+  const res = await ctx.get(`/api/boards/${boardId}${legacyPid ? `?pid=${encodeURIComponent(legacyPid)}` : ''}`);
+  expect(res.status()).toBe(200);
+  return ((await res.json()).actionItems) as Array<{
     id: string;
     description: string;
     status: string;
@@ -414,13 +417,14 @@ test.describe('action items: observed edge behaviour', () => {
 });
 
 test.describe('action items: what each viewer can READ (board GET)', () => {
-  test('documented behaviour: actionItems are NOT shaped; anonymous, participant and facilitator all receive every item with created_by', async ({ playwright, baseURL }) => {
+  test('documented behaviour: participant and facilitator receive every item with created_by; an unjoined caller receives none (Rule A)', async ({ playwright, baseURL }) => {
     const { a, b, aId, bId, boardId } = await boardWithAliceAndBob(playwright, baseURL!);
     const byA = await addItem(a, boardId, { assignee: 'Alice', dueDate: '2030-03-03' });
     const byB = await addItem(b, boardId);
     const anon = await identity(playwright, baseURL!);
 
-    for (const [label, ctx] of [['anonymous', anon], ['participant', b], ['facilitator', a]] as const) {
+    expect(await items(anon, boardId), 'anonymous').toEqual([]);
+    for (const [label, ctx] of [['participant', b], ['facilitator', a]] as const) {
       const got = await items(ctx, boardId);
       expect(got.map((i) => i.id).sort(), label).toEqual([byA.id, byB.id].sort());
       const a1 = got.find((i) => i.id === byA.id)!;
@@ -429,12 +433,12 @@ test.describe('action items: what each viewer can READ (board GET)', () => {
     }
   });
 
-  test('a viewer with a forged cookie reads the same items (read path has no auth; board is addressable by id)', async ({ playwright, baseURL }) => {
+  test('a viewer with a forged cookie is unjoined and reads no items', async ({ playwright, baseURL }) => {
     const { a, aId, boardId } = await boardWithAliceAndBob(playwright, baseURL!);
     await addItem(a, boardId);
     const forged = await withRawCookie(playwright, baseURL!, `rb_ps_${boardId}`, aId);
     contexts.push(forged);
-    expect(await items(forged, boardId)).toHaveLength(1);
+    expect(await items(forged, boardId)).toEqual([]);
   });
 });
 
@@ -462,7 +466,7 @@ test.describe('v1 (legacy) board: action items', () => {
     // Update and delete need no identity on v1, and status validation still applies.
     expect((await anon.patch(url(boardId), { data: { itemId: item.id, updates: { status: 'done' } } })).status()).toBe(200);
     expect((await anon.patch(url(boardId), { data: { itemId: item.id, updates: { status: 'bogus' } } })).status()).toBe(400);
-    expect((await items(anon, boardId)).find((i) => i.id === item.id)!.status).toBe('done');
+    expect((await items(anon, boardId, legacyId)).find((i) => i.id === item.id)!.status).toBe('done');
 
     // Lock: v1 has no facilitator-from-body, so everyone anonymous gets 409.
     await legacyUpdate(boardId, { settingsPatch: { board_locked: true } });
@@ -475,7 +479,7 @@ test.describe('v1 (legacy) board: action items', () => {
     expect((await anon.delete(url(boardId), { data: { itemId: item.id } })).status()).toBe(200);
     await legacyUpdate(boardId, { archived: true });
     expect((await anon.post(url(boardId), { data: { description: 'late' } })).status()).toBe(409);
-    expect((await anon.delete(url(boardId), { data: { itemId: (await items(anon, boardId))[0].id } })).status()).toBe(409);
+    expect((await anon.delete(url(boardId), { data: { itemId: (await items(anon, boardId, legacyId))[0].id } })).status()).toBe(409);
   });
 
   test('v1: a createdBy that is not a participant is a 4xx, not a 500', async ({ playwright, baseURL }) => {

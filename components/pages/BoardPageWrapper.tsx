@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AblyProvider } from '@/components/providers/AblyProvider';
 import { BoardPage } from '@/components/pages/BoardPage';
@@ -10,11 +11,13 @@ import { usePresence } from '@/hooks/usePresence';
 import { ChannelProvider } from 'ably/react';
 import { AppShell } from '@/components/Layout';
 import { Button, Input, Modal } from '@/components/common';
+import { BOARD_ACCESS, COMPLETED_CLOSED_MESSAGE } from '@/lib/constants/board-access';
 
 export function BoardPageWrapper({ boardId }: { boardId: string }) {
   const currentParticipantId = useBoardStore((s) => s.currentParticipantId);
   const board = useBoardStore((s) => s.board);
   const youAre = useBoardStore((s) => s.youAre);
+  const access = useBoardStore((s) => s.access);
   const loading = useBoardStore((s) => s.loading);
   const error = useBoardStore((s) => s.error);
   const fetchBoard = useBoardStore((s) => s.fetchBoard);
@@ -74,6 +77,27 @@ export function BoardPageWrapper({ boardId }: { boardId: string }) {
             <Button className="mt-6" onClick={() => router.push('/')}>
               Go Home
             </Button>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
+
+  // Completed board this browser was never part of (or a viewer with no participant row, who
+  // cannot join a completed board): no join form, no content, no realtime connection.
+  if (access === BOARD_ACCESS[1] || (board.archived_at && !currentParticipantId)) {
+    return (
+      <AppShell>
+        <div className="flex min-h-[60vh] items-center justify-center">
+          <div className="max-w-md px-6 text-center">
+            <h2 className="text-[var(--color-gray-8)]">{board.title}</h2>
+            <p className="mt-2 text-[var(--color-gray-5)]">{COMPLETED_CLOSED_MESSAGE}</p>
+            <Link
+              href="/"
+              className="mt-6 inline-flex items-center justify-center rounded-[var(--r-md)] border border-transparent bg-[var(--ink)] px-3.5 py-2.5 text-[13px] font-medium leading-none text-[var(--bg-elev)] hover:bg-[var(--ink-2)]"
+            >
+              Go Home
+            </Link>
           </div>
         </div>
       </AppShell>

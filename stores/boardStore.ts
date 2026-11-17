@@ -7,6 +7,8 @@ import { BOARD_TEMPLATES } from '@/utils/templates';
 import { saveBoardToHistory } from '@/utils/boardHistory';
 import { mergeIncomingCard } from '@/lib/mergeIncomingCard';
 import { useAppSettingsStore } from '@/stores/appSettingsStore';
+import { BOARD_ACCESS } from '@/lib/constants/board-access';
+import type { BoardAccess } from '@/types';
 import type { Board, Column, Card, Vote, ActionItem, Participant, BoardTemplate, BoardSettings, ConnectionStatus } from '@/types';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -76,6 +78,8 @@ interface BoardState {
   currentParticipantId: string | null;
   youCanFacilitate: boolean;
   youAre: YouAre | null;
+  /** 'completed-closed' = the board is completed and this browser was not part of it. */
+  access: BoardAccess;
   lastWriteError: string | null;
   clearWriteError: () => void;
 
@@ -133,6 +137,7 @@ const initialState = {
   currentParticipantId: null as string | null,
   youCanFacilitate: false,
   youAre: null as YouAre | null,
+  access: BOARD_ACCESS[0] as BoardAccess,
   lastWriteError: null as string | null,
   onlineParticipantIds: [] as string[],
 };
@@ -219,7 +224,13 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       set({ loading: true, error: null });
     }
 
-    const res = await fetch(`/api/boards/${boardId}`);
+    // The stored participant id is sent for legacy (v1) boards, where the server has no other
+    // way to know who this is. Boards on the signed-cookie model ignore it.
+    let claimedPid: string | null = null;
+    try { claimedPid = localStorage.getItem(`retro-pid-${boardId}`); } catch { /* ignore */ }
+    const res = await fetch(
+      `/api/boards/${boardId}${claimedPid ? `?pid=${encodeURIComponent(claimedPid)}` : ''}`
+    );
 
     if (!res.ok) {
       // A transient server failure during a background refresh must not blank a loaded board.
@@ -229,7 +240,19 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       return;
     }
 
-    const { board, columns, cards, votes, actionItems, participants, yourParticipantId, youCanFacilitate, youAre } = await res.json();
+    const { board, columns, cards, votes, actionItems, participants, yourParticipantId, youCanFacilitate, youAre, access } = await res.json();
+
+    // Completed and not part of it: keep only the stub. No history entry, no participant.
+    if (access === BOARD_ACCESS[1]) {
+      set({
+        ...initialState,
+        board: board as Board,
+        access: BOARD_ACCESS[1],
+        youAre: { participantId: null, isFacilitator: false, joined: false },
+        loading: false,
+      });
+      return;
+    }
 
     const storageKey = `retro-pid-${boardId}`;
     let resolvedParticipantId: string | null;
@@ -283,6 +306,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       actionItems: actionItems || [],
       participants: participants || [],
       currentParticipantId: resolvedParticipantId,
+      access: BOARD_ACCESS[0],
       youCanFacilitate: !!youCanFacilitate,
       youAre: youAre
         ? {

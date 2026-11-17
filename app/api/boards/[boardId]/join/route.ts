@@ -7,6 +7,8 @@ import { setParticipantCookie, readParticipantId } from '@/lib/participant-sessi
 import { rateLimitOr429 } from '@/lib/rate-limit';
 import { readJsonObject } from '@/lib/request-body';
 import { validateDisplayName, INVALID_BODY } from '@/lib/board-validation';
+import { loadBoardAccess } from '@/lib/board-access-loader';
+import { BOARD_COMPLETED_ERROR } from '@/lib/constants/board-access';
 
 export async function POST(
   request: Request,
@@ -37,6 +39,22 @@ export async function POST(
     return res;
   };
   const userId = loaded.actor.userId;
+
+  // A completed board takes no new participants. Existing ones (cookie row, a claimed v1 id
+  // that exists, or a signed-in user matched to a row) may still re-establish their session.
+  if (loaded.board.archived_at) {
+    const decision = await loadBoardAccess({
+      boardId,
+      trustVersion: loaded.board.trust_version,
+      archived: true,
+      userId,
+      cookieParticipantId: isV2 ? loaded.actor.participantId : null,
+      claimedParticipantId: !isV2 ? participantId : null,
+    });
+    if (!decision.canJoin) {
+      return NextResponse.json({ error: BOARD_COMPLETED_ERROR }, { status: 409 });
+    }
+  }
 
   // If authenticated, reuse any existing participant this user has on the board.
   // Prefer admin record when multiple exist (handles pre-resolver multi-device joins).
@@ -69,6 +87,15 @@ export async function POST(
     if (reused) {
       return withCookie(NextResponse.json({ participant: reused, reused: true }), reused.id);
     }
+  }
+
+  // Completed v1 board: re-establishing with an id that already exists is a reuse, not an insert.
+  if (!isV2 && loaded.board.archived_at) {
+    const [reused] = await sql`
+      UPDATE participants SET display_name = ${displayName}, last_seen = now()
+      WHERE id = ${participantId} AND board_id = ${boardId} RETURNING *
+    `;
+    if (reused) return NextResponse.json({ participant: reused, reused: true });
   }
 
   // Owner/facilitator auto-promotion: only from the server-side ownership

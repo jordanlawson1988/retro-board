@@ -1,7 +1,7 @@
 import { ablyServer } from '@/lib/ably-server';
 import { NextRequest } from 'next/server';
 import { loadBoardActor } from '@/lib/board-actor';
-import { loadBoardAccess } from '@/lib/board-access-loader';
+import { boardAccessFrom } from '@/lib/board-access-loader';
 import { BOARD_ACCESS, BOARD_COMPLETED_ERROR } from '@/lib/constants/board-access';
 
 // Mints a token usable ONLY on the requested board's two channels.
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     return new Response('Missing boardId', { status: 400 });
   }
 
-  const loaded = await loadBoardActor(request, boardId);
+  const loaded = await loadBoardActor(request, boardId, null, { claimedParticipantId: queryClientId });
   if (!loaded) {
     return new Response('Unknown board', { status: 404 });
   }
@@ -35,14 +35,7 @@ export async function GET(request: NextRequest) {
   // A completed board follows the same allowed-viewer rule as the board GET. On v1 the
   // claimed clientId is the identity (best effort, see lib/board-access.ts).
   if (loaded.board.archived_at) {
-    const decision = await loadBoardAccess({
-      boardId,
-      trustVersion: loaded.board.trust_version,
-      archived: true,
-      userId: loaded.actor.userId,
-      cookieParticipantId: loaded.board.trust_version === 2 ? loaded.actor.participantId : null,
-      claimedParticipantId: loaded.board.trust_version === 1 ? clientId : null,
-    });
+    const decision = boardAccessFrom(loaded);
     if (decision.access === BOARD_ACCESS[1]) {
       return new Response(BOARD_COMPLETED_ERROR, { status: 403 });
     }

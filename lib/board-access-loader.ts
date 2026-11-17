@@ -1,4 +1,5 @@
 import { sql } from '@/lib/db';
+import type { LoadedBoard } from '@/lib/board-actor';
 import { decideBoardAccess, type BoardAccessDecision } from '@/lib/board-access';
 
 export interface LoadBoardAccessInput {
@@ -49,5 +50,22 @@ export async function loadBoardAccess(i: LoadBoardAccessInput): Promise<BoardAcc
     userIsOwner,
     userIsMember,
     userIsSystemAdmin,
+  });
+}
+
+/**
+ * The same decision with no database call, from a board already loaded by `loadBoardActor`.
+ * v2 counts only the signed-cookie participant; v1 counts only a claimed id that exists
+ * (`LoadBoardActorOptions.claimedParticipantId`). Both are already enforced by the loader.
+ */
+export function boardAccessFrom(loaded: LoadedBoard): BoardAccessDecision {
+  const v2 = loaded.board.trust_version === 2;
+  return decideBoardAccess({
+    archived: !!loaded.board.archived_at,
+    hasParticipantRow: v2 ? loaded.participant !== null : loaded.claimedParticipantExists,
+    userMatchedParticipant: loaded.userParticipantId !== null,
+    userIsOwner: loaded.userId !== null && loaded.board.owner_id === loaded.userId,
+    userIsMember: loaded.userIsMember,
+    userIsSystemAdmin: loaded.authority?.isSystemAdmin ?? false,
   });
 }

@@ -18,10 +18,15 @@ export function sql(strings: TemplateStringsArray, ...values: unknown[]) {
 
 type TransactionBuilder = Parameters<NeonQueryFunction<false, false>['transaction']>[0];
 
+type TransactionOptions = Parameters<NeonQueryFunction<false, false>['transaction']>[1];
+
 /**
  * Run several queries as one atomic, non-interactive transaction (Neon HTTP driver).
  * Pass a function that receives a tagged-template `txn` and returns the queries.
  */
-export function sqlTransaction(build: Extract<TransactionBuilder, (...args: never[]) => unknown>) {
-  return client().transaction(build);
+export function sqlTransaction(
+  build: Extract<TransactionBuilder, (...args: never[]) => unknown>,
+  options?: TransactionOptions
+) {
+  return client().transaction(build, options);
 }

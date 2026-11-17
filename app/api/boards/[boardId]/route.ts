@@ -1,7 +1,7 @@
-import { sql } from '@/lib/db';
+import { sql, sqlTransaction } from '@/lib/db';
 import { ablyServer } from '@/lib/ably-server';
 import { NextRequest, NextResponse } from 'next/server';
-import { loadBoardActor, guardResponse, BOARD_NOT_FOUND } from '@/lib/board-actor';
+import { loadBoardActor, guardResponse, BOARD_NOT_FOUND, type LoadedBoard } from '@/lib/board-actor';
 import { checkAction } from '@/lib/board-guards';
 import { shapeCard, shapeVotes, isRevealingChange, PUBLIC_VIEWER, type ViewBoard } from '@/lib/board-view';
 import { DEFAULT_BOARD_SETTINGS } from '@/utils/constants';
@@ -9,7 +9,7 @@ import type { BoardSettings, Card, Vote } from '@/types';
 import { readJsonObject, isPlainObject } from '@/lib/request-body';
 import { INVALID_BODY } from '@/lib/board-validation';
 import { patchNeedsSettingsGuard, resolveYouAre } from '@/lib/board-write-rules';
-import { loadBoardAccess } from '@/lib/board-access-loader';
+import { boardAccessFrom } from '@/lib/board-access-loader';
 import { BOARD_ACCESS } from '@/lib/constants/board-access';
 import {
   getSessionOrNull,
@@ -30,51 +30,38 @@ export async function GET(
 ) {
   const { boardId } = await params;
 
-  const [board] = await sql`SELECT * FROM boards WHERE id = ${boardId}`;
-  if (!board) {
+  // One round-trip: board row, caller standing, cookie participant, authority, membership.
+  const claimedPid = request.nextUrl.searchParams.get('pid');
+  const loadedAny = await loadBoardActor(request, boardId, null, {
+    includeDeleted: true,
+    claimedParticipantId: claimedPid ? claimedPid.slice(0, 200) : null,
+  });
+  if (!loadedAny) {
     return NextResponse.json({ error: 'Board not found' }, { status: 404 });
   }
-
-  const session = await getSessionOrNull();
-  const userId = session?.user?.id ?? null;
+  const board = loadedAny.row;
+  const userId = loadedAny.userId;
 
   // Trashed boards are visible only to the owner / system admin (so the client
   // can offer Restore). Everyone else gets a 404.
-  if (board.deleted_at) {
-    let allowed = false;
-    if (userId) {
-      if (board.owner_id === userId) {
-        allowed = true;
-      } else {
-        const [a] = await sql`SELECT EXISTS(SELECT 1 FROM admin_users WHERE id = ${userId}) AS is_admin`;
-        allowed = !!a?.is_admin;
-      }
-    }
-    if (!allowed) {
-      return NextResponse.json({ error: 'Board not found' }, { status: 404 });
-    }
+  const trashed = !!loadedAny.board.deleted_at;
+  if (trashed && !(loadedAny.authority?.isOwner || loadedAny.authority?.isSystemAdmin)) {
+    return NextResponse.json({ error: 'Board not found' }, { status: 404 });
   }
 
-  // Resolve the viewer (null for a trashed board, which only its owner/admin can open).
-  const loaded = await loadBoardActor(request, boardId);
+  // A trashed board has no acting participant (only its owner/admin can open it).
+  const loaded: LoadedBoard | null = trashed ? null : loadedAny;
   const viewBoard: ViewBoard = {
-    trust_version: Number(board.trust_version) === 2 ? 2 : 1,
-    settings: loaded?.board.settings ?? { ...DEFAULT_BOARD_SETTINGS, ...(board.settings ?? {}) },
-    archived_at: board.archived_at ?? null,
+    trust_version: loadedAny.board.trust_version,
+    settings: loadedAny.board.settings,
+    archived_at: loadedAny.board.archived_at,
   };
 
-  // Who may see this board's content and action items (Rules A and B). One shared decision.
+  // Who may see this board's content and action items (Rules A and B). One shared decision,
+  // computed from the row already loaded (no extra query).
   // v1 limitation: identity is the claimed `pid` query value, so on legacy boards anyone who
   // knows a participant id passes as that participant. v2 ignores `pid` entirely.
-  const claimedPid = request.nextUrl.searchParams.get('pid');
-  const access = await loadBoardAccess({
-    boardId,
-    trustVersion: viewBoard.trust_version,
-    archived: !!viewBoard.archived_at,
-    userId,
-    cookieParticipantId: viewBoard.trust_version === 2 ? (loaded?.actor.participantId ?? null) : null,
-    claimedParticipantId: viewBoard.trust_version === 1 && claimedPid ? claimedPid.slice(0, 200) : null,
-  });
+  const access = boardAccessFrom(trashed ? { ...loadedAny, participant: null } : loadedAny);
 
   if (access.access === BOARD_ACCESS[1]) {
     return NextResponse.json({
@@ -96,41 +83,21 @@ export async function GET(
     });
   }
 
-  const [columns, cards, votes, actionItems, participants] = await Promise.all([
-    sql`SELECT * FROM columns WHERE board_id = ${boardId} ORDER BY position`,
-    sql`SELECT * FROM cards WHERE board_id = ${boardId} ORDER BY position`,
-    sql`SELECT * FROM votes WHERE board_id = ${boardId}`,
-    sql`SELECT * FROM action_items WHERE board_id = ${boardId} ORDER BY created_at`,
-    sql`SELECT * FROM participants WHERE board_id = ${boardId}`,
-  ]);
+  // One read-only snapshot transaction: a single round-trip and a consistent view.
+  const [columns, cards, votes, actionItems, participants] = await sqlTransaction(
+    (txn) => [
+      txn`SELECT * FROM columns WHERE board_id = ${boardId} ORDER BY position, created_at, id`,
+      txn`SELECT * FROM cards WHERE board_id = ${boardId} ORDER BY position, created_at, id`,
+      txn`SELECT * FROM votes WHERE board_id = ${boardId}`,
+      txn`SELECT * FROM action_items WHERE board_id = ${boardId} ORDER BY created_at`,
+      txn`SELECT * FROM participants WHERE board_id = ${boardId}`,
+    ],
+    { readOnly: true, isolationLevel: 'RepeatableRead' }
+  );
 
-  // If authenticated, resolve the user's existing participant + facilitator authority.
-  let yourParticipantId: string | null = null;
-  let youCanFacilitate = false;
-  if (userId) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const userParticipants = (participants as any[]).filter((p) => p.user_id === userId);
-    if (userParticipants.length > 0) {
-      userParticipants.sort((a, b) => {
-        if (a.is_admin !== b.is_admin) return a.is_admin ? -1 : 1;
-        return new Date(a.joined_at).getTime() - new Date(b.joined_at).getTime();
-      });
-      yourParticipantId = userParticipants[0].id;
-    }
-
-    const [authorityCheck] = await sql`
-      SELECT EXISTS (
-        SELECT 1 FROM boards WHERE id = ${boardId} AND owner_id = ${userId}
-        UNION ALL
-        SELECT 1 FROM board_members
-          WHERE board_id = ${boardId} AND user_id = ${userId}
-            AND role IN ('owner', 'facilitator')
-        UNION ALL
-        SELECT 1 FROM admin_users WHERE id = ${userId}
-      ) AS has_authority
-    `;
-    youCanFacilitate = !!authorityCheck?.has_authority;
-  }
+  // Signed-in user's existing participant + facilitator authority (from the same loaded row).
+  const yourParticipantId: string | null = loadedAny.userParticipantId;
+  let youCanFacilitate = loadedAny.authority?.canFacilitate ?? false;
 
   // v2: identity is the signed cookie only. yourParticipantId stays the signed-in user's
   // own participant row: a hint the client uses to join and obtain a cookie.

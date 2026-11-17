@@ -17,11 +17,25 @@ export async function getSessionOrNull() {
 }
 
 /**
+ * Like getSessionOrNull but bypasses the signed cookie cache and reads the session from the
+ * database, so a revoked session is rejected immediately. Use for privileged decisions
+ * (system admin, board ownership, anything that needs a signed-in user).
+ */
+export async function getFreshSession() {
+  try {
+    const headersList = await headers();
+    return await auth.api.getSession({ headers: headersList, query: { disableCookieCache: true } });
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Get the current session or throw 401.
  * Use in API routes that require authentication (e.g., dashboard, billing).
  */
 export async function requireSession() {
-  const session = await getSessionOrNull();
+  const session = await getFreshSession();
   if (!session?.user) {
     throw new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
@@ -93,7 +107,7 @@ export async function loadBoardAuthorityFor(
 async function loadBoardAuthority(
   boardId: string
 ): Promise<BoardAuthority & { userId: string }> {
-  const session = await getSessionOrNull();
+  const session = await getFreshSession();
   const userId = session?.user?.id ?? null;
   if (!userId) throw new AuthzError(401, 'Sign in required');
 
@@ -123,7 +137,7 @@ export async function assertBoardOwner(boardId: string): Promise<{ userId: strin
  * check is UX-only and does not cover /api routes.
  */
 export async function requireSystemAdmin(): Promise<{ userId: string }> {
-  const session = await getSessionOrNull();
+  const session = await getFreshSession();
   const userId = session?.user?.id ?? null;
   if (!userId) throw new AuthzError(401, 'Sign in required');
 

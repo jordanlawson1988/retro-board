@@ -7,7 +7,7 @@ import { setParticipantCookie, readParticipantId } from '@/lib/participant-sessi
 import { rateLimitOr429 } from '@/lib/rate-limit';
 import { readJsonObject } from '@/lib/request-body';
 import { validateDisplayName, INVALID_BODY } from '@/lib/board-validation';
-import { loadBoardAccess } from '@/lib/board-access-loader';
+import { boardAccessFrom } from '@/lib/board-access-loader';
 import { BOARD_COMPLETED_ERROR } from '@/lib/constants/board-access';
 
 export async function POST(
@@ -25,7 +25,9 @@ export async function POST(
   const displayName = name.value;
   const claimedId = body.participantId;
 
-  const loaded = await loadBoardActor(request, boardId, typeof claimedId === 'string' ? claimedId : null);
+  const loaded = await loadBoardActor(request, boardId, typeof claimedId === 'string' ? claimedId : null, {
+    claimedParticipantId: typeof claimedId === 'string' && claimedId.length > 0 ? claimedId : null,
+  });
   if (!loaded) return BOARD_NOT_FOUND();
   const isV2 = loaded.board.trust_version === 2;
   // v1 still takes the participant id from the client; v2 generates it below.
@@ -43,14 +45,7 @@ export async function POST(
   // A completed board takes no new participants. Existing ones (cookie row, a claimed v1 id
   // that exists, or a signed-in user matched to a row) may still re-establish their session.
   if (loaded.board.archived_at) {
-    const decision = await loadBoardAccess({
-      boardId,
-      trustVersion: loaded.board.trust_version,
-      archived: true,
-      userId,
-      cookieParticipantId: isV2 ? loaded.actor.participantId : null,
-      claimedParticipantId: !isV2 ? participantId : null,
-    });
+    const decision = boardAccessFrom(loaded);
     if (!decision.canJoin) {
       return NextResponse.json({ error: BOARD_COMPLETED_ERROR }, { status: 409 });
     }

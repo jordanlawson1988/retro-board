@@ -1,8 +1,7 @@
 import { sql } from '@/lib/db';
 import { NextResponse } from 'next/server';
-import { getSessionOrNull } from '@/lib/auth-helpers';
-import { readParticipantId } from '@/lib/participant-session';
-import { loadBoardAccess } from '@/lib/board-access-loader';
+import { loadBoardActor } from '@/lib/board-actor';
+import { boardAccessFrom } from '@/lib/board-access-loader';
 import { BOARD_ACCESS, BOARD_COMPLETED_ERROR } from '@/lib/constants/board-access';
 import { rateLimitOr429 } from '@/lib/rate-limit';
 
@@ -28,24 +27,12 @@ export async function POST(request: Request) {
     // sends no participant id, so v1 participants are recognised by their account only;
     // they can still open the board link directly.
     if (board.archived_at) {
-      const session = await getSessionOrNull();
-      const isV2 = Number(board.trust_version) === 2;
-      let cookieParticipantId: string | null = null;
-      if (isV2) {
-        const cookieId = readParticipantId(request, board.id);
-        if (cookieId) {
-          const [p] = await sql`SELECT 1 AS ok FROM participants WHERE id = ${cookieId} AND board_id = ${board.id}`;
-          if (p) cookieParticipantId = cookieId;
-        }
+      // The code sends no participant id, so only the cookie (v2) and the account count.
+      const loaded = await loadBoardActor(request, board.id);
+      if (!loaded) {
+        return NextResponse.json({ error: 'No board found with that code' }, { status: 404 });
       }
-      const decision = await loadBoardAccess({
-        boardId: board.id,
-        trustVersion: isV2 ? 2 : 1,
-        archived: true,
-        userId: session?.user?.id ?? null,
-        cookieParticipantId,
-        claimedParticipantId: null,
-      });
+      const decision = boardAccessFrom(loaded);
       if (decision.access === BOARD_ACCESS[1]) {
         return NextResponse.json({ error: BOARD_COMPLETED_ERROR }, { status: 409 });
       }

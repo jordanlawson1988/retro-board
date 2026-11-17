@@ -135,19 +135,10 @@ describe('fail-open behaviour (current design)', () => {
     expect(h.limitMock).not.toHaveBeenCalled();
   });
 
-  // KNOWN GAP (it.fails = expected to fail until fixed). The comment on rateLimitOr429 says it "fails open",
-  // but that only holds for missing env. `await limiter.limit(...)` (lib/rate-limit.ts) is not in a try/catch,
-  // so an Upstash outage / network error rejects and the route handler returns a 500. Same for Redis.fromEnv().
-  it.fails('Upstash throwing fails open (returns null) instead of rejecting the request', async () => {
+  it('Upstash throwing fails open (returns null) instead of rejecting the request', async () => {
     h.limitMock.mockRejectedValue(new Error('ECONNRESET'));
     const { rateLimitOr429 } = await load();
     expect(await rateLimitOr429(req('1.2.3.4'), 'vote', 60, 60)).toBeNull();
-  });
-
-  it('characterises today: an Upstash error propagates out of rateLimitOr429', async () => {
-    h.limitMock.mockRejectedValue(new Error('ECONNRESET'));
-    const { rateLimitOr429 } = await load();
-    await expect(rateLimitOr429(req('1.2.3.4'), 'vote', 60, 60)).rejects.toThrow('ECONNRESET');
   });
 });
 

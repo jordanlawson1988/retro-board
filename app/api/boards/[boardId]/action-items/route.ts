@@ -7,6 +7,9 @@ import { checkAction } from '@/lib/board-guards';
 import { readJsonObject, isPlainObject } from '@/lib/request-body';
 import { validateActionItemDescription, validateActionItemUpdates, INVALID_BODY } from '@/lib/board-validation';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ITEM_NOT_FOUND = () => NextResponse.json({ error: 'Action item not found' }, { status: 404 });
+
 
 export async function POST(
   request: Request,
@@ -29,8 +32,14 @@ export async function POST(
   const denied = guardResponse(checkAction('action-item.write', loaded.actor, loaded.state));
   if (denied) return denied;
   // v2: attribution comes from the signed session (may be null for an unjoined facilitator).
-  const itemCreatedBy: string | null =
-    loaded.board.trust_version === 2 ? loaded.actor.participantId : (createdBy ?? null);
+  let itemCreatedBy: string | null =
+    loaded.board.trust_version === 2 ? loaded.actor.participantId : ((createdBy as string | null | undefined) ?? null);
+  // Legacy boards take the id from the body; created_by references participants(id), so an id
+  // with no participant row on this board is stored as null instead of failing the insert.
+  if (loaded.board.trust_version !== 2 && itemCreatedBy !== null) {
+    const [known] = await sql`SELECT 1 FROM participants WHERE id = ${itemCreatedBy} AND board_id = ${boardId}`;
+    if (!known) itemCreatedBy = null;
+  }
 
   const [item] = await sql`
     INSERT INTO action_items (board_id, description, assignee, due_date, created_by)
@@ -52,7 +61,7 @@ export async function PATCH(
   const body = await readJsonObject(request);
   if (!body) return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
   const { itemId, updates } = body;
-  if (typeof itemId !== 'string' || !isPlainObject(updates)) {
+  if (typeof itemId !== 'string' || !UUID_RE.test(itemId) || !isPlainObject(updates)) {
     return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
   }
   const valid = validateActionItemUpdates(updates);
@@ -76,6 +85,7 @@ export async function PATCH(
   }
 
   const [item] = await sql`SELECT * FROM action_items WHERE id = ${itemId} AND board_id = ${boardId}`;
+  if (!item) return ITEM_NOT_FOUND();
 
   const channel = ablyServer.channels.get(`retro-board:${boardId}`);
   await channel.publish('action-item-updated', { item });
@@ -91,13 +101,16 @@ export async function DELETE(
   const body = await readJsonObject(request);
   if (!body) return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
   const { itemId } = body;
-  if (typeof itemId !== 'string') return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
+  if (typeof itemId !== 'string' || !UUID_RE.test(itemId)) {
+    return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
+  }
   const loaded = await loadBoardActor(request, boardId, null);
   if (!loaded) return BOARD_NOT_FOUND();
   const denied = guardResponse(checkAction('action-item.write', loaded.actor, loaded.state));
   if (denied) return denied;
 
-  await sql`DELETE FROM action_items WHERE id = ${itemId} AND board_id = ${boardId}`;
+  const deleted = await sql`DELETE FROM action_items WHERE id = ${itemId} AND board_id = ${boardId} RETURNING id`;
+  if (deleted.length === 0) return ITEM_NOT_FOUND();
 
   const channel = ablyServer.channels.get(`retro-board:${boardId}`);
   await channel.publish('action-item-deleted', { itemId });

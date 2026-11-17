@@ -371,9 +371,10 @@ test.describe('action items: input validation', () => {
   test('unknown board is 404 on every verb', async ({ playwright, baseURL }) => {
     const a = await identity(playwright, baseURL!);
     const nope = `nope${nanoid(6)}`;
+    const anyId = '00000000-0000-4000-8000-000000000000'; // well-formed: body validation runs before the board lookup
     expect((await a.post(url(nope), { data: { description: 'x' } })).status()).toBe(404);
-    expect((await a.patch(url(nope), { data: { itemId: 'x', updates: { status: 'done' } } })).status()).toBe(404);
-    expect((await a.delete(url(nope), { data: { itemId: 'x' } })).status()).toBe(404);
+    expect((await a.patch(url(nope), { data: { itemId: anyId, updates: { status: 'done' } } })).status()).toBe(404);
+    expect((await a.delete(url(nope), { data: { itemId: anyId } })).status()).toBe(404);
   });
 });
 
@@ -382,10 +383,7 @@ test.describe('action items: observed edge behaviour', () => {
   // A PATCH of a missing / malformed-uuid id is therefore an unhandled case: this test records what
   // the server actually does so a regression (or fix) is visible. It asserts "not a 5xx crash for
   // a well-formed uuid"; the exact code is reported in the QA notes.
-  // KNOWN APP BUG (test.fail = expected to fail until fixed; remove test.fail when the route returns 404).
-  // app/api/boards/[boardId]/action-items/route.ts: PATCH lines 65-83 and DELETE lines 100-105 never check
-  // that a row matched, so a missing item gives 200 {} (and publishes action-item-updated with item undefined).
-  test.fail('PATCH / DELETE of a well-formed but nonexistent item id', async ({ playwright, baseURL }) => {
+  test('PATCH / DELETE of a well-formed but nonexistent item id', async ({ playwright, baseURL }) => {
     const { a, boardId } = await boardWithAliceAndBob(playwright, baseURL!);
     const ghost = '00000000-0000-4000-8000-000000000000';
     const patch = await a.patch(url(boardId), { data: { itemId: ghost, updates: { status: 'done' } } });
@@ -397,10 +395,7 @@ test.describe('action items: observed edge behaviour', () => {
     expect(del.status(), 'DELETE of a missing item should be 404').toBe(404);
   });
 
-  // KNOWN APP BUG (test.fail = expected to fail until fixed). itemId is only checked as `string`
-  // (route.ts:55, :94) and goes straight into `WHERE id = ${itemId}` against a UUID column: Postgres
-  // rejects the cast and the unhandled error is a 500 instead of a 400/404.
-  test.fail('PATCH / DELETE with a non-uuid itemId does not crash with a 5xx', async ({ playwright, baseURL }) => {
+  test('PATCH / DELETE with a non-uuid itemId does not crash with a 5xx', async ({ playwright, baseURL }) => {
     const { a, boardId } = await boardWithAliceAndBob(playwright, baseURL!);
     const patch = await a.patch(url(boardId), { data: { itemId: 'not-a-uuid', updates: { status: 'done' } } });
     const del = await a.delete(url(boardId), { data: { itemId: 'not-a-uuid' } });
@@ -483,11 +478,7 @@ test.describe('v1 (legacy) board: action items', () => {
     expect((await anon.delete(url(boardId), { data: { itemId: (await items(anon, boardId))[0].id } })).status()).toBe(409);
   });
 
-  // KNOWN APP BUG (test.fail = expected to fail until fixed). On v1 the body's createdBy goes straight into
-  // action_items.created_by (route.ts:33, :37), which is FK -> participants(id) (scripts/migrations/006).
-  // An id with no participant row (e.g. a legacy client whose participant was removed) is an unhandled FK
-  // violation: 500 instead of a 4xx (or storing null).
-  test.fail('v1: a createdBy that is not a participant is a 4xx, not a 500', async ({ playwright, baseURL }) => {
+  test('v1: a createdBy that is not a participant is a 4xx, not a 500', async ({ playwright, baseURL }) => {
     const owner = await identity(playwright, baseURL!);
     const { boardId } = await createBoard(owner);
     await makeLegacyV1(boardId);

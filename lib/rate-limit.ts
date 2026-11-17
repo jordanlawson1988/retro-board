@@ -38,8 +38,8 @@ export function clientIp(request: Request): string {
 
 /**
  * Per-IP sliding-window limit. Returns a 429 Response when over the limit,
- * else null. Fails open when Upstash is not configured so local dev and CI
- * never depend on the external service.
+ * else null. Fails open when Upstash is not configured (local dev and CI
+ * never depend on the external service) and when Upstash itself errors.
  */
 export async function rateLimitOr429(
   request: Request,
@@ -49,7 +49,14 @@ export async function rateLimitOr429(
 ): Promise<Response | null> {
   const limiter = getLimiter(name, limit, windowSec);
   if (!limiter) return null;
-  const { success } = await limiter.limit(clientIp(request));
+  let success: boolean;
+  try {
+    ({ success } = await limiter.limit(clientIp(request)));
+  } catch (err) {
+    // Upstash outage or network error: fail open so the limiter can never take the API down.
+    console.error('[rate-limit] limiter error, failing open:', err instanceof Error ? err.message : err);
+    return null;
+  }
   if (success) return null;
   return Response.json(
     { error: 'Too many requests — please slow down and try again shortly' },

@@ -1,8 +1,8 @@
-import { sql, sqlTransaction } from '@/lib/db';
+import { sqlTransaction } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { NextResponse } from 'next/server';
 import { getSessionOrNull } from '@/lib/auth-helpers';
-import { generateJoinCode } from '@/lib/join-code';
+import { withJoinCodeRetry } from '@/lib/join-code-retry';
 import { rateLimitOr429 } from '@/lib/rate-limit';
 import { setParticipantCookie } from '@/lib/participant-session';
 import { readJsonObject } from '@/lib/request-body';
@@ -25,44 +25,40 @@ export async function POST(request: Request) {
     // The server owns the creator's participant id; the client's suggestion is ignored.
     const creatorId = nanoid();
 
-    // Generate a unique 5-digit join code
-    let joinCode = generateJoinCode();
-    for (let attempts = 0; attempts < 10; attempts++) {
-      const [existing] = await sql`SELECT 1 FROM boards WHERE join_code = ${joinCode}`;
-      if (!existing) break;
-      joinCode = generateJoinCode();
-    }
-
     // Board, columns, creator participant and owner membership commit together or not at all.
+    // The join code is generated per attempt; a collision on uq_boards_join_code rolls the whole
+    // transaction back and retries with a new code (no pre-check round-trip).
     // The creator is always the facilitator; any isAdmin hint in the body is ignored.
-    await sqlTransaction((txn) => [
-      txn`
+    const joinCode = await withJoinCodeRetry((joinCode) =>
+      sqlTransaction((txn) => [
+        txn`
         INSERT INTO boards (id, title, description, template, created_by, owner_id, join_code, settings, trust_version)
         VALUES (${id}, ${title}, ${description}, ${template}, ${creatorId}, ${ownerId}, ${joinCode}, ${JSON.stringify(settings)}, 2)
       `,
-      ...columns.map(
-        (col) => txn`
+        ...columns.map(
+          (col) => txn`
           INSERT INTO columns (id, board_id, title, description, color, position)
           VALUES (${col.id}, ${id}, ${col.title}, ${col.description}, ${col.color}, ${col.position})
         `
-      ),
-      ...(participant
-        ? [
-            txn`
+        ),
+        ...(participant
+          ? [
+              txn`
               INSERT INTO participants (id, board_id, display_name, is_admin, user_id)
               VALUES (${creatorId}, ${id}, ${participant.displayName}, true, ${ownerId})
             `,
-          ]
-        : []),
-      ...(ownerId
-        ? [
-            txn`
+            ]
+          : []),
+        ...(ownerId
+          ? [
+              txn`
               INSERT INTO board_members (board_id, user_id, role)
               VALUES (${id}, ${ownerId}, 'owner')
             `,
-          ]
-        : []),
-    ]);
+            ]
+          : []),
+      ])
+    );
 
     const res = NextResponse.json({
       boardId: id,

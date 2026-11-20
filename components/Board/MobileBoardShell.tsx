@@ -18,6 +18,8 @@ import { MobileColumnTabs } from './MobileColumnTabs';
 import { MobileVoteTracker } from './MobileVoteTracker';
 import { MobileFAB } from './MobileFAB';
 import { MobileBottomNav } from './MobileBottomNav';
+import { PhaseStepper, PHASE_STEPPER_HEIGHT } from '@/components/Phase/PhaseStepper';
+import { usePhaseGates } from '@/hooks/usePhaseGates';
 import { computeMobileNavActive } from '@/lib/mobileNav';
 import { MobileCardComposerSheet } from './MobileCardComposerSheet';
 import { MobileMoreSheet } from './MobileMoreSheet';
@@ -115,6 +117,8 @@ export function MobileBoardShell({
   const [activeColumnId, setActiveColumnId] = useState<string>(
     () => sortedColumns[0]?.id ?? ''
   );
+  const { guided, phase } = usePhaseGates();
+  const stepperShown = guided && !!phase;
   const [moreOpen, setMoreOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
 
@@ -288,8 +292,11 @@ export function MobileBoardShell({
 
       {/* FAB — only when card creation is allowed */}
       {fabVisible && (
-        <MobileFAB onClick={() => setComposerOpen(true)} />
+        <MobileFAB onClick={() => setComposerOpen(true)} lift={stepperShown ? PHASE_STEPPER_HEIGHT : 0} />
       )}
+
+      {/* Phase stepper — guided boards only, directly above the bottom nav */}
+      {stepperShown && <PhaseStepper isFacilitator={isAdmin} onCompleteRetro={onCompleteRetro} />}
 
       {/* Bottom nav — honest toolbar: active reflects which sheet is open */}
       <MobileBottomNav

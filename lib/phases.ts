@@ -125,6 +125,11 @@ export function nextStep(phase: PhaseId): NextStep {
   return { kind: 'move', label: PHASES[target].label };
 }
 
+/** Whether moving on from `phase` should first ask: it has a ready step and someone online is not ready. */
+export function needsMoveOnConfirm(phase: PhaseId, onlineTotal: number, readyCount: number): boolean {
+  return PHASES[phase].hasReady && onlineTotal > 0 && readyCount < onlineTotal;
+}
+
 // Some ICU versions put a narrow no-break space before AM/PM; show a plain space.
 const plainSpaces = (text: string) => text.replace(/[\u202f\u00a0]/g, ' ');
 

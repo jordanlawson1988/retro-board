@@ -5,6 +5,17 @@ import { Lightbulb } from 'lucide-react';
 import { PHASES, type PhaseId } from '@/lib/constants/phases';
 import { cn } from '@/utils/cn';
 
+/** The tips for a phase as a bulleted list; shared by the desktop popover and the mobile sheet. */
+export function PhaseTipList({ phase }: { phase: PhaseId }) {
+  return (
+    <ul className="flex list-disc flex-col gap-1 pl-4 text-[var(--ink-2)]">
+      {PHASES[phase].tips.map((tip) => (
+        <li key={tip}>{tip}</li>
+      ))}
+    </ul>
+  );
+}
+
 /** A small popover of tips for the current phase. */
 export function PhaseTips({ phase }: { phase: PhaseId }) {
   const [open, setOpen] = useState(false);
@@ -58,11 +69,7 @@ export function PhaseTips({ phase }: { phase: PhaseId }) {
           className="absolute left-0 top-full z-40 mt-1.5 w-72 rounded-[var(--r-md)] border border-[var(--line)] bg-[var(--surface)] p-3 text-[13px] shadow-[var(--shadow-md)]"
         >
           <p className="mb-1.5 font-medium text-[var(--ink)]">{def.label}</p>
-          <ul className="flex list-disc flex-col gap-1 pl-4 text-[var(--ink-2)]">
-            {def.tips.map((tip) => (
-              <li key={tip}>{tip}</li>
-            ))}
-          </ul>
+          <PhaseTipList phase={phase} />
         </div>
       )}
     </div>

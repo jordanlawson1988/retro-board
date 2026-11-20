@@ -10,6 +10,7 @@ import {
   uiGates,
   applyPhaseChanged,
   nextStep,
+  needsMoveOnConfirm,
   formatDeadlineDay,
   formatDeadlineTime,
 } from '@/lib/phases';
@@ -150,5 +151,17 @@ describe('deadline formatting', () => {
   it('follows the locale', () => {
     expect(formatDeadlineTime(ms, 'en-GB', 'UTC')).toBe('20:30');
     expect(formatDeadlineDay(ms, 'en-GB', 'UTC')).toBe('Fri 20:30');
+  });
+});
+
+describe('needsMoveOnConfirm', () => {
+  it('asks when a phase with a ready step has people who are not ready', () => {
+    expect(needsMoveOnConfirm('reflect', 3, 1)).toBe(true);
+    expect(needsMoveOnConfirm('vote', 2, 0)).toBe(true);
+  });
+  it('does not ask when everyone is ready, nobody is online, or the phase has no ready step', () => {
+    expect(needsMoveOnConfirm('reflect', 3, 3)).toBe(false);
+    expect(needsMoveOnConfirm('reflect', 0, 0)).toBe(false);
+    expect(needsMoveOnConfirm('discuss', 3, 0)).toBe(false);
   });
 });

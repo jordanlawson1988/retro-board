@@ -676,6 +676,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
           onPause={timerPause}
           onResume={timerResume}
           onReset={timerReset}
+          raised={guided && !!board.phase}
         />
       )}
 

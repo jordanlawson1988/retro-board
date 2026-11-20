@@ -6,6 +6,9 @@ import { Modal, Input, Textarea, Button } from '@/components/common';
 import { BOARD_TEMPLATES } from '@/utils';
 import { useBoardStore } from '@/stores/boardStore';
 import { useAppSettingsStore } from '@/stores/appSettingsStore';
+import { useFeatureFlagStore } from '@/stores/featureFlagStore';
+import { ModeChoice } from '@/components/Phase/ModeChoice';
+import type { BoardMode } from '@/lib/constants/phases';
 import { cn } from '@/utils/cn';
 import type { BoardTemplate } from '@/types';
 
@@ -18,14 +21,27 @@ export function CreateBoardModal({ onClose }: Props) {
   const [description, setDescription] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState<BoardTemplate>('mad-sad-glad');
   const [creating, setCreating] = useState(false);
+  const [mode, setMode] = useState<BoardMode>('open');
+  const [anonymous, setAnonymous] = useState(true);
+  const [createError, setCreateError] = useState<string | null>(null);
   const router = useRouter();
   const createBoard = useBoardStore((s) => s.createBoard);
   const appSettings = useAppSettingsStore((s) => s.settings);
   const fetchAppSettings = useAppSettingsStore((s) => s.fetchSettings);
+  const fetchFlags = useFeatureFlagStore((s) => s.fetchFlags);
+  // isEnabled() reads a missing flag as on; the choice needs the flag to be present and on,
+  // so while flags load, or if the fetch fails, the modal stays as it was: an open board.
+  const showModeChoice = useFeatureFlagStore((s) =>
+    s.flags.some((f) => f.key === 'guided_mode' && f.is_enabled)
+  );
 
   useEffect(() => {
     fetchAppSettings();
   }, [fetchAppSettings]);
+
+  useEffect(() => {
+    fetchFlags();
+  }, [fetchFlags]);
 
   useEffect(() => {
     if (appSettings?.default_template) {
@@ -36,11 +52,15 @@ export function CreateBoardModal({ onClose }: Props) {
   const handleCreate = async () => {
     if (!title.trim()) return;
     setCreating(true);
+    setCreateError(null);
     try {
-      const boardId = await createBoard(title.trim(), description.trim() || null, selectedTemplate);
+      const boardId = showModeChoice
+        ? await createBoard(title.trim(), description.trim() || null, selectedTemplate, undefined, { mode, anonymous })
+        : await createBoard(title.trim(), description.trim() || null, selectedTemplate);
       router.push(`/board/${boardId}`);
     } catch (err) {
       console.error('Failed to create board:', err);
+      if (showModeChoice) setCreateError(err instanceof Error ? err.message : 'Failed to create board');
     } finally {
       setCreating(false);
     }
@@ -65,6 +85,17 @@ export function CreateBoardModal({ onClose }: Props) {
           onChange={(e) => setDescription(e.target.value)}
           rows={2}
         />
+
+        {showModeChoice && (
+          <ModeChoice
+            mode={mode}
+            anonymous={anonymous}
+            onChange={(next) => {
+              setMode(next.mode);
+              setAnonymous(next.anonymous);
+            }}
+          />
+        )}
 
         {/* Template Selection — 2×2 grid with tint-stripe */}
         <div className="flex flex-col gap-2">
@@ -100,6 +131,12 @@ export function CreateBoardModal({ onClose }: Props) {
             ))}
           </div>
         </div>
+
+        {createError && (
+          <p role="alert" className="text-[13px] text-[var(--danger)]">
+            {createError}
+          </p>
+        )}
 
         {/* Actions */}
         <div className="flex justify-end gap-3 border-t border-[var(--line)] pt-4">

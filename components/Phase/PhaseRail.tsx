@@ -1,13 +1,11 @@
 'use client';
 
-import { useCallback, useState } from 'react';
 import { Check } from 'lucide-react';
-import { Button, Modal } from '@/components/common';
-import { useBoardStore } from '@/stores/boardStore';
-import { usePhaseStore } from '@/stores/phaseStore';
-import { PHASES, type PhaseId } from '@/lib/constants/phases';
-import { railSteps, nextStep } from '@/lib/phases';
+import { Button } from '@/components/common';
+import { railSteps } from '@/lib/phases';
 import { cn } from '@/utils/cn';
+import { usePhaseAdvance } from './usePhaseAdvance';
+import { MoveOnDialog } from './MoveOnDialog';
 
 interface PhaseRailProps {
   isFacilitator: boolean;
@@ -17,38 +15,10 @@ interface PhaseRailProps {
 
 /** The five guided phases, with the facilitator's Back and Next controls. */
 export function PhaseRail({ isFacilitator, onCompleteRetro }: PhaseRailProps) {
-  const board = useBoardStore((s) => s.board);
-  const moving = usePhaseStore((s) => s.moving);
-  const movePhase = usePhaseStore((s) => s.movePhase);
-  const readyCount = usePhaseStore((s) => s.readyIds.length);
-  const onlineTotal = usePhaseStore((s) => s.onlineTotal);
-  // The phase the Move on dialog was opened in; it is closed, and cannot act, in any other phase.
-  const [confirmPhase, setConfirmPhase] = useState<PhaseId | null>(null);
+  const { phase, next, hasReady, moving, readyCount, onlineTotal, confirming, go, onNext, stay, moveOn } =
+    usePhaseAdvance({ onCompleteRetro });
 
-  // Failures are shown by the connection banner from lastWriteError; nothing more to do here.
-  const go = useCallback(
-    (to: 'next' | 'back') => {
-      movePhase(to).catch(() => {});
-    },
-    [movePhase]
-  );
-  const stay = useCallback(() => setConfirmPhase(null), []);
-
-  if (!board || board.mode !== 'guided' || !board.phase) return null;
-  const phase = board.phase;
-  const def = PHASES[phase];
-  const next = nextStep(phase);
-  const confirming = confirmPhase === phase;
-
-  const onNext = () => {
-    if (next?.kind === 'complete') {
-      onCompleteRetro();
-    } else if (def.hasReady && onlineTotal > 0 && readyCount < onlineTotal) {
-      setConfirmPhase(phase);
-    } else {
-      go('next');
-    }
-  };
+  if (!phase) return null;
 
   return (
     <div data-testid="phase-rail" data-phase={phase} className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -96,7 +66,7 @@ export function PhaseRail({ isFacilitator, onCompleteRetro }: PhaseRailProps) {
           <Button variant="accent" size="sm" disabled={moving} onClick={onNext}>
             {next.kind === 'complete' ? 'Complete Retro' : `Next: ${next.label}`}
           </Button>
-          {def.hasReady && (
+          {hasReady && (
             <span className="whitespace-nowrap text-[13px] text-[var(--ink-3)] tnum" aria-live="polite">
               {readyCount} of {onlineTotal} ready
             </span>
@@ -104,27 +74,7 @@ export function PhaseRail({ isFacilitator, onCompleteRetro }: PhaseRailProps) {
         </div>
       )}
 
-      <Modal open={confirming} onClose={stay} title="Move on?" size="sm">
-        <div className="flex flex-col gap-4">
-          <p className="text-[var(--ink-2)]">
-            {readyCount} of {onlineTotal} people are ready.
-          </p>
-          <div className="flex justify-end gap-3">
-            <Button variant="ghost" onClick={stay}>
-              Stay
-            </Button>
-            <Button
-              variant="accent"
-              onClick={() => {
-                setConfirmPhase(null);
-                if (confirming) go('next');
-              }}
-            >
-              Move on
-            </Button>
-          </div>
-        </div>
-      </Modal>
+      <MoveOnDialog open={confirming} readyCount={readyCount} onlineTotal={onlineTotal} onStay={stay} onMoveOn={moveOn} />
     </div>
   );
 }

@@ -102,7 +102,7 @@ export function PhaseStepper({ isFacilitator, onCompleteRetro }: PhaseStepperPro
           </span>
         </button>
 
-        <div aria-hidden className="flex flex-1 items-center justify-center gap-1">
+        <div aria-hidden className="hidden min-[380px]:flex flex-1 items-center justify-center gap-1">
           {railSteps(phase).map((step) => (
             <span
               key={step.id}
@@ -110,13 +110,13 @@ export function PhaseStepper({ isFacilitator, onCompleteRetro }: PhaseStepperPro
                 'h-1.5 rounded-full',
                 step.state === 'current' && 'w-4 bg-[var(--accent)]',
                 step.state === 'past' && 'w-1.5 bg-[var(--ink-3)]',
-                step.state === 'upcoming' && 'w-1.5 border border-[var(--line-strong)]'
+                step.state === 'upcoming' && 'w-1.5 border border-[var(--ink-3)]'
               )}
             />
           ))}
         </div>
 
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
           {joined && <ReadyButton className="min-h-11 px-3" />}
           {isFacilitator && next && (
             <>

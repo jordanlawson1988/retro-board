@@ -4,6 +4,8 @@ import { applyPhaseChanged, type PhaseTarget } from '@/lib/phases';
 import type { PhaseId } from '@/lib/constants/phases';
 import type { Board } from '@/types';
 
+const NETWORK_ERROR = 'Could not reach the server. Check your connection and try again.';
+const WRITE_ERROR_MS = 6000;
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
 interface PhaseState {
@@ -33,15 +35,22 @@ export function currentReadyPhase(
 async function postPhase(body: Record<string, unknown>, fallback: string): Promise<void> {
   const { board } = useBoardStore.getState();
   if (!board || board.mode !== 'guided') return;
-  const res = await fetch(`/api/boards/${board.id}/phase`, {
-    method: 'POST',
-    headers: JSON_HEADERS,
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    await failWrite(res, fallback);
-    return;
+  let res: Response;
+  try {
+    res = await fetch(`/api/boards/${board.id}/phase`, {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    // Existing store writes let a thrown fetch escape unannounced; here the user also sees why.
+    useBoardStore.setState({ lastWriteError: NETWORK_ERROR });
+    setTimeout(() => {
+      if (useBoardStore.getState().lastWriteError === NETWORK_ERROR) useBoardStore.setState({ lastWriteError: null });
+    }, WRITE_ERROR_MS);
+    throw err;
   }
+  if (!res.ok) throw await failWrite(res, fallback);
   const data = await res.json().catch(() => null);
   useBoardStore.setState((state) => ({
     board: state.board ? applyPhaseChanged(state.board, data) : null,

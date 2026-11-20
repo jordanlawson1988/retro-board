@@ -106,23 +106,32 @@ describe('movePhase', () => {
     expect(useBoardStore.getState().board?.phase).toBe('group');
   });
 
-  it('on 409 it refetches the board and surfaces the message', async () => {
+  it('on 409 it rejects with the message, refetches the board and sets lastWriteError', async () => {
     routes({
       'POST /api/boards/b1/phase': () => json(409, { error: 'The phase already changed' }),
       'GET /api/boards/b1': getBoardResponse(board({ phase: 'vote' })),
     });
-    await usePhaseStore.getState().movePhase('next');
+    await expect(usePhaseStore.getState().movePhase('next')).rejects.toThrow('The phase already changed');
     expect(useBoardStore.getState().lastWriteError).toBe('The phase already changed');
     expect(useBoardStore.getState().board?.phase).toBe('vote');
     expect(usePhaseStore.getState().moving).toBe(false);
   });
 
-  it('on a non-409 failure it surfaces the message and does not refetch', async () => {
+  it('on a non-409 failure it rejects, surfaces the message and does not refetch', async () => {
     routes({ 'POST /api/boards/b1/phase': () => json(403, { error: 'Only a facilitator can do that' }) });
-    await usePhaseStore.getState().movePhase('next');
+    await expect(usePhaseStore.getState().movePhase('next')).rejects.toThrow('Only a facilitator can do that');
     expect(useBoardStore.getState().lastWriteError).toBe('Only a facilitator can do that');
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(useBoardStore.getState().board?.phase).toBe('reflect');
+  });
+
+  it('a thrown fetch rejects, clears moving, keeps the phase and sets lastWriteError', async () => {
+    fetchMock = vi.fn(async () => { throw new TypeError('Failed to fetch'); });
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(usePhaseStore.getState().movePhase('next')).rejects.toThrow();
+    expect(usePhaseStore.getState().moving).toBe(false);
+    expect(useBoardStore.getState().board?.phase).toBe('reflect');
+    expect(useBoardStore.getState().lastWriteError).toBe('Could not reach the server. Check your connection and try again.');
   });
 
   it('ignores a second call while one is in flight', async () => {
@@ -156,6 +165,22 @@ describe('setDeadline', () => {
     const [, init] = fetchMock.mock.calls[0] as FetchCall;
     expect(init?.body).toBe(JSON.stringify({ action: 'set-deadline', deadline }));
     expect(useBoardStore.getState().board?.phase_config.deadline).toBe(deadline);
+  });
+});
+
+describe('setDeadline failures', () => {
+  it('rejects on a 400 with the server text and sets lastWriteError', async () => {
+    routes({ 'POST /api/boards/b1/phase': () => json(400, { error: 'Deadline must be in the future' }) });
+    await expect(usePhaseStore.getState().setDeadline('2020-01-01T00:00:00.000Z')).rejects.toThrow('Deadline must be in the future');
+    expect(useBoardStore.getState().lastWriteError).toBe('Deadline must be in the future');
+    expect(useBoardStore.getState().board?.phase_config.deadline).toBeNull();
+  });
+
+  it('a thrown fetch rejects and sets lastWriteError', async () => {
+    fetchMock = vi.fn(async () => { throw new TypeError('Failed to fetch'); });
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(usePhaseStore.getState().setDeadline(null)).rejects.toThrow();
+    expect(useBoardStore.getState().lastWriteError).toBe('Could not reach the server. Check your connection and try again.');
   });
 });
 
@@ -272,9 +297,12 @@ describe('completeBoard', () => {
   });
 
   it('reverts the phase when completion fails', async () => {
-    routes({ 'POST /api/boards/b1': () => json(409, { error: 'Nope' }), 'GET /api/boards/b1': getBoardResponse(board()) });
+    // 500 so failWrite does not refetch: only the revert in completeBoard can restore the board.
+    routes({ 'POST /api/boards/b1': () => json(500, { error: 'Nope' }) });
     await expect(useBoardStore.getState().completeBoard()).rejects.toThrow('Nope');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(useBoardStore.getState().board?.phase).toBe('reflect');
+    expect(useBoardStore.getState().board?.archived_at).toBeNull();
   });
 
   it('leaves phase null on an open board', async () => {

@@ -17,6 +17,8 @@ interface FacilitatorToolbarProps {
    * Actions button and Complete Retro (the More sheet owns those).
    */
   layout?: 'inline' | 'stacked';
+  /** Guided boards: the phase controls reveal, lock and voting, so those switches are hidden. */
+  guided?: boolean;
 }
 
 export function FacilitatorToolbar({
@@ -27,6 +29,7 @@ export function FacilitatorToolbar({
   isCompleted,
   onCompleteRetro,
   layout = 'inline',
+  guided = false,
 }: FacilitatorToolbarProps) {
   const isRevealed = settings.card_visibility === 'visible';
   const isLocked = settings.board_locked;
@@ -37,6 +40,8 @@ export function FacilitatorToolbar({
     <div className={cn(stacked ? 'flex flex-col gap-1.5' : 'flex items-center gap-1 sm:gap-1.5 overflow-x-auto')}>
       {!isCompleted && (
         <>
+          {!guided && (
+            <>
           {/* Reveal / Hide cards */}
           <ToolbarButton
             icon={isRevealed ? Eye : EyeOff}
@@ -77,6 +82,8 @@ export function FacilitatorToolbar({
               stacked={stacked}
               onClick={() => onUpdateSettings({ secret_voting: !settings.secret_voting })}
             />
+          )}
+            </>
           )}
 
           {/* Actions + Complete Retro live in the More sheet on mobile (stacked) */}

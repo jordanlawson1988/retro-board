@@ -7,6 +7,7 @@ import { CardColorPicker } from './CardColorPicker';
 import { VotePill } from './VotePill';
 import { IconButton } from '@/components/common/IconButton';
 import { Pill } from '@/components/common/Pill';
+import { usePhaseGates } from '@/hooks/usePhaseGates';
 import { ReactionPill } from './ReactionPill';
 import type { Card, CardReactions, Participant, Vote } from '@/types';
 
@@ -81,6 +82,7 @@ export function RetroCard({
   onToggleExpand,
   participants = [],
 }: RetroCardProps) {
+  const { editLocked } = usePhaseGates();
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(text);
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
@@ -242,6 +244,8 @@ export function RetroCard({
                         <Merge size={16} className="sm:size-3.5" />
                       </IconButton>
                     )}
+                    {!editLocked && (
+                      <>
                     <CardColorPicker
                       currentColor={color}
                       onSelectColor={(newColor) => onUpdate(id, { color: newColor })}
@@ -266,6 +270,8 @@ export function RetroCard({
                     >
                       <Trash2 size={16} className="sm:size-3.5" />
                     </IconButton>
+                      </>
+                    )}
                   </div>
                 )}
 

@@ -2,7 +2,7 @@
 
 import { Check } from 'lucide-react';
 import { Button } from '@/components/common';
-import { railSteps } from '@/lib/phases';
+import { railSteps, readyLabel } from '@/lib/phases';
 import { cn } from '@/utils/cn';
 import { usePhaseAdvance } from './usePhaseAdvance';
 import { MoveOnDialog } from './MoveOnDialog';
@@ -68,7 +68,7 @@ export function PhaseRail({ isFacilitator, onCompleteRetro }: PhaseRailProps) {
           </Button>
           {hasReady && (
             <span className="whitespace-nowrap text-[13px] text-[var(--ink-3)] tnum" aria-live="polite">
-              {readyCount} of {onlineTotal} ready
+              {readyLabel(readyCount, onlineTotal)}
             </span>
           )}
         </div>

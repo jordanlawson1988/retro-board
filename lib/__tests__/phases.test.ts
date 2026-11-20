@@ -18,6 +18,13 @@ import {
   phaseConfigAfterClose,
   canGoBack,
   ACTION_PHASE_GATE,
+  deadlineNotice,
+  deadlineRecheckMs,
+  readyLabel,
+  stepperInfoLines,
+  stepperAreaHeight,
+  STEPPER_ROW_PX,
+  STEPPER_LINE_PX,
 } from '@/lib/phases';
 import { DEFAULT_BOARD_SETTINGS } from '@/utils/constants';
 
@@ -243,5 +250,65 @@ describe('canGoBack', () => {
     expect(canGoBack('done')).toBe(false);
     expect(canGoBack('group')).toBe(true);
     expect(canGoBack('discuss')).toBe(true);
+  });
+});
+
+describe('deadlineNotice', () => {
+  const due = Date.parse('2026-11-20T15:30:00Z');
+  const label = (id: 'reflect' | 'vote') => PHASES[id].label;
+  it('is null with no deadline, a bad deadline, or once the retro is done', () => {
+    expect(deadlineNotice('reflect', null, due)).toBeNull();
+    expect(deadlineNotice('reflect', 'nope', due)).toBeNull();
+    expect(deadlineNotice('done', new Date(due + 1000).toISOString(), due)).toBeNull();
+  });
+  it('open: the desktop chip wording from the shared formatters', () => {
+    const n = deadlineNotice('reflect', new Date(due).toISOString(), due - 1000)!;
+    expect(n.state).toBe('open');
+    expect(n.dueMs).toBe(due);
+    expect(n.text).toBe(`${label('reflect')} closes ${formatDeadlineDay(due)}`);
+  });
+  it('passed: the desktop banner wording', () => {
+    const n = deadlineNotice('vote', new Date(due).toISOString(), due)!;
+    expect(n.state).toBe('passed');
+    expect(n.text).toBe(`${label('vote')} closed at ${formatDeadlineTime(due)}. Waiting for the facilitator.`);
+  });
+});
+
+describe('deadlineRecheckMs', () => {
+  const due = 1_000_000;
+  it('is null with no deadline, a bad one, or one already passed', () => {
+    expect(deadlineRecheckMs(null, 0, 5000)).toBeNull();
+    expect(deadlineRecheckMs('nope', 0, 5000)).toBeNull();
+    expect(deadlineRecheckMs(new Date(due).toISOString(), due, 5000)).toBeNull();
+    expect(deadlineRecheckMs(new Date(due).toISOString(), due + 10, 5000)).toBeNull();
+  });
+  it('waits until just after the deadline, capped at the maximum', () => {
+    expect(deadlineRecheckMs(new Date(due).toISOString(), due - 1000, 5000)).toBe(1050);
+    expect(deadlineRecheckMs(new Date(due).toISOString(), due - 100_000, 5000)).toBe(5000);
+  });
+});
+
+describe('readyLabel', () => {
+  it('matches the desktop wording', () => {
+    expect(readyLabel(2, 5)).toBe('2 of 5 ready');
+    expect(readyLabel(0, 0)).toBe('0 of 0 ready');
+  });
+});
+
+describe('phone stepper area height', () => {
+  it('one info line when only one thing shows, or the chip and the count share a line', () => {
+    expect(stepperInfoLines('none', false)).toBe(0);
+    expect(stepperInfoLines('open', false)).toBe(1);
+    expect(stepperInfoLines('passed', false)).toBe(1);
+    expect(stepperInfoLines('none', true)).toBe(1);
+    expect(stepperInfoLines('open', true)).toBe(1);
+  });
+  it('a passed deadline is too long to share its line with the count', () => {
+    expect(stepperInfoLines('passed', true)).toBe(2);
+  });
+  it('height is the row plus the lines', () => {
+    expect(stepperAreaHeight(0)).toBe(STEPPER_ROW_PX);
+    expect(stepperAreaHeight(2)).toBe(STEPPER_ROW_PX + 2 * STEPPER_LINE_PX);
+    expect(STEPPER_ROW_PX).toBe(56);
   });
 });

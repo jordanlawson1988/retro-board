@@ -118,6 +118,54 @@ export function deadlineState(deadline: string | null, nowMs: number): 'none' | 
   return ms > nowMs ? 'open' : 'passed';
 }
 
+/**
+ * What the deadline UI says for a phase, shared by the desktop chip and banner and the phone
+ * stepper. Null when there is no usable deadline or nothing is timed (the retro is done).
+ */
+export function deadlineNotice(
+  phase: PhaseId,
+  deadline: string | null,
+  nowMs: number,
+): { state: 'open' | 'passed'; text: string; dueMs: number } | null {
+  if (!nextStep(phase)) return null;
+  const state = deadlineState(deadline, nowMs);
+  if (state === 'none') return null;
+  const dueMs = Date.parse(deadline as string);
+  const label = PHASES[phase].label;
+  return state === 'open'
+    ? { state, dueMs, text: `${label} closes ${formatDeadlineDay(dueMs)}` }
+    : { state, dueMs, text: `${label} closed at ${formatDeadlineTime(dueMs)}. Waiting for the facilitator.` };
+}
+
+/** Ms until the deadline UI should be re-evaluated (just after it falls due), or null when nothing is pending. */
+export function deadlineRecheckMs(deadline: string | null, nowMs: number, maxMs: number): number | null {
+  if (!deadline) return null;
+  const due = Date.parse(deadline);
+  if (Number.isNaN(due) || nowMs >= due) return null;
+  return Math.max(0, Math.min(due - nowMs + 50, maxMs));
+}
+
+export function readyLabel(readyCount: number, onlineTotal: number): string {
+  return `${readyCount} of ${onlineTotal} ready`;
+}
+
+/** Phone stepper geometry: the button row, plus optional info lines above it. */
+export const STEPPER_ROW_PX = 56;
+export const STEPPER_LINE_PX = 20;
+
+/**
+ * Info lines above the phone stepper row. The deadline text and the ready count share one line,
+ * except a passed deadline, whose text is too long to leave room for the count.
+ */
+export function stepperInfoLines(state: 'none' | 'open' | 'passed', showReady: boolean): 0 | 1 | 2 {
+  if (state === 'passed' && showReady) return 2;
+  return state !== 'none' || showReady ? 1 : 0;
+}
+
+export function stepperAreaHeight(infoLines: number): number {
+  return STEPPER_ROW_PX + infoLines * STEPPER_LINE_PX;
+}
+
 export function railSteps(
   current: PhaseId,
 ): { id: PhaseId; label: string; state: 'past' | 'current' | 'upcoming' }[] {

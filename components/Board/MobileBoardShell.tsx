@@ -18,7 +18,7 @@ import { MobileColumnTabs } from './MobileColumnTabs';
 import { MobileVoteTracker } from './MobileVoteTracker';
 import { MobileFAB } from './MobileFAB';
 import { MobileBottomNav } from './MobileBottomNav';
-import { PhaseStepper, PHASE_STEPPER_HEIGHT } from '@/components/Phase/PhaseStepper';
+import { PhaseStepper } from '@/components/Phase/PhaseStepper';
 import { usePhaseGates } from '@/hooks/usePhaseGates';
 import { computeMobileNavActive } from '@/lib/mobileNav';
 import { MobileCardComposerSheet } from './MobileCardComposerSheet';
@@ -293,7 +293,7 @@ export function MobileBoardShell({
 
       {/* FAB — only when card creation is allowed */}
       {fabVisible && (
-        <MobileFAB onClick={() => setComposerOpen(true)} lift={stepperShown ? PHASE_STEPPER_HEIGHT : 0} />
+        <MobileFAB onClick={() => setComposerOpen(true)} />
       )}
 
       {/* Phase stepper — guided boards only, directly above the bottom nav */}

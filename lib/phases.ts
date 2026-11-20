@@ -1,6 +1,7 @@
 import type { BoardAction } from '@/lib/constants/board-actions';
 import {
   DEADLINE_MAX_DAYS,
+  DEFAULT_PHASE_CONFIG,
   FINAL_PHASE,
   PHASES,
   PHASE_IDS,
@@ -157,4 +158,17 @@ export function applyPhaseChanged<
   if (!p.settings || typeof p.settings !== 'object') return board;
   if (!p.phaseConfig || typeof p.phaseConfig !== 'object') return board;
   return { ...board, phase: p.phase, settings: p.settings, phase_config: p.phaseConfig };
+}
+
+/** Fill the guided-mode fields an older server may omit, so a board always reads as open by default. */
+export function withPhaseDefaults<T extends object>(
+  board: T,
+): T & { mode: BoardMode; phase: PhaseId | null; phase_config: PhaseConfig } {
+  const b = board as Partial<{ mode: BoardMode; phase: PhaseId | null; phase_config: PhaseConfig }>;
+  return {
+    ...board,
+    mode: b.mode ?? 'open',
+    phase: b.phase ?? null,
+    phase_config: b.phase_config ?? { ...DEFAULT_PHASE_CONFIG },
+  };
 }

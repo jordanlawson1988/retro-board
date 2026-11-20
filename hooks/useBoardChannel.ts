@@ -5,6 +5,8 @@ import { useAbly, useChannel } from 'ably/react';
 import { createCoalescedRunner } from '@/lib/coalescedRunner';
 import { useBoardStore } from '@/stores/boardStore';
 import { mergeIncomingCard } from '@/lib/mergeIncomingCard';
+import { applyPhaseChanged } from '@/lib/phases';
+import { isPhaseId } from '@/lib/constants/phases';
 import type { Card, Column, Vote, Participant, ActionItem } from '@/types';
 
 export function useBoardChannel(boardId: string) {
@@ -120,7 +122,7 @@ export function useBoardChannel(boardId: string) {
       case 'board-reopened':
         store.setState((state) => ({
           board: state.board
-            ? { ...state.board, archived_at: null, settings: data.settings }
+            ? { ...state.board, archived_at: null, settings: data.settings, ...(isPhaseId(data.phase) ? { phase: data.phase } : {}) }
             : null,
         }));
         refetchIfAsked(data);
@@ -128,8 +130,16 @@ export function useBoardChannel(boardId: string) {
       case 'board-completed':
         store.setState((state) => ({
           board: state.board
-            ? { ...state.board, archived_at: data.archivedAt, settings: data.settings }
+            ? { ...state.board, archived_at: data.archivedAt, settings: data.settings, ...(isPhaseId(data.phase) ? { phase: data.phase } : {}) }
             : null,
+        }));
+        refetchIfAsked(data);
+        break;
+
+      // Guided phase: idempotent, the same payload twice leaves the same board
+      case 'phase-changed':
+        store.setState((state) => ({
+          board: state.board ? applyPhaseChanged(state.board, data) : null,
         }));
         refetchIfAsked(data);
         break;

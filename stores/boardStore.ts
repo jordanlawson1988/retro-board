@@ -8,6 +8,8 @@ import { saveBoardToHistory } from '@/utils/boardHistory';
 import { mergeIncomingCard } from '@/lib/mergeIncomingCard';
 import { useAppSettingsStore } from '@/stores/appSettingsStore';
 import { BOARD_ACCESS } from '@/lib/constants/board-access';
+import { withPhaseDefaults } from '@/lib/phases';
+import { FINAL_PHASE, type BoardMode } from '@/lib/constants/phases';
 import type { BoardAccess } from '@/types';
 import type { Board, Column, Card, Vote, ActionItem, Participant, BoardTemplate, BoardSettings, ConnectionStatus } from '@/types';
 
@@ -49,7 +51,7 @@ const WRITE_ERROR_MS = 6000;
  * participant so the join modal shows. Callers roll back their optimistic
  * change first, then throw the returned error.
  */
-async function failWrite(res: Response, fallback: string): Promise<Error> {
+export async function failWrite(res: Response, fallback: string): Promise<Error> {
   const data = await res.json().catch(() => null);
   const message: string = data?.error || fallback;
   const { board } = useBoardStore.getState();
@@ -62,6 +64,10 @@ async function failWrite(res: Response, fallback: string): Promise<Error> {
   setTimeout(() => {
     if (useBoardStore.getState().lastWriteError === message) useBoardStore.setState({ lastWriteError: null });
   }, WRITE_ERROR_MS);
+  // A refused write on a guided board usually means the phase moved under us: pull the fresh phase.
+  if (res.status === 409 && board?.mode === 'guided') {
+    try { await useBoardStore.getState().fetchBoard(board.id); } catch { /* the message is already surfaced */ }
+  }
   return new Error(message);
 }
 
@@ -84,7 +90,10 @@ interface BoardState {
   clearWriteError: () => void;
 
   // Board lifecycle
-  createBoard: (title: string, description: string | null, template: BoardTemplate, displayName?: string) => Promise<string>;
+  createBoard: (title: string, description: string | null, template: BoardTemplate,
+    displayName?: string,
+    options?: { mode?: BoardMode; anonymous?: boolean },
+  ) => Promise<string>;
   fetchBoard: (boardId: string) => Promise<void>;
   updateSettings: (settings: Partial<BoardSettings>) => Promise<void>;
   completeBoard: () => Promise<void>;
@@ -145,7 +154,7 @@ const initialState = {
 export const useBoardStore = create<BoardState>((set, get) => ({
   ...initialState,
 
-  createBoard: async (title, description, template, displayName?) => {
+  createBoard: async (title, description, template, displayName?, options?) => {
     const boardId = nanoid(10);
     const templateDef = BOARD_TEMPLATES.find((t) => t.id === template);
 
@@ -172,7 +181,9 @@ export const useBoardStore = create<BoardState>((set, get) => ({
         settings: {
           ...DEFAULT_BOARD_SETTINGS,
           ...(useAppSettingsStore?.getState?.()?.settings?.default_board_settings ?? {}),
+          ...(options?.mode === 'guided' ? { anonymous_cards: options.anonymous ?? true } : {}),
         },
+        ...(options?.mode ? { mode: options.mode } : {}),
         columns,
         participant,
       }),
@@ -240,7 +251,8 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       return;
     }
 
-    const { board, columns, cards, votes, actionItems, participants, yourParticipantId, youCanFacilitate, youAre, access } = await res.json();
+    const { board: rawBoard, columns, cards, votes, actionItems, participants, yourParticipantId, youCanFacilitate, youAre, access } = await res.json();
+    const board = withPhaseDefaults(rawBoard);
 
     // Completed and not part of it: keep only the stub. No history entry, no participant.
     if (access === BOARD_ACCESS[1]) {
@@ -351,7 +363,14 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     const completedSettings = { ...board.settings, card_visibility: 'visible' as const, board_locked: true };
 
     // Optimistic update
-    set({ board: { ...board, archived_at: archivedAt, settings: completedSettings } });
+    set({
+      board: {
+        ...board,
+        archived_at: archivedAt,
+        settings: completedSettings,
+        ...(board.mode === 'guided' ? { phase: FINAL_PHASE } : {}),
+      },
+    });
 
     saveBoardToHistory({
       boardId: board.id,

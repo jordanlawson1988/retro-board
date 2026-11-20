@@ -72,10 +72,13 @@ export function PhaseStepper({ isFacilitator, onCompleteRetro }: PhaseStepperPro
               )}
               style={{ height: STEPPER_LINE_PX }}
             >
-              {notice.state === 'open' && <Clock size={12} aria-hidden />}
-              {notice.text}
+              {notice.state === 'open' && <Clock size={12} aria-hidden className="shrink-0" />}
+              {/* Never spill past the screen edge: a long locale time string shortens with an ellipsis. */}
+              <span className="min-w-0 truncate leading-normal" title={notice.text}>
+                {notice.text}
+              </span>
               {notice.state === 'open' && showReady && (
-                <ReadyCount className="ml-auto" label={readyLabel(readyCount, onlineTotal)} />
+                <ReadyCount className="ml-auto shrink-0 pl-2" label={readyLabel(readyCount, onlineTotal)} />
               )}
             </p>
           )}

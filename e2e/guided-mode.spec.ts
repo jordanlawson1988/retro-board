@@ -256,26 +256,92 @@ test('a second facilitator pressing Next at the same time advances one phase onl
   }
 });
 
+// What this proves: a participant whose realtime connection was really cut, who missed a phase change,
+// lands on the current phase after the connection comes back, with no manual reload, and the server
+// refuses their stale write meanwhile. What it does NOT prove: whether the catch-up came from Ably
+// replaying the missed message on resume or from the app refetching the board on reconnect; the test
+// does not depend on which. (We log whether B made a new board GET after reconnecting.)
+// The cut: B's Ably websocket is closed and every new Ably websocket is closed on arrival; Ably's HTTP
+// fallback hosts, B's token endpoint and B's board GET are aborted. setOffline is not used because
+// Chromium does not close an already-open websocket with it.
 test('a participant who was offline during a phase change catches up', async ({ browser }) => {
+  // realtime.ably.net, plus the fallback hosts under ably-realtime.com
+  const ablyHost = /^[a-z]+:\/\/[^/]*ably[^/]*\//;
   const ctxA = await browser.newContext();
   const ctxB = await browser.newContext();
-  const { boardId } = await createBoard(ctxA.request, { mode: 'guided' });
-  await joinAs(ctxA, boardId, `Alice-${rand()}`);
+  const { boardId, columnId } = await createBoard(ctxA.request, { mode: 'guided' });
+  const pageA = await joinAs(ctxA, boardId, `Alice-${rand()}`);
+
+  let cut = false;
+  let refused = 0; // Ably connection attempts and fetches we refused while cut
+  const openSockets: import('@playwright/test').WebSocketRoute[] = [];
+  let boardGets = 0;
   let capB!: ReturnType<typeof capture>;
-  const pageB = await joinAs(ctxB, boardId, `Bob-${rand()}`, { beforeGoto: (p) => { capB = capture(p); } });
+  const pageB = await joinAs(ctxB, boardId, `Bob-${rand()}`, {
+    beforeGoto: (p) => {
+      capB = capture(p);
+      void p.routeWebSocket(ablyHost, (ws) => {
+        if (cut) {
+          refused++;
+          void ws.close();
+          return;
+        }
+        ws.connectToServer();
+        openSockets.push(ws);
+      });
+      void p.route(ablyHost, (route) => {
+        if (cut) {
+          refused++;
+          return route.abort();
+        }
+        return route.continue();
+      });
+      void p.route('**/api/ably-token**', (route) => (cut ? route.abort() : route.continue()));
+      void p.route(new RegExp(`/api/boards/${boardId}(\\?.*)?$`), (route) => {
+        if (route.request().method() !== 'GET') return route.continue();
+        if (cut) return route.abort();
+        boardGets++;
+        return route.continue();
+      });
+    },
+  });
   await waitForRealtime(capB, boardId);
+  await expectPhase(pageA, 'reflect');
   await expectPhase(pageB, 'reflect');
+  expect(openSockets.length, 'B has an open Ably socket to cut').toBeGreaterThan(0);
 
-  await ctxB.setOffline(true);
-  // A moves on while B cannot hear it.
-  const move = await apiMovePhase(ctxA.request, boardId, 'reflect', 'next');
-  expect(move.status(), await move.text()).toBe(200);
-  // Give the client time to notice it is offline, so the event is truly missed.
-  await pageB.waitForTimeout(2000);
-  await ctxB.setOffline(false);
+  // Cut B off: refuse everything, then close the live socket(s).
+  cut = true;
+  await Promise.all(openSockets.splice(0).map((ws) => ws.close()));
+  // Control: B really tries to reconnect and is refused, so the cut is in force.
+  await expect.poll(() => refused, { timeout: 20_000 }).toBeGreaterThan(0);
 
-  // Back online, without a reload, B's rail shows the new phase.
-  await expectPhase(pageB, 'group', 10_000);
+  // A moves to Group (through the UI) while B cannot hear it.
+  await advance(pageA, 'Group', { confirm: true }); // nobody is ready
+  await expectPhase(pageA, 'group');
+  expect((await getBoard(ctxA.request, boardId)).board.phase).toBe('group');
+
+  // B misses it. The one fixed wait: it sits immediately before an absence check.
+  await pageB.waitForTimeout(3000);
+  await expectPhase(pageB, 'reflect', 1_000);
+
+  // Server half: B's stale write is refused with a clear message (B's request context is not cut off).
+  const stale = await ctxB.request.post(`/api/boards/${boardId}/cards`, {
+    data: { id: rand().slice(0, 10), columnId, text: 'stale card', position: 0 },
+  });
+  expect(stale.status()).toBe(409);
+  expect((await stale.json()).error).toBe('Not available during Group');
+  await expectPhase(pageB, 'reflect', 1_000); // still cut off
+
+  // Restore. The browser's own "online" event makes Ably retry at once rather than after its retry timer.
+  const getsBefore = boardGets;
+  cut = false;
+  await pageB.evaluate(() => window.dispatchEvent(new Event('online')));
+  await expectPhase(pageB, 'group', 10_000); // no page.reload()
+  test.info().annotations.push({
+    type: 'catch-up',
+    description: `new board GETs by B after reconnect: ${boardGets - getsBefore}`,
+  });
 
   await ctxA.close();
   await ctxB.close();

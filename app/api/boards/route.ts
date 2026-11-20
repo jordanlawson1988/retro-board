@@ -6,7 +6,7 @@ import { withJoinCodeRetry } from '@/lib/join-code-retry';
 import { rateLimitOr429 } from '@/lib/rate-limit';
 import { setParticipantCookie } from '@/lib/participant-session';
 import { readJsonObject } from '@/lib/request-body';
-import { validateNewBoard, INVALID_BODY } from '@/lib/board-validation';
+import { validateNewBoard, validateSettingsPatch, INVALID_BODY } from '@/lib/board-validation';
 import { canUse } from '@/lib/can-use';
 import { FIRST_PHASE, DEFAULT_PHASE_CONFIG, GUIDED_MODE } from '@/lib/constants/phases';
 import { phaseSettings } from '@/lib/phases';
@@ -21,6 +21,13 @@ export async function POST(request: Request) {
     const parsed = validateNewBoard(body);
     if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
     const { id, title, description, template, settings, columns, participant, mode } = parsed.value;
+
+    // A guided board derives its per-card limit from the per-person value, so the settings must be
+    // valid before anything else runs. Open creates keep storing the body as sent.
+    if (mode === GUIDED_MODE) {
+      const valid = validateSettingsPatch(settings);
+      if (!valid.ok) return NextResponse.json({ error: valid.error }, { status: 400 });
+    }
 
     // Get authenticated user if available (board creation works for both auth'd and anon users)
     const session = await getSessionOrNull();

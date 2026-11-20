@@ -3,7 +3,7 @@ import {
   voteWeight, voteTotalsByCard, votesUsedBy, myVotesOn, sumVoteCounts, groupScore, maxVotesPerCard,
   guidedVoteDefaults, voteControlKind, voteControlState, applyVoteDelta, settleOwnVote, applyVoteTally,
   teamVotesRemaining, teamVotesLeftFor, teamVotesLabel, votesPerCardError, voteLimitProblem, limitRefusal,
-  hasLimitKey, voteLimitsEditable, GROUP_VOTE_ERROR, NO_VOTES_LEFT, VOTE_LIMIT_RELATION_ERROR,
+  hasLimitKey, voteLimitsEditable, teamUsedAfter, GROUP_VOTE_ERROR, NO_VOTES_LEFT, VOTE_LIMIT_RELATION_ERROR,
 } from '@/lib/votes';
 import { phaseSettings } from '@/lib/phases';
 import { DEFAULT_BOARD_SETTINGS } from '@/utils/constants';
@@ -130,5 +130,13 @@ describe('team tally', () => {
     expect(teamVotesLeftFor({ ...board, phase: 'group' }, 2, { used: 3, at: 1 })).toBeNull();
     expect(teamVotesLeftFor({ ...board, mode: 'open', phase: null }, 2, { used: 3, at: 1 })).toBeNull();
     expect(teamVotesLeftFor(board, 2, null)).toBeNull();
+  });
+});
+
+describe('teamUsedAfter', () => {
+  it('adds or subtracts the one vote the statement changed after reading the state before it', () => {
+    expect(teamUsedAfter(4, 1)).toBe(5);
+    expect(teamUsedAfter(5, -1)).toBe(4);
+    expect(teamUsedAfter(0, 1)).toBe(1);
   });
 });

@@ -2,10 +2,21 @@ import { sqlTransaction } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { rateLimitOr429 } from '@/lib/rate-limit';
 import { loadBoardActor, guardResponse, requireParticipantOn, BOARD_NOT_FOUND } from '@/lib/board-actor';
-import { publishVote } from '@/lib/board-publish';
+import { publishVote, publishVoteTally } from '@/lib/board-publish';
 import { checkAction } from '@/lib/board-guards';
 import { readJsonObject, isPlainObject } from '@/lib/request-body';
 import { INVALID_BODY } from '@/lib/board-validation';
+import { isVoteAction } from '@/lib/constants/votes';
+import { GUIDED_MODE, NOT_GUIDED_ERROR } from '@/lib/constants/phases';
+import {
+  GROUP_VOTE_ERROR,
+  GUIDED_ACTION_REQUIRED_ERROR,
+  NO_VOTE_TO_REMOVE_ERROR,
+  maxVotesPerCard,
+  teamUsedAfter,
+  voteLockKey,
+  votesPerCardError,
+} from '@/lib/votes';
 
 
 export async function POST(
@@ -17,11 +28,12 @@ export async function POST(
   const { boardId } = await params;
   const body = await readJsonObject(request);
   if (!body) return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
-  const { cardId, voterId: claimedVoterId, voteId } = body;
+  const { cardId, voterId: claimedVoterId, voteId, action } = body;
   if (
     typeof cardId !== 'string' ||
     (voteId !== undefined && voteId !== null && typeof voteId !== 'string') ||
-    (claimedVoterId !== undefined && claimedVoterId !== null && typeof claimedVoterId !== 'string')
+    (claimedVoterId !== undefined && claimedVoterId !== null && typeof claimedVoterId !== 'string') ||
+    (action !== undefined && !isVoteAction(action))
   ) {
     return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
   }
@@ -30,6 +42,13 @@ export async function POST(
   if (!loaded) return BOARD_NOT_FOUND();
   const denied = guardResponse(checkAction('vote.toggle', loaded.actor, loaded.state));
   if (denied) return denied;
+
+  if (loaded.board.mode === GUIDED_MODE) {
+    return guidedVote(loaded, boardId, cardId, action, (voteId as string | null | undefined) || undefined);
+  }
+  if (action !== undefined) {
+    return NextResponse.json({ error: NOT_GUIDED_ERROR }, { status: 409 });
+  }
 
   // v2: the voter is the signed-in participant, never the body's claim.
   let voterId = claimedVoterId as string;
@@ -102,4 +121,123 @@ export async function POST(
 
 function dbErrorCode(err: unknown): string | undefined {
   return typeof err === 'object' && err !== null ? (err as { code?: string }).code : undefined;
+}
+
+type Loaded = NonNullable<Awaited<ReturnType<typeof loadBoardActor>>>;
+
+/**
+ * Guided boards: several votes per card inside a per-card and a per-person limit. One transaction
+ * under a per-board lock, so both limits and the team tally see every committed vote. A CTE sees
+ * one snapshot, so `mine`, `team` and `cur` read the state before the statement's own change.
+ * Only the tally is published: guided votes are secret, so no vote row leaves this route except
+ * the caller's own in the response.
+ */
+async function guidedVote(
+  loaded: Loaded,
+  boardId: string,
+  cardId: string,
+  action: unknown,
+  voteId: string | undefined
+) {
+  if (!isVoteAction(action)) {
+    return NextResponse.json({ error: GUIDED_ACTION_REQUIRED_ERROR }, { status: 400 });
+  }
+  const needsJoin = requireParticipantOn(loaded);
+  if (needsJoin) return needsJoin;
+  const voterId = loaded.actor.participantId;
+  if (voterId === null) return NextResponse.json({ error: 'Join the board first' }, { status: 401 });
+
+  const settings = loaded.state.settings;
+  const perPerson = settings.max_votes_per_participant;
+  const perCard = maxVotesPerCard(settings);
+  const lockKey = voteLockKey(boardId);
+
+  if (action === 'remove') {
+    const [, removedRows] = await sqlTransaction((txn) => [
+      txn`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`,
+      txn`
+        WITH cur AS (
+          SELECT id, count FROM votes
+          WHERE card_id = ${cardId} AND voter_id = ${voterId} AND board_id = ${boardId}
+        ), decremented AS (
+          UPDATE votes SET count = votes.count - 1 FROM cur
+          WHERE votes.id = cur.id AND cur.count > 1
+          RETURNING votes.id
+        ), deleted AS (
+          DELETE FROM votes USING cur
+          WHERE votes.id = cur.id AND cur.count = 1
+          RETURNING votes.id
+        ), team AS (
+          SELECT COALESCE(SUM(count), 0)::int AS used FROM votes WHERE board_id = ${boardId}
+        )
+        SELECT cur.id AS vote_id, cur.count AS count_before, team.used AS team_used_before,
+               floor(extract(epoch from clock_timestamp()) * 1000)::float8 AS tally_at
+        FROM team LEFT JOIN cur ON true
+      `,
+    ]);
+    const row = (removedRows as Record<string, unknown>[])[0];
+    if (!row || row.vote_id === null) {
+      return NextResponse.json({ error: NO_VOTE_TO_REMOVE_ERROR }, { status: 409 });
+    }
+    const tally = { used: teamUsedAfter(Number(row.team_used_before), -1), at: Number(row.tally_at) };
+    await publishVoteTally(boardId, tally);
+    return NextResponse.json({
+      action: 'removed',
+      voteId: row.vote_id,
+      count: Number(row.count_before) - 1,
+      tally,
+    });
+  }
+
+  const newVoteId = voteId || crypto.randomUUID();
+  const [, addedRows] = await sqlTransaction((txn) => [
+    txn`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`,
+    txn`
+      WITH card AS (
+        SELECT id, merged_with FROM cards WHERE id = ${cardId} AND board_id = ${boardId}
+      ), mine AS (
+        SELECT COALESCE(SUM(count), 0)::int AS spent,
+               COALESCE(SUM(count) FILTER (WHERE card_id = ${cardId}), 0)::int AS on_card
+        FROM votes WHERE board_id = ${boardId} AND voter_id = ${voterId}
+      ), team AS (
+        SELECT COALESCE(SUM(count), 0)::int AS used FROM votes WHERE board_id = ${boardId}
+      ), upserted AS (
+        INSERT INTO votes (id, card_id, board_id, voter_id, count)
+        SELECT ${newVoteId}, ${cardId}, ${boardId}, ${voterId}, 1 FROM card, mine
+        WHERE card.merged_with IS NULL AND mine.spent < ${perPerson}::int AND mine.on_card < ${perCard}::int
+        ON CONFLICT (card_id, voter_id) DO UPDATE SET count = votes.count + 1
+        RETURNING *
+      )
+      SELECT (SELECT COUNT(*) FROM card)::int AS card_found, (SELECT merged_with FROM card) AS card_parent,
+             mine.spent, mine.on_card, team.used AS team_used_before,
+             floor(extract(epoch from clock_timestamp()) * 1000)::float8 AS tally_at,
+             u.id, u.card_id, u.board_id, u.voter_id, u.count, u.created_at
+      FROM mine CROSS JOIN team LEFT JOIN upserted u ON true
+    `,
+  ]);
+  const row = (addedRows as Record<string, unknown>[])[0];
+  if (!row || Number(row.card_found) === 0) {
+    return NextResponse.json({ error: 'Card not found' }, { status: 404 });
+  }
+  if (row.id === null) {
+    if (row.card_parent) return NextResponse.json({ error: GROUP_VOTE_ERROR }, { status: 409 });
+    if (Number(row.spent) >= perPerson) {
+      return NextResponse.json({ error: 'Vote limit reached', maxVotes: perPerson }, { status: 422 });
+    }
+    return NextResponse.json({ error: votesPerCardError(perCard), maxVotesPerCard: perCard }, { status: 422 });
+  }
+  const tally = { used: teamUsedAfter(Number(row.team_used_before), 1), at: Number(row.tally_at) };
+  await publishVoteTally(boardId, tally);
+  return NextResponse.json({
+    action: 'added',
+    vote: {
+      id: row.id,
+      card_id: row.card_id,
+      board_id: row.board_id,
+      voter_id: row.voter_id,
+      count: row.count,
+      created_at: row.created_at,
+    },
+    tally,
+  });
 }

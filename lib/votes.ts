@@ -6,6 +6,8 @@ import { GUIDED_MODE, PHASES, type BoardMode } from '@/lib/constants/phases';
 import type { Board, BoardSettings, Card, Vote } from '@/types';
 
 export const GROUP_VOTE_ERROR = 'Votes go on the group, not on a card inside it';
+export const GUIDED_ACTION_REQUIRED_ERROR = 'Guided boards take add or remove';
+export const NO_VOTE_TO_REMOVE_ERROR = 'You have no vote on this card';
 export const NO_VOTES_LEFT = 'No votes left';
 export const VOTE_LIMIT_RELATION_ERROR = 'Votes per card cannot be more than votes per person';
 export const CARD_LIMIT_OPEN_ERROR = 'Votes per card is only available on guided boards';
@@ -194,4 +196,12 @@ export function voteLimitsEditable(board: Pick<Board, 'mode' | 'phase' | 'archiv
 /** The one advisory-lock key for a board's guided votes. */
 export function voteLockKey(boardId: string): string {
   return `${boardId}:votes`;
+}
+
+/**
+ * The team's votes used after a guided add or remove. The statement reads every count BEFORE its
+ * own insert, update or delete (one snapshot per statement), so the change is applied here.
+ */
+export function teamUsedAfter(teamUsedBefore: number, delta: 1 | -1): number {
+  return teamUsedBefore + delta;
 }

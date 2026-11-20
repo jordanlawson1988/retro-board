@@ -8,6 +8,7 @@ import { sortCards, effectiveCardSort } from '@/utils/sortCards';
 import { isMine } from '@/utils/isMine';
 import { useCardText } from '@/hooks/useCardText';
 import { voteTotalsRevealed } from '@/lib/votePillPolicy';
+import { voteTotalsByCard, votesUsedBy } from '@/lib/votes';
 import type { Column, Card, Vote, Participant, CardSort } from '@/types';
 
 interface SwimlaneViewProps {
@@ -55,11 +56,7 @@ export function SwimlaneView({
     [columns]
   );
 
-  const voteCountByCard = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const v of votes) map.set(v.card_id, (map.get(v.card_id) || 0) + 1);
-    return map;
-  }, [votes]);
+  const voteCountByCard = useMemo(() => voteTotalsByCard(votes), [votes]);
 
   const voteCountFor = useCallback(
     (id: string) => voteCountByCard.get(id) || 0,
@@ -68,8 +65,7 @@ export function SwimlaneView({
 
   const voteLimitReached = useMemo(() => {
     if (!currentParticipantId) return false;
-    const myVoteCount = votes.filter((v) => v.voter_id === currentParticipantId).length;
-    return myVoteCount >= maxVotesPerParticipant;
+    return votesUsedBy(votes, currentParticipantId) >= maxVotesPerParticipant;
   }, [votes, currentParticipantId, maxVotesPerParticipant]);
 
   const toggleRow = (columnId: string) => {
@@ -94,9 +90,7 @@ export function SwimlaneView({
             voteCountFor
           );
           const isCollapsed = collapsedRows.has(col.id);
-          const colVoteCount = votes.filter((v) =>
-            colCards.some((c) => c.id === v.card_id)
-          ).length;
+          const colVoteCount = colCards.reduce((sum, c) => sum + voteCountFor(c.id), 0);
 
           return (
             <div
@@ -157,7 +151,7 @@ export function SwimlaneView({
                             authorName={card.author_name}
                             authorId={card.author_id}
                             color={card.color}
-                            voteCount={cardVotes.length}
+                            voteCount={voteCountFor(card.id)}
                             hasVoted={hasVoted}
                             isAuthor={isMine(card, currentParticipantId)}
                             isObscured={isObscured}

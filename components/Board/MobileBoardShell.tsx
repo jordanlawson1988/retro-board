@@ -28,6 +28,7 @@ import { RetroCard } from './RetroCard';
 import { ColumnSortMenu } from './ColumnSortMenu';
 import { sortCards, effectiveCardSort } from '@/utils/sortCards';
 import { isMine } from '@/utils/isMine';
+import { leadCardVotes, voteTotalsByCard, votesUsedBy } from '@/lib/votes';
 import { useCardText } from '@/hooks/useCardText';
 import type { Column, Card, Vote, ActionItem, CardReactions, Participant, CardSort, BoardSettings } from '@/types';
 
@@ -134,11 +135,7 @@ export function MobileBoardShell({
     [sortedColumns, safeActiveColumnId]
   );
 
-  const voteCountByCard = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const v of votes) map.set(v.card_id, (map.get(v.card_id) || 0) + 1);
-    return map;
-  }, [votes]);
+  const voteCountByCard = useMemo(() => voteTotalsByCard(votes), [votes]);
 
   const voteCountFor = useCallback(
     (id: string) => voteCountByCard.get(id) || 0,
@@ -161,9 +158,7 @@ export function MobileBoardShell({
 
   // Votes used by the current participant (derived from store votes array)
   const votesUsed = useMemo(
-    () => (currentParticipantId
-      ? votes.filter((v) => v.voter_id === currentParticipantId).length
-      : 0),
+    () => votesUsedBy(votes, currentParticipantId),
     [votes, currentParticipantId]
   );
 
@@ -247,7 +242,7 @@ export function MobileBoardShell({
                 authorName={card.author_name}
                 authorId={card.author_id}
                 color={card.color}
-                voteCount={cardVotes.length}
+                voteCount={leadCardVotes(guided, card.id, cards, voteCountByCard)}
                 votes={votes}
                 hasVoted={hasVoted}
                 isAuthor={isMine(card, currentParticipantId)}

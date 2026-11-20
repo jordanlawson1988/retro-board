@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  voteWeight, voteTotalsByCard, votesUsedBy, myVotesOn, sumVoteCounts, groupScore, maxVotesPerCard,
+  voteWeight, voteTotalsByCard, votesUsedBy, myVotesOn, sumVoteCounts, groupScore, leadCardVotes, maxVotesPerCard,
   guidedVoteDefaults, voteControlKind, voteControlState, applyVoteDelta, settleOwnVote, applyVoteTally,
   teamVotesRemaining, teamVotesLeftFor, teamVotesLabel, votesPerCardError, voteLimitProblem, limitRefusal,
   hasLimitKey, voteLimitsEditable, teamUsedAfter, GROUP_VOTE_ERROR, NO_VOTES_LEFT, VOTE_LIMIT_RELATION_ERROR,
@@ -36,6 +36,13 @@ describe('vote arithmetic', () => {
     const cards = [{ id: 'c1', merged_with: null }, { id: 'c2', merged_with: 'c1' }, { id: 'c3', merged_with: null }];
     expect(groupScore('c1', cards, voteTotalsByCard(rows))).toBe(5);
     expect(groupScore('c3', cards, voteTotalsByCard(rows))).toBe(0);
+  });
+  it('a lead card shows its group on a guided board and its own total on an open one', () => {
+    const cards = [{ id: 'c1', merged_with: null }, { id: 'c2', merged_with: 'c1' }];
+    const totals = voteTotalsByCard(rows);
+    expect(leadCardVotes(true, 'c1', cards, totals)).toBe(5);
+    expect(leadCardVotes(false, 'c1', cards, totals)).toBe(4);
+    expect(leadCardVotes(false, 'missing', cards, totals)).toBe(0);
   });
 });
 

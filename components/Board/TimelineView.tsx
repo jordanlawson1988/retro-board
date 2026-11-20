@@ -6,6 +6,7 @@ import { isMine } from '@/utils/isMine';
 import { useCardText } from '@/hooks/useCardText';
 import { VotePill } from './VotePill';
 import { voteTotalsRevealed } from '@/lib/votePillPolicy';
+import { voteTotalsByCard, votesUsedBy } from '@/lib/votes';
 import type { Column, Card, Vote, Participant } from '@/types';
 
 interface TimelineViewProps {
@@ -49,17 +50,11 @@ export function TimelineView({
     return map;
   }, [columns]);
 
-  const voteCountMap = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const vote of votes) {
-      map.set(vote.card_id, (map.get(vote.card_id) || 0) + 1);
-    }
-    return map;
-  }, [votes]);
+  const voteCountMap = useMemo(() => voteTotalsByCard(votes), [votes]);
 
   const voteLimitReached = useMemo(() => {
     if (!currentParticipantId) return false;
-    return votes.filter((v) => v.voter_id === currentParticipantId).length >= maxVotesPerParticipant;
+    return votesUsedBy(votes, currentParticipantId) >= maxVotesPerParticipant;
   }, [votes, currentParticipantId, maxVotesPerParticipant]);
 
   const groups = useMemo((): TimelineGroup[] => {

@@ -34,6 +34,7 @@ import { ActionItemsPanel } from '@/components/ActionItems';
 import { exportMarkdown, exportCsv } from '@/utils/export';
 import { useCardText } from '@/hooks/useCardText';
 import { GUIDED_MODE } from '@/lib/constants/phases';
+import { votesUsedBy } from '@/lib/votes';
 
 /** A drag distance no pointer reaches: used to switch dragging off. */
 const DRAG_NEVER_PX = 100_000;
@@ -427,7 +428,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
               </button>
               {isJoined && board.settings.voting_enabled && (
                 <VoteStatus
-                  votesUsed={votes.filter((v) => v.voter_id === currentParticipantId).length}
+                  votesUsed={votesUsedBy(votes, currentParticipantId)}
                   maxVotes={board.settings.max_votes_per_participant}
                 />
               )}

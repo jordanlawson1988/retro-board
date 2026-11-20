@@ -48,6 +48,19 @@ export function groupScore(
   return score;
 }
 
+/**
+ * The count a lead card shows on phones: its group's total on a guided board, its own total on an
+ * open board (open boards have always left a lead's children out here).
+ */
+export function leadCardVotes(
+  guided: boolean,
+  cardId: string,
+  cards: readonly Pick<Card, 'id' | 'merged_with'>[],
+  totals: ReadonlyMap<string, number>,
+): number {
+  return guided ? groupScore(cardId, cards, totals) : (totals.get(cardId) ?? 0);
+}
+
 export function maxVotesPerCard(settings: Pick<BoardSettings, 'max_votes_per_card'>): number {
   return settings.max_votes_per_card ?? OPEN_MAX_VOTES_PER_CARD;
 }

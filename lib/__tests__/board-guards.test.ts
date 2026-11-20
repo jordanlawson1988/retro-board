@@ -300,3 +300,32 @@ describe('phase rule in checkAction', () => {
       .toEqual({ ok: false, status: 409, error: 'Board is completed' });
   });
 });
+
+describe('group actions', () => {
+  const inGroup = state({ phase: 'group', settings: phaseSettings('group') });
+  const inVote = state({ phase: 'vote', settings: phaseSettings('vote') });
+  it('group.title: any joined participant during Group, refused in other phases', () => {
+    expect(checkAction('group.title', actor(), inGroup)).toEqual({ ok: true });
+    expect(checkAction('group.title', actor(), inVote)).toEqual({ ok: false, status: 409, error: 'Not available during Vote' });
+  });
+  it('group.title: 401 for someone who has not joined', () => {
+    expect(checkAction('group.title', actor({ participantId: null }), inGroup)).toEqual({ ok: false, status: 401, error: 'Join the board first' });
+  });
+  it('group.reset: facilitator only, during Group only', () => {
+    expect(checkAction('group.reset', actor(), inGroup)).toEqual({ ok: false, status: 403, error: 'Facilitator access required' });
+    expect(checkAction('group.reset', actor({ isFacilitator: true }), inGroup)).toEqual({ ok: true });
+    expect(checkAction('group.reset', actor({ isFacilitator: true }), inVote)).toEqual({ ok: false, status: 409, error: 'Not available during Vote' });
+  });
+  it('group.reset is facilitator-only on a v1 board too', () => {
+    expect(checkAction('group.reset', actor({ trustVersion: 1 }), state())).toEqual({ ok: false, status: 403, error: 'Facilitator access required' });
+  });
+  it('group.title: a facilitator without a participant row passes; a legacy v1 participant passes', () => {
+    expect(checkAction('group.title', actor({ participantId: null, isFacilitator: true }), inGroup)).toEqual({ ok: true });
+    expect(checkAction('group.title', actor({ trustVersion: 1 }), inGroup)).toEqual({ ok: true });
+  });
+  it('group.title is refused on a locked board for a non-facilitator, allowed for a facilitator', () => {
+    const locked = state({ phase: 'group', settings: { ...phaseSettings('group'), board_locked: true } });
+    expect(checkAction('group.title', actor(), locked)).toEqual({ ok: false, status: 409, error: 'Board is locked' });
+    expect(checkAction('group.title', actor({ isFacilitator: true }), locked)).toEqual({ ok: true });
+  });
+});

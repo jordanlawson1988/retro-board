@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { cardEventPayload, voteEventPayload } from '@/lib/board-publish';
+import { cardEventPayload, voteEventPayload, voteTallyPayload } from '@/lib/board-publish';
 import type { BoardSettings, Card } from '@/types';
 import type { ViewBoard } from '@/lib/board-view';
 
@@ -40,5 +40,11 @@ describe('voteEventPayload', () => {
   it('passes through otherwise', () => {
     expect(voteEventPayload(p, board({}))).toBe(p);
     expect(voteEventPayload(p, board({ secret_voting: true }, 1))).toBe(p);
+  });
+});
+
+describe('voteTallyPayload', () => {
+  it('the tally payload carries only used and at', () => {
+    expect(voteTallyPayload({ used: 4, at: 17, voter_id: 'p2' } as never)).toEqual({ used: 4, at: 17 });
   });
 });

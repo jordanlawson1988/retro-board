@@ -72,11 +72,13 @@ describe('phaseDenial', () => {
   it.each([
     ['card.create', 'group'], ['card.edit', 'vote'], ['card.delete', 'discuss'],
     ['card.move', 'reflect'], ['card.move', 'vote'], ['vote.toggle', 'reflect'], ['vote.toggle', 'discuss'],
+    ['group.title', 'reflect'], ['group.title', 'vote'], ['group.reset', 'discuss'],
   ] as const)('%s is denied in %s', (action, phase) => {
     expect(phaseDenial(action, phase)).toBe(`Not available during ${PHASES[phase].label}`);
   });
   it.each([
     ['card.create', 'reflect'], ['card.edit', 'group'], ['card.move', 'group'], ['vote.toggle', 'vote'],
+    ['group.title', 'group'], ['group.reset', 'group'],
     ['card.react', 'vote'], ['action-item.write', 'reflect'], ['board.settings', 'vote'], ['participant.leave', 'done'],
   ] as const)('%s is allowed in %s', (action, phase) => {
     expect(phaseDenial(action, phase)).toBeNull();
@@ -217,6 +219,8 @@ describe('phaseDenial full table', () => {
     'card.edit': ['reflect', 'group'],
     'card.delete': ['reflect', 'group'],
     'card.move': ['group'],
+    'group.title': ['group'],
+    'group.reset': ['group'],
     'card.react': PHASE_IDS,
     'vote.toggle': ['vote'],
     'column.write': PHASE_IDS,

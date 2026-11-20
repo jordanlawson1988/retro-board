@@ -43,6 +43,7 @@ function isLockable(action: BoardAction): boolean {
     action === 'card.edit' ||
     action === 'card.delete' ||
     action === 'card.move' ||
+    action === 'group.title' ||
     action === 'card.react' ||
     action === 'vote.toggle' ||
     action === 'action-item.write'
@@ -97,6 +98,7 @@ function checkIdentity(
     case 'column.write':
     case 'participant.manage':
     case 'board.settings':
+    case 'group.reset':
       return actor.isFacilitator ? OK : deny(403, FACILITATOR_REQUIRED);
     case 'participant.leave': {
       const isSelf =
@@ -107,6 +109,7 @@ function checkIdentity(
     }
     case 'card.create':
     case 'card.move':
+    case 'group.title':
     case 'card.react':
     case 'vote.toggle':
     case 'action-item.write':
@@ -131,7 +134,7 @@ export function checkAction(
   if (actor.trustVersion !== 1) return checkIdentity(action, actor, target);
 
   // Rule 3: v1 skips identity rules except board.settings.
-  if (action === 'board.settings' && !actor.isFacilitator) {
+  if ((action === 'board.settings' || action === 'group.reset') && !actor.isFacilitator) {
     return deny(403, FACILITATOR_REQUIRED);
   }
   return OK;

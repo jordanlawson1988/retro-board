@@ -33,6 +33,7 @@ export function shapeCard(card: Card, board: ViewBoard, viewer: Viewer): Card {
   if (board.settings.card_visibility === 'hidden' && !isMine && !board.archived_at) {
     shaped.text = '';
     shaped.text_hidden = true;
+    if ('group_title' in shaped) shaped.group_title = null;
   }
 
   if (board.settings.anonymous_cards && !isMine) {

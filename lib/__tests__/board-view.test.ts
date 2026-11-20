@@ -263,3 +263,22 @@ describe('isRevealingChange', () => {
     expect(isRevealingChange(s({}), s({}))).toBe(false);
   });
 });
+
+describe('group title shaping and secret vote counts', () => {
+  it('a withheld text also withholds the group title; a visible card or my own keeps it', () => {
+    const hidden = board({ settings: { card_visibility: 'hidden' } });
+    const c = card({ author_id: 'someone', group_title: 'Release pain' });
+    expect(shapeCard(c, hidden, { participantId: 'p1' }).group_title).toBeNull();
+    expect(shapeCard(c, board(), { participantId: 'p1' }).group_title).toBe('Release pain');
+    expect(shapeCard({ ...c, author_id: 'p1' }, hidden, { participantId: 'p1' }).group_title).toBe('Release pain');
+    expect('group_title' in shapeCard(card({ author_id: 'someone' }), hidden, { participantId: 'p1' })).toBe(false);
+  });
+  it('secret voting keeps my vote with its count and drops everyone else', () => {
+    const secret = board({ settings: { secret_voting: true } });
+    const votes = [
+      { id: 'v1', card_id: 'c1', board_id: 'b1', voter_id: 'p1', count: 2, created_at: 'x' },
+      { id: 'v2', card_id: 'c1', board_id: 'b1', voter_id: 'p2', count: 3, created_at: 'x' },
+    ];
+    expect(shapeVotes(votes, secret, { participantId: 'p1' })).toEqual([votes[0]]);
+  });
+});

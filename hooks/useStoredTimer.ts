@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { playTimerDing, resumeAudioContext } from '@/lib/audio';
 import { useBoardStore } from '@/stores/boardStore';
-import { IDLE_TIMER, pausedTimer, resumedTimer, startedTimer, timerView } from '@/lib/timer-state';
+import { IDLE_TIMER, pausedTimer, resumedTimer, sameTimerView, startedTimer, timerView } from '@/lib/timer-state';
 import type { TimerState } from '@/types';
 
 /**
@@ -24,11 +24,17 @@ export function useStoredTimer({ enabled }: { enabled: boolean }) {
     storedRef.current = base;
   });
 
-  // Tick only while the stored status is running.
-  const running = enabled && base.status === 'running';
+  // Poll every 250ms only while the derived view is running; stops by itself at expiry. State
+  // changes only when the displayed second or status changes, so the board re-renders once a second.
+  const running = enabled && timer.status === 'running';
   useEffect(() => {
     if (!running) return;
-    const id = setInterval(() => setNow(Date.now()), 250);
+    const id = setInterval(() => {
+      setNow((prev) => {
+        const next = Date.now();
+        return sameTimerView(timerView(storedRef.current, prev), timerView(storedRef.current, next)) ? prev : next;
+      });
+    }, 250);
     return () => clearInterval(id);
   }, [running]);
 

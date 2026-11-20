@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { IDLE_TIMER, startedTimer, pausedTimer, resumedTimer, timerView } from '@/lib/timer-state';
+import { IDLE_TIMER, startedTimer, pausedTimer, resumedTimer, timerView, sameTimerView } from '@/lib/timer-state';
 import { validateSettingsPatch } from '@/lib/board-validation';
 
 const t0 = Date.parse('2026-11-18T12:00:00Z');
@@ -35,5 +35,14 @@ describe('timer-state', () => {
     for (const t of [IDLE_TIMER, startedTimer(300, t0), paused, resumedTimer(paused, t0 + 9000)]) {
       expect(validateSettingsPatch({ timer: t }).ok).toBe(true);
     }
+  });
+
+  it('sameTimerView compares status and displayed seconds only', () => {
+    const t = startedTimer(300, t0);
+    expect(sameTimerView(timerView(t, t0 + 1000), timerView(t, t0 + 1250))).toBe(true);
+    expect(sameTimerView(timerView(t, t0 + 1000), timerView(t, t0 + 2000))).toBe(false);
+    const short = startedTimer(60, t0);
+    expect(sameTimerView(timerView(short, t0 + 59_000), timerView(short, t0 + 60_000))).toBe(false);
+    expect(sameTimerView(timerView(short, t0 + 60_000), timerView(short, t0 + 90_000))).toBe(true);
   });
 });

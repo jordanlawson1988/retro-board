@@ -34,3 +34,8 @@ export function resumedTimer(t: TimerState, nowMs: number): TimerState {
   const startedAt = new Date(nowMs - (t.duration - t.remaining) * 1000).toISOString();
   return { ...t, status: 'running', started_at: startedAt };
 }
+
+/** True when two views would display the same thing: same status and same whole seconds. */
+export function sameTimerView(a: TimerState, b: TimerState): boolean {
+  return a.status === b.status && a.remaining === b.remaining;
+}

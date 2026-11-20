@@ -25,6 +25,7 @@ import type { BoardView } from '@/types';
 import { useBoardStore } from '@/stores/boardStore';
 import { useFeatureFlagStore } from '@/stores/featureFlagStore';
 import { useTimer } from '@/hooks/useTimer';
+import { useStoredTimer } from '@/hooks/useStoredTimer';
 import { usePolling } from '@/hooks/usePolling';
 import { TimerFloating } from '@/components/Timer';
 import { ActionItemsPanel } from '@/components/ActionItems';
@@ -113,10 +114,14 @@ export function BoardPage({ boardId }: { boardId: string }) {
 
   const liveEventsEnabled = useFeatureFlagStore((s) => s.isEnabled('live_events'));
 
-  const { timer, start: timerStart, pause: timerPause, resume: timerResume, reset: timerReset } = useTimer({
+  const guidedBoard = useBoardStore((s) => s.board?.mode === 'guided');
+  const openTimer = useTimer({
     boardId: boardId || '',
-    liveSync: liveEventsEnabled && !!currentParticipantId,
+    liveSync: liveEventsEnabled && !!currentParticipantId && !guidedBoard,
   });
+  const storedTimer = useStoredTimer({ enabled: guidedBoard });
+  const { timer, start: timerStart, pause: timerPause, resume: timerResume, reset: timerReset } =
+    guidedBoard ? storedTimer : openTimer;
 
   usePolling(boardId, 10_000, !liveEventsEnabled && !!currentParticipantId);
 

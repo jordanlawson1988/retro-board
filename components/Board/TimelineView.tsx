@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { cn } from '@/utils/cn';
 import { isMine } from '@/utils/isMine';
-import { displayCardText } from '@/utils/cardText';
+import { useCardText } from '@/hooks/useCardText';
 import { VotePill } from './VotePill';
 import { voteTotalsRevealed } from '@/lib/votePillPolicy';
 import type { Column, Card, Vote, Participant } from '@/types';
@@ -40,6 +40,7 @@ export function TimelineView({
   secretVoting,
   participants,
 }: TimelineViewProps) {
+  const cardText = useCardText();
   const columnMap = useMemo(() => {
     const map = new Map<string, Column>();
     for (const col of columns) {
@@ -145,7 +146,7 @@ export function TimelineView({
                           blurred && 'select-none blur-sm'
                         )}
                       >
-                        {displayCardText(card)}
+                        {cardText(card)}
                       </p>
 
                       {/* Vote count — also shown as totals once voting is off */}

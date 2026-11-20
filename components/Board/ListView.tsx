@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import { ArrowUp, ArrowDown } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { isMine } from '@/utils/isMine';
-import { displayCardText } from '@/utils/cardText';
+import { useCardText } from '@/hooks/useCardText';
 import { VotePill } from './VotePill';
 import { voteTotalsRevealed } from '@/lib/votePillPolicy';
 import type { Column, Card, Vote, Participant } from '@/types';
@@ -39,6 +39,7 @@ export function ListView({
   secretVoting,
   participants,
 }: ListViewProps) {
+  const cardText = useCardText();
   const [sortField, setSortField] = useState<SortField>('column');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
 
@@ -195,7 +196,7 @@ export function ListView({
                         blurred && 'select-none blur-sm'
                       )}
                     >
-                      {displayCardText(card)}
+                      {cardText(card)}
                     </span>
                   </td>
                   <td className="px-4 py-3">

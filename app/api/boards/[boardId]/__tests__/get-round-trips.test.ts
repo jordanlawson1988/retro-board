@@ -62,6 +62,27 @@ describe('board GET round-trip budget', () => {
     expect(json.board).not.toHaveProperty('cp_id');
   });
 
+  it('open board: the five snapshot statements are pinned and there is no voteTally', async () => {
+    mocks.sql.mockResolvedValue([ctxRow({ cp_id: 'p1', cp_is_admin: false, cp_display_name: 'Ann' })]);
+    mocks.pid.mockReturnValue('p1');
+    const json = await (await call()).json();
+    expect('voteTally' in json).toBe(false);
+    const texts: string[] = [];
+    mocks.tx.mock.calls[0][0]((s: TemplateStringsArray) => {
+      texts.push(s.join('?'));
+      return {};
+    });
+    expect(texts).toMatchInlineSnapshot(`
+      [
+        "SELECT * FROM columns WHERE board_id = ? ORDER BY position, created_at, id",
+        "SELECT * FROM cards WHERE board_id = ? ORDER BY position, created_at, id",
+        "SELECT * FROM votes WHERE board_id = ?",
+        "SELECT * FROM action_items WHERE board_id = ? ORDER BY created_at",
+        "SELECT * FROM participants WHERE board_id = ?",
+      ]
+    `);
+  });
+
   it('completed-closed stranger: one sql, no transaction', async () => {
     mocks.sql.mockResolvedValue([ctxRow({ archived_at: '2026-01-01' })]);
     const res = await call();

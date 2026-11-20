@@ -72,12 +72,23 @@ describe('POST /api/boards guided mode', () => {
     expect(ins.values).toContain(JSON.stringify(DEFAULT_PHASE_CONFIG));
     const settingsJson = ins.values.find((v) => typeof v === 'string' && v.startsWith('{"card_visibility"')) as string;
     const settings = JSON.parse(settingsJson);
-    expect(settings).toEqual({ ...baseBody.settings, ...phaseSettings(FIRST_PHASE) });
+    expect(settings).toEqual({ ...baseBody.settings, ...phaseSettings(FIRST_PHASE), max_votes_per_card: 3 });
     // Reflect hides cards even though the body said visible; unowned keys keep the body value.
     expect(settings.card_visibility).toBe('hidden');
     expect(settings.anonymous_cards).toBe(true);
     expect(ins.text).toContain('trust_version');
     expect(ins.text).toContain('?, 2, ?, ?, ?::jsonb)');
+  });
+
+  it('a guided board whose per-person limit is 2 gets 2 per card', async () => {
+    await call({ mode: 'guided', settings: { ...baseBody.settings, max_votes_per_participant: 2 } });
+    const settingsJson = boardInsert()!.values.find((v) => typeof v === 'string' && v.startsWith('{"card_visibility"')) as string;
+    expect(JSON.parse(settingsJson).max_votes_per_card).toBe(2);
+  });
+
+  it('an open board is inserted without max_votes_per_card', async () => {
+    await call();
+    expect(boardInsert()!.values.some((v) => typeof v === 'string' && v.includes('max_votes_per_card'))).toBe(false);
   });
 
   it('403 when the guided_mode flag is off, and nothing is inserted', async () => {

@@ -10,6 +10,7 @@ import { validateNewBoard, INVALID_BODY } from '@/lib/board-validation';
 import { canUse } from '@/lib/can-use';
 import { FIRST_PHASE, DEFAULT_PHASE_CONFIG, GUIDED_MODE } from '@/lib/constants/phases';
 import { phaseSettings } from '@/lib/phases';
+import { guidedVoteDefaults } from '@/lib/votes';
 
 export async function POST(request: Request) {
   const limited = await rateLimitOr429(request, 'board-create', 10, 3600);
@@ -46,7 +47,7 @@ export async function POST(request: Request) {
         mode === GUIDED_MODE
           ? txn`
         INSERT INTO boards (id, title, description, template, created_by, owner_id, join_code, settings, trust_version, mode, phase, phase_config)
-        VALUES (${id}, ${title}, ${description}, ${template}, ${creatorId}, ${ownerId}, ${joinCode}, ${JSON.stringify({ ...settings, ...phaseSettings(FIRST_PHASE) })}, 2, ${mode}, ${FIRST_PHASE}, ${JSON.stringify(DEFAULT_PHASE_CONFIG)}::jsonb)
+        VALUES (${id}, ${title}, ${description}, ${template}, ${creatorId}, ${ownerId}, ${joinCode}, ${JSON.stringify({ ...settings, ...phaseSettings(FIRST_PHASE), ...guidedVoteDefaults(settings) })}, 2, ${mode}, ${FIRST_PHASE}, ${JSON.stringify(DEFAULT_PHASE_CONFIG)}::jsonb)
       `
           : txn`
         INSERT INTO boards (id, title, description, template, created_by, owner_id, join_code, settings, trust_version)

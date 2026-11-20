@@ -13,6 +13,16 @@ import { boardAccessFrom } from '@/lib/board-access-loader';
 import { BOARD_ACCESS } from '@/lib/constants/board-access';
 import { REOPEN_PHASE, FINAL_PHASE, GUIDED_MODE, type PhaseId } from '@/lib/constants/phases';
 import { phaseSettings, phaseOwnedKeysIn } from '@/lib/phases';
+import { OPEN_MAX_VOTES_PER_CARD } from '@/lib/constants/board-settings';
+import {
+  CARD_LIMIT_OPEN_ERROR,
+  hasLimitKey,
+  limitRefusal,
+  sumVoteCounts,
+  voteLimitProblem,
+  voteLockKey,
+  type VoteTally,
+} from '@/lib/votes';
 import {
   getSessionOrNull,
   assertCanFacilitate,
@@ -130,8 +140,15 @@ export async function GET(
         : PUBLIC_VIEWER
       : { participantId: yourParticipantId };
 
+  // The team's votes used, summed from the rows already read and BEFORE shaping, so it counts
+  // everyone's votes even while they are secret. Guided boards only. `at: 0` marks a snapshot;
+  // any later vote-tally event or vote response replaces it.
+  const voteTally: VoteTally | null =
+    loadedAny.board.mode === GUIDED_MODE ? { used: sumVoteCounts(votes as unknown as Vote[]), at: 0 } : null;
+
   return NextResponse.json({
     board: { ...board, ...modeFields },
+    ...(voteTally ? { voteTally } : {}),
     columns,
     cards: (cards as unknown as Card[]).map((c) => shapeCard(c, viewBoard, viewer)),
     votes: shapeVotes(votes as unknown as Vote[], viewBoard, viewer),
@@ -174,6 +191,7 @@ export async function PATCH(
   }
 
   let prevSettings: BoardSettings | null = null;
+  let guardedLimitPatch = false;
   if (patchNeedsSettingsGuard(body)) {
     // Settings changes go through the actor so a v2 creator without an account can change them.
     const loaded = await loadBoardActor(request, boardId);
@@ -185,6 +203,16 @@ export async function PATCH(
       return NextResponse.json({ error: 'This setting follows the phase on a guided board' }, { status: 409 });
     }
     prevSettings = loaded.state.settings;
+    if (settingsPatch !== null) {
+      if (loaded.board.mode !== GUIDED_MODE && 'max_votes_per_card' in settingsPatch) {
+        return NextResponse.json({ error: CARD_LIMIT_OPEN_ERROR }, { status: 409 });
+      }
+      if (loaded.board.mode === GUIDED_MODE && hasLimitKey(settingsPatch)) {
+        const problem = voteLimitProblem(loaded.state.settings, settingsPatch);
+        if (problem) return NextResponse.json({ error: problem }, { status: 400 });
+        guardedLimitPatch = true;
+      }
+    }
   } else {
     // Rename / description only: signed-in facilitator authority (owner, facilitator member,
     // system admin), read from the same one-query context. Facilitators may still rename a
@@ -203,9 +231,61 @@ export async function PATCH(
     return NextResponse.json({ ok: true });
   }
 
+  let guardedRow: Record<string, unknown> | null = null;
+  if (guardedLimitPatch && settingsPatch !== null) {
+    // A vote limit may not drop below what has already been spent. The check and the update are
+    // one statement, run under the same per-board lock a guided vote takes, so a vote cannot
+    // commit between the read and the write. Title and description handling matches the plain
+    // statement below. One transaction batch is one round-trip.
+    const limitPerPerson = settingsPatch.max_votes_per_participant ?? null;
+    const limitPerCard = settingsPatch.max_votes_per_card ?? null;
+    const [, guardedRows] = await sqlTransaction((txn) => [
+      txn`SELECT pg_advisory_xact_lock(hashtext(${voteLockKey(boardId)}))`,
+      txn`
+        WITH spent AS (
+          SELECT COALESCE(MAX(per_voter), 0)::int AS max_spent
+          FROM (SELECT SUM(count) AS per_voter FROM votes WHERE board_id = ${boardId} GROUP BY voter_id) s
+        ), top AS (
+          SELECT COALESCE(MAX(count), 0)::int AS max_on_card FROM votes WHERE board_id = ${boardId}
+        ), updated AS (
+          UPDATE boards SET
+            title = CASE WHEN ${hasTitle}::boolean THEN ${title}::text ELSE title END,
+            description = CASE WHEN ${hasDescription}::boolean THEN ${description}::text ELSE description END,
+            settings = settings || ${JSON.stringify(settingsPatch)}::jsonb
+          WHERE id = ${boardId} AND archived_at IS NULL AND deleted_at IS NULL
+            AND (${limitPerPerson}::int IS NULL OR ${limitPerPerson}::int >= (SELECT max_spent FROM spent))
+            AND (${limitPerCard}::int IS NULL OR ${limitPerCard}::int >= (SELECT max_on_card FROM top))
+            AND COALESCE(${limitPerCard}::int, (settings ->> 'max_votes_per_card')::int, ${OPEN_MAX_VOTES_PER_CARD}::int)
+              <= COALESCE(${limitPerPerson}::int, (settings ->> 'max_votes_per_participant')::int, ${DEFAULT_BOARD_SETTINGS.max_votes_per_participant}::int)
+          RETURNING title, description, settings
+        )
+        SELECT u.title, u.description, u.settings, spent.max_spent, top.max_on_card
+        FROM spent CROSS JOIN top LEFT JOIN updated u ON true
+      `,
+    ]);
+    const result = (guardedRows as unknown as Record<string, unknown>[] | undefined)?.[0];
+    if (!result || result.settings === null || result.settings === undefined) {
+      return NextResponse.json(
+        {
+          error: limitRefusal({
+            perPerson: limitPerPerson,
+            perCard: limitPerCard,
+            maxSpent: Number(result?.max_spent ?? 0),
+            maxOnCard: Number(result?.max_on_card ?? 0),
+          }),
+        },
+        { status: 409 }
+      );
+    }
+    guardedRow = result;
+  }
+
   // One atomic statement. Settings merge key by key (nested values such as `timer` are replaced
   // whole per top-level key), so concurrent changes to different keys cannot undo each other.
-  const [row] = await sql`
+  // A guarded limit change already ran its own statement above.
+  const [row] = guardedRow
+    ? [guardedRow]
+    : await sql`
     UPDATE boards SET
       title = CASE WHEN ${hasTitle}::boolean THEN ${title}::text ELSE title END,
       description = CASE WHEN ${hasDescription}::boolean THEN ${description}::text ELSE description END,

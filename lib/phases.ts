@@ -9,6 +9,7 @@ import {
   type BoardMode,
   type PhaseConfig,
   type PhaseId,
+  type PhaseProfile,
 } from '@/lib/constants/phases';
 import type { BoardSettings } from '@/types';
 
@@ -34,6 +35,11 @@ export function resolvePhaseMove(
   }
   if (target === FINAL_PHASE) return { ok: false, error: COMPLETE_ERROR };
   return { ok: true, phase: target };
+}
+
+/** Whether the facilitator can step back from `phase`. */
+export function canGoBack(phase: PhaseId): boolean {
+  return resolvePhaseMove(phase, 'back').ok;
 }
 
 export const PHASE_OWNED_SETTINGS = [
@@ -63,18 +69,29 @@ export function phaseOwnedKeysIn(patch: Record<string, unknown>): string[] {
   return PHASE_OWNED_SETTINGS.filter((key) => key in patch);
 }
 
+/**
+ * The phase flag that gates each board action, or null when the action is allowed in every
+ * phase. Typed over every BoardAction, so adding an action to BOARD_ACTIONS without deciding
+ * here is a compile error.
+ */
+export const ACTION_PHASE_GATE: Record<BoardAction, keyof PhaseProfile | null> = {
+  'card.create': 'canWriteCards',
+  'card.edit': 'canEditCards',
+  'card.delete': 'canEditCards',
+  'card.move': 'canGroup',
+  'card.react': null,
+  'vote.toggle': 'canVote',
+  'column.write': null,
+  'participant.manage': null,
+  'participant.leave': null,
+  'action-item.write': null,
+  'board.settings': null,
+};
+
 export function phaseDenial(action: BoardAction, phase: PhaseId): string | null {
   const { profile, label } = PHASES[phase];
-  let allowed = true;
-  switch (action) {
-    case 'card.create': allowed = profile.canWriteCards; break;
-    case 'card.edit':
-    case 'card.delete': allowed = profile.canEditCards; break;
-    case 'card.move': allowed = profile.canGroup; break;
-    case 'vote.toggle': allowed = profile.canVote; break;
-    default: allowed = true;
-  }
-  return allowed ? null : `Not available during ${label}`;
+  const gate = ACTION_PHASE_GATE[action];
+  return gate === null || profile[gate] ? null : `Not available during ${label}`;
 }
 
 export function validateDeadline(

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { PHASE_IDS, PHASES } from '@/lib/constants/phases';
+import { BOARD_ACTIONS, type BoardAction } from '@/lib/constants/board-actions';
 import {
   resolvePhaseMove,
   phaseSettings,
@@ -15,6 +16,8 @@ import {
   formatDeadlineTime,
   guidedModeEnabled,
   phaseConfigAfterClose,
+  canGoBack,
+  ACTION_PHASE_GATE,
 } from '@/lib/phases';
 import { DEFAULT_BOARD_SETTINGS } from '@/utils/constants';
 
@@ -197,5 +200,48 @@ describe('phaseConfigAfterClose', () => {
     expect(phaseConfigAfterClose(cfg, {})).toBe(cfg);
     expect(phaseConfigAfterClose(cfg, undefined)).toBe(cfg);
     expect(phaseConfigAfterClose(cfg, { phase: 'bogus' })).toBe(cfg);
+  });
+});
+
+describe('phaseDenial full table', () => {
+  // Which phases ALLOW each action: reflect, group, vote, discuss, done.
+  const ALLOWED: Record<BoardAction, readonly string[]> = {
+    'card.create': ['reflect'],
+    'card.edit': ['reflect', 'group'],
+    'card.delete': ['reflect', 'group'],
+    'card.move': ['group'],
+    'card.react': PHASE_IDS,
+    'vote.toggle': ['vote'],
+    'column.write': PHASE_IDS,
+    'participant.manage': PHASE_IDS,
+    'participant.leave': PHASE_IDS,
+    'action-item.write': PHASE_IDS,
+    'board.settings': PHASE_IDS,
+  };
+  it('covers every action', () => {
+    expect(Object.keys(ALLOWED).sort()).toEqual([...BOARD_ACTIONS].sort());
+    expect(Object.keys(ACTION_PHASE_GATE).sort()).toEqual([...BOARD_ACTIONS].sort());
+  });
+  for (const action of BOARD_ACTIONS) {
+    for (const phase of PHASE_IDS) {
+      it(`${action} in ${phase}`, () => {
+        const expected = ALLOWED[action].includes(phase) ? null : `Not available during ${PHASES[phase].label}`;
+        expect(phaseDenial(action, phase)).toBe(expected);
+      });
+    }
+  }
+});
+
+describe('canGoBack', () => {
+  it('is true exactly when resolvePhaseMove(phase, back) succeeds', () => {
+    for (const phase of PHASE_IDS) {
+      expect(canGoBack(phase)).toBe(resolvePhaseMove(phase, 'back').ok);
+    }
+  });
+  it('is false at the first and final phases, true between', () => {
+    expect(canGoBack('reflect')).toBe(false);
+    expect(canGoBack('done')).toBe(false);
+    expect(canGoBack('group')).toBe(true);
+    expect(canGoBack('discuss')).toBe(true);
   });
 });

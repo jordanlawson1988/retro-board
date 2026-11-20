@@ -6,6 +6,16 @@ import { buildActor } from '@/lib/board-write-rules';
 import type { BoardActor, BoardState, GuardResult } from '@/lib/board-guards';
 import type { BoardSettings } from '@/types';
 import { DEFAULT_BOARD_SETTINGS } from '@/utils/constants';
+import {
+  DEFAULT_PHASE_CONFIG,
+  GUIDED_MODE,
+  OPEN_MODE,
+  isBoardMode,
+  isPhaseId,
+  type BoardMode,
+  type PhaseConfig,
+  type PhaseId,
+} from '@/lib/constants/phases';
 
 export interface LoadedBoard {
   actor: BoardActor;
@@ -18,6 +28,9 @@ export interface LoadedBoard {
     deleted_at: string | null;
     owner_id: string | null;
     created_by: string | null;
+    mode: BoardMode;
+    phase: PhaseId | null;
+    phase_config: PhaseConfig;
   };
   /** The full boards row (`SELECT *` shape), for routes that return it as-is. */
   row: Record<string, unknown>;
@@ -128,9 +141,23 @@ export async function loadBoardActor(
   // Missing keys take the defaults so they never read as "open".
   const settings: BoardSettings = { ...DEFAULT_BOARD_SETTINGS, ...((row.settings as Partial<BoardSettings> | null) ?? {}) };
   const archivedAt = (row.archived_at as string | null) ?? null;
+
+  // A row from before migration 015 has no mode key: it is an open board.
+  const rawMode = row.mode === undefined ? OPEN_MODE : row.mode;
+  if (!isBoardMode(rawMode)) throw new Error(`Invalid mode for board ${boardId}`);
+  const mode: BoardMode = rawMode;
+  let phase: PhaseId | null = null;
+  if (mode === GUIDED_MODE) {
+    if (!isPhaseId(row.phase)) throw new Error(`Invalid phase for board ${boardId}`);
+    phase = row.phase;
+  }
+  const phaseConfig: PhaseConfig = {
+    ...DEFAULT_PHASE_CONFIG,
+    ...((row.phase_config as Partial<PhaseConfig> | null | undefined) ?? {}),
+  };
   return {
     actor,
-    state: { archived: !!archivedAt, settings },
+    state: { archived: !!archivedAt, settings, phase },
     board: {
       id: row.id as string,
       trust_version: trustVersion,
@@ -139,6 +166,9 @@ export async function loadBoardActor(
       deleted_at: (row.deleted_at as string | null) ?? null,
       owner_id: (row.owner_id as string | null) ?? null,
       created_by: (row.created_by as string | null) ?? null,
+      mode,
+      phase,
+      phase_config: phaseConfig,
     },
     row: boardRow,
     userId,

@@ -90,25 +90,30 @@ export class AuthzError extends Error {
 export async function loadBoardAuthorityFor(
   boardId: string,
   userId: string
-): Promise<BoardAuthority> {
+): Promise<BoardAuthority & { boardMode: string | null }> {
   const [row] = await sql`
     SELECT
       (SELECT owner_id FROM boards WHERE id = ${boardId})                                 AS owner_id,
+      -- to_jsonb reads boards.mode by name at run time, so this still runs before migration 015.
+      (SELECT to_jsonb(b) ->> 'mode' FROM boards b WHERE b.id = ${boardId})                AS board_mode,
       (SELECT role FROM board_members WHERE board_id = ${boardId} AND user_id = ${userId}) AS member_role,
       EXISTS (SELECT 1 FROM admin_users WHERE id = ${userId})                              AS is_system_admin
   `;
 
-  return resolveBoardAuthority({
-    userId,
-    ownerId: (row?.owner_id as string | null) ?? null,
-    memberRole: (row?.member_role as string | null) ?? null,
-    isSystemAdmin: !!row?.is_system_admin,
-  });
+  return {
+    ...resolveBoardAuthority({
+      userId,
+      ownerId: (row?.owner_id as string | null) ?? null,
+      memberRole: (row?.member_role as string | null) ?? null,
+      isSystemAdmin: !!row?.is_system_admin,
+    }),
+    boardMode: (row?.board_mode as string | null) ?? null,
+  };
 }
 
 async function loadBoardAuthority(
   boardId: string
-): Promise<BoardAuthority & { userId: string }> {
+): Promise<BoardAuthority & { userId: string; boardMode: string | null }> {
   const session = await getFreshSession();
   const userId = session?.user?.id ?? null;
   if (!userId) throw new AuthzError(401, 'Sign in required');
@@ -125,12 +130,14 @@ export async function assertCanFacilitate(boardId: string): Promise<{ userId: st
 }
 
 /** Throw unless the caller is the board owner (or a system admin). */
-export async function assertBoardOwner(boardId: string): Promise<{ userId: string }> {
+export async function assertBoardOwner(
+  boardId: string
+): Promise<{ userId: string; boardMode: string | null }> {
   const a = await loadBoardAuthority(boardId);
   if (!a.isOwner && !a.isSystemAdmin) {
     throw new AuthzError(403, 'Only the board owner can do this');
   }
-  return { userId: a.userId };
+  return { userId: a.userId, boardMode: a.boardMode };
 }
 
 /**

@@ -11,6 +11,8 @@ import { INVALID_BODY, validateSettingsPatch } from '@/lib/board-validation';
 import { patchNeedsSettingsGuard, resolveYouAre } from '@/lib/board-write-rules';
 import { boardAccessFrom } from '@/lib/board-access-loader';
 import { BOARD_ACCESS } from '@/lib/constants/board-access';
+import { REOPEN_PHASE, FINAL_PHASE, GUIDED_MODE, type PhaseId } from '@/lib/constants/phases';
+import { phaseSettings, phaseOwnedKeysIn } from '@/lib/phases';
 import {
   getSessionOrNull,
   assertCanFacilitate,
@@ -55,6 +57,14 @@ export async function GET(
     trust_version: loadedAny.board.trust_version,
     settings: loadedAny.board.settings,
     archived_at: loadedAny.board.archived_at,
+  };
+
+  // Mode and phase come from the normalised actor load, so a row from before migration 015
+  // reads as an open board.
+  const modeFields = {
+    mode: loadedAny.board.mode,
+    phase: loadedAny.board.phase,
+    phase_config: loadedAny.board.phase_config,
   };
 
   // Who may see this board's content and action items (Rules A and B). One shared decision,
@@ -121,7 +131,7 @@ export async function GET(
       : { participantId: yourParticipantId };
 
   return NextResponse.json({
-    board,
+    board: { ...board, ...modeFields },
     columns,
     cards: (cards as unknown as Card[]).map((c) => shapeCard(c, viewBoard, viewer)),
     votes: shapeVotes(votes as unknown as Vote[], viewBoard, viewer),
@@ -170,6 +180,10 @@ export async function PATCH(
     if (!loaded) return BOARD_NOT_FOUND();
     const denied = guardResponse(checkAction('board.settings', loaded.actor, loaded.state));
     if (denied) return denied;
+    // On a guided board the phase owns these settings; the phase route changes them.
+    if (loaded.board.mode === GUIDED_MODE && settingsPatch !== null && phaseOwnedKeysIn(settingsPatch).length > 0) {
+      return NextResponse.json({ error: 'This setting follows the phase on a guided board' }, { status: 409 });
+    }
     prevSettings = loaded.state.settings;
   } else {
     // Rename / description only: signed-in facilitator authority (owner, facilitator member,
@@ -250,7 +264,19 @@ export async function POST(
     if (denied) return denied;
     const archivedAt = new Date().toISOString();
     // Merge in the database so a settings change committed since the load is not undone.
-    const [done] = await sql`
+    // A guided board also moves to its final phase and takes that phase's settings. Only the
+    // guided statement names `phase`, so an open board's statement is unchanged.
+    const guidedBoard = loaded.board.mode === GUIDED_MODE;
+    const phase: PhaseId | null = guidedBoard ? FINAL_PHASE : null;
+    const [done] = guidedBoard
+      ? await sql`
+      UPDATE boards SET archived_at = ${archivedAt}, phase = ${FINAL_PHASE},
+        settings = settings || ${JSON.stringify(phaseSettings(FINAL_PHASE))}::jsonb,
+        phase_config = phase_config || '{"deadline":null}'::jsonb
+      WHERE id = ${boardId}
+      RETURNING settings
+    `
+      : await sql`
       UPDATE boards SET archived_at = ${archivedAt},
         settings = settings || '{"card_visibility":"visible","board_locked":true}'::jsonb
       WHERE id = ${boardId}
@@ -258,27 +284,41 @@ export async function POST(
     `;
     if (!done) return BOARD_NOT_FOUND();
     const settings = { ...DEFAULT_BOARD_SETTINGS, ...(done.settings as Partial<BoardSettings>) };
-    await channel.publish('board-completed', { archivedAt, settings, refetch: true });
+    await channel.publish('board-completed', { archivedAt, settings, phase, refetch: true });
     return NextResponse.json({ ok: true });
   }
 
   if (action === 'reopen') {
+    let boardMode: string | null;
     try {
-      await assertBoardOwner(boardId);
+      ({ boardMode } = await assertBoardOwner(boardId));
     } catch (e) {
       const r = authFail(e);
       if (r) return r;
       throw e;
     }
-    // Clear archived_at and unlock; leave card_visibility as-is (facilitator can re-hide).
-    const [board] = await sql`
+    // Open board: clear archived_at and unlock; leave card_visibility as-is (facilitator can
+    // re-hide). Guided board: back to the reopen phase with that phase's settings.
+    const guidedBoard = boardMode === GUIDED_MODE;
+    const phase: PhaseId | null = guidedBoard ? REOPEN_PHASE : null;
+    const [board] = guidedBoard
+      ? await sql`
+      UPDATE boards SET archived_at = NULL, phase = ${REOPEN_PHASE},
+        settings = settings || ${JSON.stringify(phaseSettings(REOPEN_PHASE))}::jsonb,
+        phase_config = phase_config || '{"deadline":null}'::jsonb
+      WHERE id = ${boardId} AND archived_at IS NOT NULL
+      RETURNING settings
+    `
+      : await sql`
       UPDATE boards SET archived_at = NULL, settings = settings || '{"board_locked":false}'::jsonb
       WHERE id = ${boardId}
       RETURNING settings
     `;
+    // A guided reopen only applies to a completed board; otherwise it would skip the phase rules.
+    if (!board && guidedBoard) return NextResponse.json({ error: 'Board is not completed' }, { status: 409 });
     if (!board) return BOARD_NOT_FOUND();
     const settings = board.settings;
-    await channel.publish('board-reopened', { settings, refetch: true });
+    await channel.publish('board-reopened', { settings, phase, refetch: true });
     return NextResponse.json({ ok: true });
   }
 

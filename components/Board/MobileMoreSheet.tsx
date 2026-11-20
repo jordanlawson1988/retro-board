@@ -5,6 +5,7 @@ import { Check, Link2, Users, CheckCircle2 } from 'lucide-react';
 import { MobileSheet } from '@/components/common/Sheet';
 import { FacilitatorToolbar } from './FacilitatorToolbar';
 import { ParticipantList } from './ParticipantList';
+import { usePhaseGates } from '@/hooks/usePhaseGates';
 import type { BoardSettings, Participant } from '@/types';
 
 interface MobileMoreSheetProps {
@@ -48,6 +49,7 @@ export function MobileMoreSheet({
   onToggleActionItems,
   onCompleteRetro,
 }: MobileMoreSheetProps) {
+  const { guided } = usePhaseGates();
   const [copied, setCopied] = useState(false);
 
   const handleCopyLink = async () => {
@@ -116,6 +118,7 @@ export function MobileMoreSheet({
             </span>
             <FacilitatorToolbar
               layout="stacked"
+              guided={guided}
               settings={settings}
               onUpdateSettings={onUpdateSettings}
               actionItemCount={actionItemCount}

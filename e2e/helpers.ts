@@ -19,6 +19,8 @@ export interface CreateBoardOpts {
   settings?: Record<string, unknown>;
   /** When set, the creator is inserted as a participant at creation time. */
   displayName?: string;
+  /** 'guided' creates a phase-driven board (needs the guided_mode flag). Omitted means an open board. */
+  mode?: 'open' | 'guided';
 }
 
 export interface CreatedBoard {
@@ -45,6 +47,7 @@ export async function createBoard(
       settings: { ...BASE_SETTINGS, ...(opts.settings ?? {}) },
       columns: [{ id: columnId, title: 'Col', description: null, color: '#cccccc', position: 0 }],
       participant: opts.displayName ? { displayName: opts.displayName } : undefined,
+      ...(opts.mode ? { mode: opts.mode } : {}),
     },
   });
   expect(res.status(), `create board: ${await res.text()}`).toBe(200);
@@ -259,4 +262,22 @@ export async function cardUpdatedAt(boardId: string, cardId: string): Promise<st
   const db = neon(url);
   const rows = await db`SELECT updated_at FROM cards WHERE id = ${cardId} AND board_id = ${boardId}`;
   return rows.length === 1 ? new Date(rows[0].updated_at as string).toISOString() : null;
+}
+
+/** Ask the phase route to move a guided board. Returns the raw response so callers can inspect status. */
+export function apiMovePhase(request: APIRequestContext, boardId: string, from: string, to: string) {
+  return request.post(`/api/boards/${boardId}/phase`, { data: { action: 'move', from, to } });
+}
+
+/**
+ * Turn a feature flag on or off for the whole (dev) database. Same dev-only guard as makeLegacyV1.
+ * Touches only the row with this key and throws unless exactly one row changed.
+ */
+export async function setFlagDirect(key: string, enabled: boolean): Promise<void> {
+  const url = process.env.DATABASE_URL ?? '';
+  if (process.env.NEON_BRANCH !== 'dev') throw new Error('setFlagDirect refuses to run unless NEON_BRANCH=dev');
+  if (url.includes('ep-delicate-star')) throw new Error('setFlagDirect refuses to run against the production host');
+  const db = neon(url);
+  const rows = await db`UPDATE feature_flags SET is_enabled = ${enabled} WHERE key = ${key} RETURNING key`;
+  if (rows.length !== 1) throw new Error(`setFlagDirect expected to update exactly one flag, updated ${rows.length}`);
 }

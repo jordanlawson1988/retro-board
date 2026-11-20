@@ -13,9 +13,14 @@ export interface Board {
   archived_at: string | null;
   deleted_at: string | null;     // null = live; set when soft-deleted (in Trash)
   trust_version: 1 | 2;          // 1 = legacy client-trusted identity; 2 = signed participant sessions
+  mode: BoardMode;               // 'open' = classic board; 'guided' = phase-driven
+  phase: PhaseId | null;         // null on open boards
+  phase_config: PhaseConfig;
 }
 
 export type { BoardAccess } from '@/lib/constants/board-access';
+export type { BoardMode, PhaseId, PhaseConfig } from '@/lib/constants/phases';
+import type { BoardMode, PhaseId, PhaseConfig } from '@/lib/constants/phases';
 import type { CardVisibility, TimerStatus } from '@/lib/constants/board-settings';
 
 /** What the board GET returns as `board` to someone locked out of a completed board. */

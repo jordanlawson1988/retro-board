@@ -11,6 +11,8 @@ import { useAppSettingsStore } from '@/stores/appSettingsStore';
 import { BOARD_ACCESS } from '@/lib/constants/board-access';
 import { withPhaseDefaults } from '@/lib/phases';
 import { createKeyedCoalescer } from '@/lib/coalescedRunner';
+import { tallyAfterFetch, type VoteTally } from '@/lib/votes';
+import { currentTallyVersion } from '@/lib/voteTallyVersion';
 import { FINAL_PHASE, GUIDED_MODE, type BoardMode } from '@/lib/constants/phases';
 import type { BoardAccess } from '@/types';
 import type { Board, Column, Card, Vote, ActionItem, Participant, BoardTemplate, BoardSettings, ConnectionStatus } from '@/types';
@@ -96,6 +98,8 @@ interface BoardState {
   /** 'completed-closed' = the board is completed and this browser was not part of it. */
   access: BoardAccess;
   lastWriteError: string | null;
+  /** Team votes used on a guided board; null on an open board or before the first GET. */
+  voteTally: VoteTally | null;
   clearWriteError: () => void;
 
   // Board lifecycle
@@ -157,6 +161,7 @@ const initialState = {
   youAre: null as YouAre | null,
   access: BOARD_ACCESS[0] as BoardAccess,
   lastWriteError: null as string | null,
+  voteTally: null as VoteTally | null,
   onlineParticipantIds: [] as string[],
 };
 
@@ -246,6 +251,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
     // The stored participant id is sent for legacy (v1) boards, where the server has no other
     // way to know who this is. Boards on the signed-cookie model ignore it.
+    const tallyVersionAtStart = currentTallyVersion();
     let claimedPid: string | null = null;
     try { claimedPid = localStorage.getItem(`retro-pid-${boardId}`); } catch { /* ignore */ }
     const res = await fetch(
@@ -260,7 +266,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       return;
     }
 
-    const { board: rawBoard, columns, cards, votes, actionItems, participants, yourParticipantId, youCanFacilitate, youAre, access } = await res.json();
+    const { board: rawBoard, columns, cards, votes, actionItems, participants, yourParticipantId, youCanFacilitate, youAre, access, voteTally } = await res.json();
     const board = withPhaseDefaults(rawBoard);
 
     // Completed and not part of it: keep only the stub. No history entry, no participant.
@@ -328,6 +334,11 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       participants: participants || [],
       currentParticipantId: resolvedParticipantId,
       access: BOARD_ACCESS[0],
+      voteTally: tallyAfterFetch(
+        get().board?.id === boardId ? get().voteTally : null,
+        (voteTally as VoteTally | undefined) ?? null,
+        currentTallyVersion() !== tallyVersionAtStart,
+      ),
       youCanFacilitate: !!youCanFacilitate,
       youAre: youAre
         ? {

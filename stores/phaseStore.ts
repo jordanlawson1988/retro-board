@@ -4,7 +4,7 @@ import { applyPhaseChanged, type PhaseTarget } from '@/lib/phases';
 import { GUIDED_MODE, type PhaseId } from '@/lib/constants/phases';
 import type { Board } from '@/types';
 
-const NETWORK_ERROR = 'Could not reach the server. Check your connection and try again.';
+export const NETWORK_ERROR = 'Could not reach the server. Check your connection and try again.';
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
 interface PhaseState {

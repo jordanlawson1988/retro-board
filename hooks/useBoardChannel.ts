@@ -3,6 +3,7 @@
 import { useEffect, useMemo } from 'react';
 import { useAbly, useChannel } from 'ably/react';
 import { useBoardStore, refetchBoardCoalesced } from '@/stores/boardStore';
+import { applyVoteTallyEvent } from '@/stores/groupVoteStore';
 import { mergeIncomingCard } from '@/lib/mergeIncomingCard';
 import { applyPhaseChanged, phaseConfigAfterClose, refetchRouteFor } from '@/lib/phases';
 import { isPhaseId } from '@/lib/constants/phases';
@@ -88,6 +89,14 @@ export function useBoardChannel(boardId: string) {
         store.setState((state) => ({
           votes: state.votes.filter((v) => v.id !== data.voteId),
         }));
+        break;
+
+      // Guided votes: the team tally, and a grouping reset (refetch carries the phase)
+      case 'vote-tally':
+        applyVoteTallyEvent(boardId, data);
+        break;
+      case 'grouping-reset':
+        refetchCompletionEvent(data);
         break;
 
       // Participants

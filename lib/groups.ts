@@ -67,3 +67,6 @@ export function groupTitleOutcome(
 export function groupResetOutcome(row: { board_ok: boolean; cleared: number }): 'ok' | 'phase-changed' {
   return row.board_ok ? 'ok' : 'phase-changed';
 }
+
+export const SET_TITLE_FALLBACK = 'Failed to save the group title';
+export const RESET_GROUPING_FALLBACK = 'Failed to reset grouping';

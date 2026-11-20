@@ -205,3 +205,82 @@ export function voteLockKey(boardId: string): string {
 export function teamUsedAfter(teamUsedBefore: number, delta: 1 | -1): number {
   return teamUsedBefore + delta;
 }
+
+export const ADD_VOTE_FALLBACK = 'Failed to add vote';
+export const REMOVE_VOTE_FALLBACK = 'Failed to remove vote';
+
+/**
+ * The tally a board GET leaves in the store. The GET's tally replaces the current one unless a
+ * vote answer or `vote-tally` event was applied after the GET started (`changedSince`): that
+ * data is newer than the GET's snapshot. A board with no tally yet takes the GET's; a GET with no
+ * tally (an open board) leaves none.
+ */
+export function tallyAfterFetch(
+  current: VoteTally | null,
+  fromGet: VoteTally | null,
+  changedSince: boolean,
+): VoteTally | null {
+  if (fromGet === null) return null;
+  if (current === null) return fromGet;
+  return changedSince ? current : fromGet;
+}
+
+/** One server answer to a click: the team tally and my row on the card (null when it is gone). */
+export interface VoteResult {
+  tally: VoteTally;
+  vote: Vote | null;
+}
+
+/** Clicks in flight for one card, and the newest answer seen so far (by `tally.at`). */
+export interface VoteSlot {
+  pending: number;
+  newest: { at: number; vote: Vote | null } | null;
+}
+
+export const EMPTY_VOTE_SLOT: VoteSlot = { pending: 0, newest: null };
+
+export function startVoteClick(slot: VoteSlot): VoteSlot {
+  return { ...slot, pending: slot.pending + 1 };
+}
+
+/**
+ * One click is answered (`result`) or failed (null). When it was the last one in flight, `settle`
+ * carries the newest answer, whatever order they arrived in; otherwise the optimistic row stays.
+ */
+export function finishVoteClick(
+  slot: VoteSlot,
+  result: { at: number; vote: Vote | null } | null,
+): { slot: VoteSlot; settle: { vote: Vote | null } | null } {
+  const newest = result && (!slot.newest || result.at >= slot.newest.at) ? result : slot.newest;
+  const pending = Math.max(0, slot.pending - 1);
+  if (pending > 0) return { slot: { pending, newest }, settle: null };
+  return { slot: EMPTY_VOTE_SLOT, settle: newest ? { vote: newest.vote } : null };
+}
+
+/** Reads a 200 answer from the guided vote route; null when it is not one. */
+export function voteResult(
+  answer: unknown,
+  local: Vote | undefined,
+  ctx: { boardId: string; cardId: string; voterId: string; nowIso: string },
+): VoteResult | null {
+  if (!answer || typeof answer !== 'object') return null;
+  const a = answer as { action?: unknown; vote?: unknown; voteId?: unknown; count?: unknown; tally?: unknown };
+  const tally = applyVoteTally(null, a.tally);
+  if (!tally) return null;
+  if (a.action === 'added') {
+    const v = a.vote as Vote | null | undefined;
+    if (!v || typeof v !== 'object' || typeof v.id !== 'string') return null;
+    return { tally, vote: v };
+  }
+  if (a.action === 'removed') {
+    if (typeof a.count !== 'number' || !Number.isInteger(a.count) || a.count < 0) return null;
+    if (a.count === 0) return { tally, vote: null };
+    if (local) return { tally, vote: { ...local, count: a.count } };
+    if (typeof a.voteId !== 'string') return null;
+    return {
+      tally,
+      vote: { id: a.voteId, card_id: ctx.cardId, board_id: ctx.boardId, voter_id: ctx.voterId, count: a.count, created_at: ctx.nowIso },
+    };
+  }
+  return null;
+}

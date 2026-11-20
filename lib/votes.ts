@@ -61,6 +61,18 @@ export function leadCardVotes(
   return guided ? groupScore(cardId, cards, totals) : (totals.get(cardId) ?? 0);
 }
 
+/**
+ * The number the phone list sorts a card by: the same number it shows (`leadCardVotes`), so the
+ * order always matches the figures on screen. An open board sorts by each card's own total.
+ */
+export function voteSortKey(
+  guided: boolean,
+  cards: readonly Pick<Card, 'id' | 'merged_with'>[],
+  totals: ReadonlyMap<string, number>,
+): (cardId: string) => number {
+  return (cardId) => leadCardVotes(guided, cardId, cards, totals);
+}
+
 export function maxVotesPerCard(settings: Pick<BoardSettings, 'max_votes_per_card'>): number {
   return settings.max_votes_per_card ?? OPEN_MAX_VOTES_PER_CARD;
 }

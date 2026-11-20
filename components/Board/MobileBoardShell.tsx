@@ -12,7 +12,7 @@
  * No new store fields, no new API calls — same data, different layout.
  */
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import { StickyNote } from 'lucide-react';
 import { MobileColumnTabs } from './MobileColumnTabs';
 import { MobileVoteTracker } from './MobileVoteTracker';
@@ -28,7 +28,7 @@ import { RetroCard } from './RetroCard';
 import { ColumnSortMenu } from './ColumnSortMenu';
 import { sortCards, effectiveCardSort } from '@/utils/sortCards';
 import { isMine } from '@/utils/isMine';
-import { leadCardVotes, voteTotalsByCard, votesUsedBy } from '@/lib/votes';
+import { leadCardVotes, voteSortKey, voteTotalsByCard, votesUsedBy } from '@/lib/votes';
 import { useCardText } from '@/hooks/useCardText';
 import type { Column, Card, Vote, ActionItem, CardReactions, Participant, CardSort, BoardSettings } from '@/types';
 
@@ -137,9 +137,10 @@ export function MobileBoardShell({
 
   const voteCountByCard = useMemo(() => voteTotalsByCard(votes), [votes]);
 
-  const voteCountFor = useCallback(
-    (id: string) => voteCountByCard.get(id) || 0,
-    [voteCountByCard]
+  // Sorted by the number each card shows: a guided lead's group score, an open card's own total.
+  const voteCountFor = useMemo(
+    () => voteSortKey(guided, cards, voteCountByCard),
+    [guided, cards, voteCountByCard]
   );
 
   // Root cards for the active column (no merged-children in top-level list).

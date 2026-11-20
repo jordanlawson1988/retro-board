@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  voteWeight, voteTotalsByCard, votesUsedBy, myVotesOn, sumVoteCounts, groupScore, leadCardVotes, maxVotesPerCard,
+  voteWeight, voteTotalsByCard, votesUsedBy, myVotesOn, sumVoteCounts, groupScore, leadCardVotes, voteSortKey, maxVotesPerCard,
   guidedVoteDefaults, voteControlKind, voteControlState, applyVoteDelta, settleOwnVote, applyVoteTally,
   teamVotesRemaining, teamVotesLeftFor, teamVotesLabel, votesPerCardError, voteLimitProblem, limitRefusal,
   hasLimitKey, voteLimitsEditable, teamUsedAfter, GROUP_VOTE_ERROR, NO_VOTES_LEFT, VOTE_LIMIT_RELATION_ERROR,
@@ -43,6 +43,13 @@ describe('vote arithmetic', () => {
     expect(leadCardVotes(true, 'c1', cards, totals)).toBe(5);
     expect(leadCardVotes(false, 'c1', cards, totals)).toBe(4);
     expect(leadCardVotes(false, 'missing', cards, totals)).toBe(0);
+  });
+  it('the phone list sorts a lead by its group score on a guided board and by its own total on an open one', () => {
+    const cards = [{ id: 'c1', merged_with: null }, { id: 'c2', merged_with: 'c1' }];
+    const totals = new Map([['c1', 1], ['c2', 4]]);
+    expect(voteSortKey(true, cards, totals)('c1')).toBe(5);
+    expect(voteSortKey(false, cards, totals)('c1')).toBe(1);
+    expect(voteSortKey(true, cards, totals)('missing')).toBe(0);
   });
 });
 

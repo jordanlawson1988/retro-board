@@ -5,11 +5,9 @@ import { Clock } from 'lucide-react';
 import { Button, Pill } from '@/components/common';
 import { useBoardStore } from '@/stores/boardStore';
 import { usePhaseStore } from '@/stores/phaseStore';
-import { DEADLINE_MAX_DAYS, GUIDED_MODE, PHASES, type PhaseId } from '@/lib/constants/phases';
-import { deadlineState, nextStep, formatDeadlineDay, formatDeadlineTime } from '@/lib/phases';
-
-/** setTimeout cannot wait longer than about 24.8 days. */
-const MAX_TIMEOUT_MS = 6 * 3_600_000;
+import { DEADLINE_MAX_DAYS, GUIDED_MODE, type PhaseId } from '@/lib/constants/phases';
+import { nextStep } from '@/lib/phases';
+import { usePhaseDeadline } from './usePhaseDeadline';
 
 /** `datetime-local` wants `YYYY-MM-DDTHH:mm` in local time. */
 function toLocalInput(ms: number): string {
@@ -23,25 +21,13 @@ export function PhaseDeadline({ isFacilitator }: { isFacilitator: boolean }) {
   const movePhase = usePhaseStore((s) => s.movePhase);
   const setDeadline = usePhaseStore((s) => s.setDeadline);
   const moving = usePhaseStore((s) => s.moving);
-  const [now, setNow] = useState(() => Date.now());
+  const notice = usePhaseDeadline();
   // The open form belongs to the phase it was opened in, and its input limits are fixed when it opens.
   const [form, setForm] = useState<{ phase: PhaseId; min: string; max: string } | null>(null);
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const deadline = board?.phase_config?.deadline ?? null;
   const formOpen = form !== null && form.phase === (board?.phase ?? null);
-
-  // Re-check when the deadline falls due, so the chip turns into the banner without a reload.
-  // Waits at most MAX_TIMEOUT_MS per step and does nothing once the deadline has passed.
-  useEffect(() => {
-    if (!deadline) return;
-    const due = Date.parse(deadline);
-    if (Number.isNaN(due) || now >= due) return;
-    const wait = Math.max(0, Math.min(due - Date.now() + 50, MAX_TIMEOUT_MS));
-    const t = setTimeout(() => setNow(Date.now()), wait);
-    return () => clearTimeout(t);
-  }, [deadline, now]);
 
   const closeForm = useCallback(() => {
     setForm(null);
@@ -63,9 +49,7 @@ export function PhaseDeadline({ isFacilitator }: { isFacilitator: boolean }) {
   // Nothing is timed once the retro is done.
   if (!next) return null;
 
-  const label = PHASES[phase].label;
-  const state = deadlineState(deadline, now);
-  const dueMs = deadline ? Date.parse(deadline) : NaN;
+  const state = notice?.state ?? 'none';
 
   const toggleForm = () => {
     if (formOpen) return closeForm();
@@ -92,7 +76,7 @@ export function PhaseDeadline({ isFacilitator }: { isFacilitator: boolean }) {
       {state === 'open' && (
         <Pill variant="default" className="gap-1.5 text-[13px] text-[var(--ink-2)]">
           <Clock size={12} aria-hidden />
-          {label} closes {formatDeadlineDay(dueMs)}
+          {notice?.text}
         </Pill>
       )}
       {state === 'passed' && (
@@ -100,7 +84,7 @@ export function PhaseDeadline({ isFacilitator }: { isFacilitator: boolean }) {
           role="status"
           className="rounded-[var(--r-md)] border border-[var(--line-strong)] bg-[var(--surface-muted)] px-2.5 py-1 text-[13px] text-[var(--ink)]"
         >
-          {label} closed at {formatDeadlineTime(dueMs)}. Waiting for the facilitator.
+          {notice?.text}
         </p>
       )}
 

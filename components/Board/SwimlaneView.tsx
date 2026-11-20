@@ -6,7 +6,7 @@ import { RetroCard } from './RetroCard';
 import { ColumnSortMenu } from './ColumnSortMenu';
 import { sortCards, effectiveCardSort } from '@/utils/sortCards';
 import { isMine } from '@/utils/isMine';
-import { displayCardText } from '@/utils/cardText';
+import { useCardText } from '@/hooks/useCardText';
 import { voteTotalsRevealed } from '@/lib/votePillPolicy';
 import type { Column, Card, Vote, Participant, CardSort } from '@/types';
 
@@ -47,6 +47,7 @@ export function SwimlaneView({
   isAdmin,
   onUpdateColumn,
 }: SwimlaneViewProps) {
+  const cardText = useCardText();
   const [collapsedRows, setCollapsedRows] = useState<Set<string>>(new Set());
 
   const sortedColumns = useMemo(
@@ -151,7 +152,7 @@ export function SwimlaneView({
                           <RetroCard
                             key={card.id}
                             id={card.id}
-                            text={displayCardText(card)}
+                            text={cardText(card)}
                             textHidden={card.text_hidden}
                             authorName={card.author_name}
                             authorId={card.author_id}

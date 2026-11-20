@@ -6,7 +6,7 @@ import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { ThumbsUp, Trash2, Palette, Unlink, Merge, MoreHorizontal } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { isMine } from '@/utils/isMine';
-import { displayCardText } from '@/utils/cardText';
+import { useCardText } from '@/hooks/useCardText';
 import { COLUMN_COLORS } from '@/utils/constants';
 import { RetroCard } from './RetroCard';
 import { SortableCard } from './SortableCard';
@@ -118,6 +118,7 @@ export function BoardColumn({
   canDeleteColumn,
   participants = [],
 }: BoardColumnProps) {
+  const cardText = useCardText();
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -522,7 +523,7 @@ export function BoardColumn({
                   <div className="relative">
                     <RetroCard
                       id={card.id}
-                      text={displayCardText(card)}
+                      text={cardText(card)}
                       textHidden={card.text_hidden}
                       authorName={card.author_name}
                       authorId={card.author_id}
@@ -587,7 +588,7 @@ export function BoardColumn({
                           <div className="[&_>_div]:p-2 [&_>_div]:text-xs [&_p]:text-xs">
                             <RetroCard
                               id={child.id}
-                              text={displayCardText(child)}
+                              text={cardText(child)}
                               textHidden={child.text_hidden}
                               authorName={child.author_name}
                               authorId={child.author_id}

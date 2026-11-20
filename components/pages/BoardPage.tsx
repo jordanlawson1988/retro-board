@@ -32,13 +32,14 @@ import { usePolling } from '@/hooks/usePolling';
 import { TimerFloating } from '@/components/Timer';
 import { ActionItemsPanel } from '@/components/ActionItems';
 import { exportMarkdown, exportCsv } from '@/utils/export';
-import { displayCardText } from '@/utils/cardText';
+import { useCardText } from '@/hooks/useCardText';
 import { GUIDED_MODE } from '@/lib/constants/phases';
 
 /** A drag distance no pointer reaches: used to switch dragging off. */
 const DRAG_NEVER_PX = 100_000;
 
 export function BoardPage({ boardId }: { boardId: string }) {
+  const cardText = useCardText();
   const router = useRouter();
   const {
     board,
@@ -284,14 +285,14 @@ export function BoardPage({ boardId }: { boardId: string }) {
           'whitespace-pre-wrap text-[var(--ink)]',
           isChild ? 'text-xs' : 'text-[15px] leading-[1.45]'
         )}>
-          {displayCardText(card)}
+          {cardText(card)}
         </p>
         <span className="mt-1 block text-xs text-[var(--ink-4)]">
           {card.author_name ?? 'Anonymous'}
         </span>
       </div>
     );
-  }, [activeDragId, cards]);
+  }, [activeDragId, cards, cardText]);
 
   // Loading/error/join states are handled by BoardPageWrapper
   // This component only renders when board is loaded and user has joined
@@ -677,7 +678,6 @@ export function BoardPage({ boardId }: { boardId: string }) {
           onPause={timerPause}
           onResume={timerResume}
           onReset={timerReset}
-          raised={guided && !!board.phase}
         />
       )}
 

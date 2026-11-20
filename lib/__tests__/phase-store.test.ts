@@ -368,3 +368,49 @@ describe('withPhaseDefaults', () => {
     expect((withPhaseDefaults({}) as { phase_config: { deadline: string | null } }).phase_config.deadline).toBeNull();
   });
 });
+
+describe('updateSettings failure', () => {
+  const timerPatch = { duration: 60, remaining: 60, status: 'running' as const, started_at: null };
+
+  it('a failed PATCH undoes only its own keys: a phase-changed that landed meanwhile survives', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    fetchMock = vi.fn(async () => { await gate; return json(500, { error: 'boom' }); });
+    vi.stubGlobal('fetch', fetchMock);
+    const oldTimer = useBoardStore.getState().board!.settings.timer;
+    const pending = useBoardStore.getState().updateSettings({ timer: timerPatch });
+    const failed = pending.catch((e: unknown) => e);
+    expect(useBoardStore.getState().board?.settings.timer).toEqual(timerPatch);
+    // A phase-changed event lands while the PATCH is in flight.
+    const moved = { ...DEFAULT_BOARD_SETTINGS, card_visibility: 'visible' as const, timer: timerPatch };
+    useBoardStore.setState((state) => ({
+      board: state.board ? { ...state.board, phase: 'vote', settings: { ...moved, voting_enabled: true } } : null,
+    }));
+    release();
+    expect(await failed).toBeInstanceOf(Error);
+    const after = useBoardStore.getState().board!;
+    expect(after.phase).toBe('vote');
+    expect(after.settings.voting_enabled).toBe(true);
+    expect(after.settings.timer).toEqual(oldTimer);
+  });
+
+  it('an uncontended failure restores the old settings', async () => {
+    routes({ 'PATCH /api/boards/b1': () => json(500, { error: 'boom' }) });
+    const before = useBoardStore.getState().board!.settings;
+    await expect(useBoardStore.getState().updateSettings({ timer: timerPatch })).rejects.toThrow();
+    expect(useBoardStore.getState().board?.settings).toEqual(before);
+  });
+
+  it('a failure for board A does not touch board B when the user moved on meanwhile', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    fetchMock = vi.fn(async () => { await gate; return json(500, { error: 'boom' }); });
+    vi.stubGlobal('fetch', fetchMock);
+    const failed = useBoardStore.getState().updateSettings({ voting_enabled: true }).catch((e: unknown) => e);
+    const boardB = board({ id: 'b2', settings: { ...DEFAULT_BOARD_SETTINGS, voting_enabled: true } });
+    useBoardStore.setState({ board: boardB });
+    release();
+    expect(await failed).toBeInstanceOf(Error);
+    expect(useBoardStore.getState().board).toBe(boardB);
+  });
+});

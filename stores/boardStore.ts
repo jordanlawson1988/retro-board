@@ -6,6 +6,7 @@ import { DEFAULT_BOARD_SETTINGS } from '@/utils/constants';
 import { BOARD_TEMPLATES } from '@/utils/templates';
 import { saveBoardToHistory } from '@/utils/boardHistory';
 import { mergeIncomingCard } from '@/lib/mergeIncomingCard';
+import { revertSettingsPatch } from '@/lib/settingsRevert';
 import { useAppSettingsStore } from '@/stores/appSettingsStore';
 import { BOARD_ACCESS } from '@/lib/constants/board-access';
 import { withPhaseDefaults } from '@/lib/phases';
@@ -358,7 +359,12 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     });
 
     if (!res.ok) {
-      set({ board: { ...board, settings: prevSettings } });
+      // Undo only this call's keys on the board as it is now, so an event that landed while the
+      // request was in flight (a phase move, a rename) is not rolled back with it. If the user has
+      // since moved to another board, that board is left untouched.
+      set((state) => ({
+        board: state.board && state.board.id === board.id ? revertSettingsPatch(state.board, prevSettings, settingsUpdate) : state.board,
+      }));
       throw await failWrite(res, 'Failed to update settings');
     }
   },

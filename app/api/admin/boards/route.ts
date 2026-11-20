@@ -1,5 +1,7 @@
 import { sql } from '@/lib/db';
 import { requireSystemAdmin, authzErrorResponse } from '@/lib/auth-helpers';
+import { FINAL_PHASE, GUIDED_MODE, REOPEN_PHASE } from '@/lib/constants/phases';
+import { phaseSettings } from '@/lib/phases';
 
 export async function GET(request: Request) {
   try {
@@ -99,13 +101,36 @@ export async function POST(request: Request) {
     throw e;
   }
   const { boardId, action } = await request.json();
+  // to_jsonb reads boards.mode by name at run time, so this still runs before migration 015
+  // (NULL there, which is an open board). Only a guided board takes the phase statements.
   if (action === 'archive') {
-    // Fetch current settings to merge board_locked
-    const [board] = await sql`SELECT settings FROM boards WHERE id = ${boardId}`;
-    const mergedSettings = { ...(board?.settings ?? {}), board_locked: true };
-    await sql`UPDATE boards SET archived_at = NOW(), settings = ${JSON.stringify(mergedSettings)} WHERE id = ${boardId}`;
+    const [board] = await sql`SELECT settings, to_jsonb(b) ->> 'mode' AS mode FROM boards b WHERE b.id = ${boardId}`;
+    if (board?.mode === GUIDED_MODE) {
+      // One UPDATE: a phase move landing in between cannot leave the old phase's settings behind.
+      await sql`
+        UPDATE boards SET archived_at = NOW(), phase = ${FINAL_PHASE},
+          settings = settings || ${JSON.stringify(phaseSettings(FINAL_PHASE))}::jsonb,
+          phase_config = phase_config || '{"deadline":null}'::jsonb
+        WHERE id = ${boardId}
+      `;
+    } else {
+      // Fetch current settings to merge board_locked
+      const mergedSettings = { ...(board?.settings ?? {}), board_locked: true };
+      await sql`UPDATE boards SET archived_at = NOW(), settings = ${JSON.stringify(mergedSettings)} WHERE id = ${boardId}`;
+    }
   } else if (action === 'unarchive') {
-    await sql`UPDATE boards SET archived_at = NULL WHERE id = ${boardId}`;
+    const [board] = await sql`SELECT to_jsonb(b) ->> 'mode' AS mode FROM boards b WHERE b.id = ${boardId}`;
+    if (board?.mode === GUIDED_MODE) {
+      // The archived_at guard stops an admin from resetting an active guided retro to the reopen phase.
+      await sql`
+        UPDATE boards SET archived_at = NULL, phase = ${REOPEN_PHASE},
+          settings = settings || ${JSON.stringify(phaseSettings(REOPEN_PHASE))}::jsonb,
+          phase_config = phase_config || '{"deadline":null}'::jsonb
+        WHERE id = ${boardId} AND archived_at IS NOT NULL
+      `;
+    } else {
+      await sql`UPDATE boards SET archived_at = NULL WHERE id = ${boardId}`;
+    }
   }
   return Response.json({ ok: true });
 }

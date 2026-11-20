@@ -2,7 +2,7 @@
 
 import { Check } from 'lucide-react';
 import { Button } from '@/components/common';
-import { railSteps } from '@/lib/phases';
+import { railSteps, readyLabel } from '@/lib/phases';
 import { cn } from '@/utils/cn';
 import { usePhaseAdvance } from './usePhaseAdvance';
 import { MoveOnDialog } from './MoveOnDialog';
@@ -33,7 +33,7 @@ export function PhaseRail({ isFacilitator, onCompleteRetro }: PhaseRailProps) {
             <span
               className={cn(
                 'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full py-1 pl-1.5 pr-2.5 text-[13px]',
-                step.state === 'current' && 'bg-[var(--accent-soft)] font-semibold text-[var(--accent)]',
+                step.state === 'current' && 'bg-[var(--accent-soft)] font-semibold text-[var(--accent-hover)]',
                 step.state === 'past' && 'text-[var(--ink-2)]',
                 step.state === 'upcoming' && 'text-[var(--ink-3)]'
               )}
@@ -44,7 +44,7 @@ export function PhaseRail({ isFacilitator, onCompleteRetro }: PhaseRailProps) {
                   'flex h-[18px] w-[18px] items-center justify-center rounded-full text-[10px] font-semibold',
                   step.state === 'current' && 'bg-[var(--accent)] text-[var(--on-accent)]',
                   step.state === 'past' && 'bg-[var(--surface-muted)] text-[var(--ink-2)] border border-[var(--line-strong)]',
-                  step.state === 'upcoming' && 'border border-[var(--line-strong)] text-[var(--ink-3)]'
+                  step.state === 'upcoming' && 'border border-[var(--ink-3)] text-[var(--ink-3)]'
                 )}
               >
                 {step.state === 'past' ? <Check size={11} strokeWidth={3} /> : i + 1}
@@ -68,7 +68,7 @@ export function PhaseRail({ isFacilitator, onCompleteRetro }: PhaseRailProps) {
           </Button>
           {hasReady && (
             <span className="whitespace-nowrap text-[13px] text-[var(--ink-3)] tnum" aria-live="polite">
-              {readyCount} of {onlineTotal} ready
+              {readyLabel(readyCount, onlineTotal)}
             </span>
           )}
         </div>

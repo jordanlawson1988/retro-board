@@ -18,7 +18,7 @@ import { MobileColumnTabs } from './MobileColumnTabs';
 import { MobileVoteTracker } from './MobileVoteTracker';
 import { MobileFAB } from './MobileFAB';
 import { MobileBottomNav } from './MobileBottomNav';
-import { PhaseStepper, PHASE_STEPPER_HEIGHT } from '@/components/Phase/PhaseStepper';
+import { PhaseStepper } from '@/components/Phase/PhaseStepper';
 import { usePhaseGates } from '@/hooks/usePhaseGates';
 import { computeMobileNavActive } from '@/lib/mobileNav';
 import { MobileCardComposerSheet } from './MobileCardComposerSheet';
@@ -28,7 +28,7 @@ import { RetroCard } from './RetroCard';
 import { ColumnSortMenu } from './ColumnSortMenu';
 import { sortCards, effectiveCardSort } from '@/utils/sortCards';
 import { isMine } from '@/utils/isMine';
-import { displayCardText } from '@/utils/cardText';
+import { useCardText } from '@/hooks/useCardText';
 import type { Column, Card, Vote, ActionItem, CardReactions, Participant, CardSort, BoardSettings } from '@/types';
 
 interface MobileBoardShellProps {
@@ -109,6 +109,7 @@ export function MobileBoardShell({
   onCloseActionItems,
   onCompleteRetro,
 }: MobileBoardShellProps) {
+  const cardText = useCardText();
   const sortedColumns = useMemo(
     () => [...columns].sort((a, b) => a.position - b.position),
     [columns]
@@ -241,7 +242,7 @@ export function MobileBoardShell({
               <RetroCard
                 key={card.id}
                 id={card.id}
-                text={displayCardText(card)}
+                text={cardText(card)}
                 textHidden={card.text_hidden}
                 authorName={card.author_name}
                 authorId={card.author_id}
@@ -292,7 +293,7 @@ export function MobileBoardShell({
 
       {/* FAB — only when card creation is allowed */}
       {fabVisible && (
-        <MobileFAB onClick={() => setComposerOpen(true)} lift={stepperShown ? PHASE_STEPPER_HEIGHT : 0} />
+        <MobileFAB onClick={() => setComposerOpen(true)} />
       )}
 
       {/* Phase stepper — guided boards only, directly above the bottom nav */}

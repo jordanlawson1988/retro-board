@@ -54,7 +54,7 @@ export function PhaseTips({ phase }: { phase: PhaseId }) {
         className={cn(
           'inline-flex items-center gap-1.5 whitespace-nowrap rounded-[var(--r-md)] px-2.5 py-1.5 text-[13px] transition-colors',
           open
-            ? 'bg-[var(--accent-soft)] font-medium text-[var(--accent)]'
+            ? 'bg-[var(--accent-soft)] font-medium text-[var(--accent-hover)]'
             : 'text-[var(--ink-3)] hover:bg-[var(--surface-muted)] hover:text-[var(--ink)]'
         )}
       >

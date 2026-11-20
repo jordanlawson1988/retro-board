@@ -110,6 +110,37 @@ export function railSteps(
   }));
 }
 
+export type NextStep =
+  | { kind: 'move'; label: string }
+  /** The forward step would enter the final phase, which only Complete Retro can do. */
+  | { kind: 'complete' }
+  | null;
+
+/** What the forward control does from `phase`: move on, complete the retro, or nothing (already final). */
+export function nextStep(phase: PhaseId): NextStep {
+  const index = PHASE_IDS.indexOf(phase);
+  if (phase === FINAL_PHASE) return null;
+  const target = PHASE_IDS[index + 1];
+  if (target === FINAL_PHASE) return { kind: 'complete' };
+  return { kind: 'move', label: PHASES[target].label };
+}
+
+// Some ICU versions put a narrow no-break space before AM/PM; show a plain space.
+const plainSpaces = (text: string) => text.replace(/[\u202f\u00a0]/g, ' ');
+
+/** `3:30 PM`, in the given locale and time zone (both default to the viewer's). */
+export function formatDeadlineTime(ms: number, locale?: string, timeZone?: string): string {
+  return plainSpaces(
+    new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit', timeZone }).format(ms),
+  );
+}
+
+/** `Fri 3:30 PM`: weekday, a space, then the time, with no comma. */
+export function formatDeadlineDay(ms: number, locale?: string, timeZone?: string): string {
+  const weekday = new Intl.DateTimeFormat(locale, { weekday: 'short', timeZone }).format(ms);
+  return `${weekday} ${formatDeadlineTime(ms, locale, timeZone)}`;
+}
+
 function readyPhaseOf(data: unknown): unknown {
   return data && typeof data === 'object' ? (data as { readyPhase?: unknown }).readyPhase : undefined;
 }

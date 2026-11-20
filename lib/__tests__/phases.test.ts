@@ -9,6 +9,9 @@ import {
   readySummary,
   uiGates,
   applyPhaseChanged,
+  nextStep,
+  formatDeadlineDay,
+  formatDeadlineTime,
 } from '@/lib/phases';
 import { DEFAULT_BOARD_SETTINGS } from '@/utils/constants';
 
@@ -112,5 +115,40 @@ describe('applyPhaseChanged', () => {
   it('returns the board unchanged for an unknown phase or a non-object', () => {
     expect(applyPhaseChanged(board, { phase: 'party' })).toBe(board);
     expect(applyPhaseChanged(board, null)).toBe(board);
+  });
+});
+
+describe('nextStep', () => {
+  it('reflect, group and vote give the next phase with its label', () => {
+    expect(nextStep('reflect')).toEqual({ kind: 'move', label: PHASES.group.label });
+    expect(nextStep('group')).toEqual({ kind: 'move', label: PHASES.vote.label });
+    expect(nextStep('vote')).toEqual({ kind: 'move', label: PHASES.discuss.label });
+  });
+  it('discuss, the last phase before done, gives complete', () => {
+    expect(nextStep('discuss')).toEqual({ kind: 'complete' });
+  });
+  it('done gives null: the rail renders no forward button', () => {
+    expect(nextStep('done')).toBeNull();
+  });
+  it('covers every phase id', () => {
+    for (const id of PHASE_IDS) expect(nextStep(id) === null).toBe(id === 'done');
+  });
+});
+
+describe('deadline formatting', () => {
+  // Friday 2026-11-20 20:30 UTC
+  const ms = Date.UTC(2026, 10, 20, 20, 30);
+  it('chip day and time are weekday, space, time with no comma', () => {
+    expect(formatDeadlineDay(ms, 'en-US', 'America/New_York')).toBe('Fri 3:30 PM');
+  });
+  it('uses the given time zone', () => {
+    expect(formatDeadlineDay(ms, 'en-US', 'UTC')).toBe('Fri 8:30 PM');
+  });
+  it('time alone', () => {
+    expect(formatDeadlineTime(ms, 'en-US', 'America/New_York')).toBe('3:30 PM');
+  });
+  it('follows the locale', () => {
+    expect(formatDeadlineTime(ms, 'en-GB', 'UTC')).toBe('20:30');
+    expect(formatDeadlineDay(ms, 'en-GB', 'UTC')).toBe('Fri 20:30');
   });
 });

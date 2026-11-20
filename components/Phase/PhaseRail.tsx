@@ -5,10 +5,9 @@ import { Check } from 'lucide-react';
 import { Button, Modal } from '@/components/common';
 import { useBoardStore } from '@/stores/boardStore';
 import { usePhaseStore } from '@/stores/phaseStore';
-import { PHASES } from '@/lib/constants/phases';
-import { railSteps } from '@/lib/phases';
+import { PHASES, type PhaseId } from '@/lib/constants/phases';
+import { railSteps, nextStep } from '@/lib/phases';
 import { cn } from '@/utils/cn';
-import { nextStep } from './nextStep';
 
 interface PhaseRailProps {
   isFacilitator: boolean;
@@ -23,7 +22,8 @@ export function PhaseRail({ isFacilitator, onCompleteRetro }: PhaseRailProps) {
   const movePhase = usePhaseStore((s) => s.movePhase);
   const readyCount = usePhaseStore((s) => s.readyIds.length);
   const onlineTotal = usePhaseStore((s) => s.onlineTotal);
-  const [confirming, setConfirming] = useState(false);
+  // The phase the Move on dialog was opened in; it is closed, and cannot act, in any other phase.
+  const [confirmPhase, setConfirmPhase] = useState<PhaseId | null>(null);
 
   // Failures are shown by the connection banner from lastWriteError; nothing more to do here.
   const go = useCallback(
@@ -32,18 +32,19 @@ export function PhaseRail({ isFacilitator, onCompleteRetro }: PhaseRailProps) {
     },
     [movePhase]
   );
-  const stay = useCallback(() => setConfirming(false), []);
+  const stay = useCallback(() => setConfirmPhase(null), []);
 
   if (!board || board.mode !== 'guided' || !board.phase) return null;
   const phase = board.phase;
   const def = PHASES[phase];
   const next = nextStep(phase);
+  const confirming = confirmPhase === phase;
 
   const onNext = () => {
     if (next?.kind === 'complete') {
       onCompleteRetro();
     } else if (def.hasReady && onlineTotal > 0 && readyCount < onlineTotal) {
-      setConfirming(true);
+      setConfirmPhase(phase);
     } else {
       go('next');
     }
@@ -115,8 +116,8 @@ export function PhaseRail({ isFacilitator, onCompleteRetro }: PhaseRailProps) {
             <Button
               variant="accent"
               onClick={() => {
-                setConfirming(false);
-                go('next');
+                setConfirmPhase(null);
+                if (confirming) go('next');
               }}
             >
               Move on

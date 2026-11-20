@@ -5,15 +5,11 @@ import { Clock } from 'lucide-react';
 import { Button, Pill } from '@/components/common';
 import { useBoardStore } from '@/stores/boardStore';
 import { usePhaseStore } from '@/stores/phaseStore';
-import { DEADLINE_MAX_DAYS, PHASES } from '@/lib/constants/phases';
-import { deadlineState } from '@/lib/phases';
-import { nextStep } from './nextStep';
+import { DEADLINE_MAX_DAYS, PHASES, type PhaseId } from '@/lib/constants/phases';
+import { deadlineState, nextStep, formatDeadlineDay, formatDeadlineTime } from '@/lib/phases';
 
 /** setTimeout cannot wait longer than about 24.8 days. */
 const MAX_TIMEOUT_MS = 6 * 3_600_000;
-
-const WEEKDAY_TIME = new Intl.DateTimeFormat('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' });
-const TIME = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' });
 
 /** `datetime-local` wants `YYYY-MM-DDTHH:mm` in local time. */
 function toLocalInput(ms: number): string {
@@ -28,11 +24,13 @@ export function PhaseDeadline({ isFacilitator }: { isFacilitator: boolean }) {
   const setDeadline = usePhaseStore((s) => s.setDeadline);
   const moving = usePhaseStore((s) => s.moving);
   const [now, setNow] = useState(() => Date.now());
-  const [formOpen, setFormOpen] = useState(false);
+  // The open form belongs to the phase it was opened in, and its input limits are fixed when it opens.
+  const [form, setForm] = useState<{ phase: PhaseId; min: string; max: string } | null>(null);
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
 
   const deadline = board?.phase_config?.deadline ?? null;
+  const formOpen = form !== null && form.phase === (board?.phase ?? null);
 
   // Re-check when the deadline falls due, so the chip turns into the banner without a reload.
   // Waits at most MAX_TIMEOUT_MS per step and does nothing once the deadline has passed.
@@ -46,7 +44,7 @@ export function PhaseDeadline({ isFacilitator }: { isFacilitator: boolean }) {
   }, [deadline, now]);
 
   const closeForm = useCallback(() => {
-    setFormOpen(false);
+    setForm(null);
     setValue('');
   }, []);
 
@@ -69,6 +67,17 @@ export function PhaseDeadline({ isFacilitator }: { isFacilitator: boolean }) {
   const state = deadlineState(deadline, now);
   const dueMs = deadline ? Date.parse(deadline) : NaN;
 
+  const toggleForm = () => {
+    if (formOpen) return closeForm();
+    const opened = Date.now();
+    setValue('');
+    setForm({
+      phase,
+      min: toLocalInput(opened),
+      max: toLocalInput(opened + DEADLINE_MAX_DAYS * 86_400_000),
+    });
+  };
+
   // A failed save keeps the form open; the connection banner already shows the reason.
   const submit = (iso: string | null) => {
     setBusy(true);
@@ -83,7 +92,7 @@ export function PhaseDeadline({ isFacilitator }: { isFacilitator: boolean }) {
       {state === 'open' && (
         <Pill variant="default" className="gap-1.5 text-[13px] text-[var(--ink-2)]">
           <Clock size={12} aria-hidden />
-          {label} closes {WEEKDAY_TIME.format(dueMs)}
+          {label} closes {formatDeadlineDay(dueMs)}
         </Pill>
       )}
       {state === 'passed' && (
@@ -91,7 +100,7 @@ export function PhaseDeadline({ isFacilitator }: { isFacilitator: boolean }) {
           role="status"
           className="rounded-[var(--r-md)] border border-[var(--line-strong)] bg-[var(--surface-muted)] px-2.5 py-1 text-[13px] text-[var(--ink)]"
         >
-          {label} closed at {TIME.format(dueMs)}. Waiting for the facilitator.
+          {label} closed at {formatDeadlineTime(dueMs)}. Waiting for the facilitator.
         </p>
       )}
 
@@ -107,13 +116,13 @@ export function PhaseDeadline({ isFacilitator }: { isFacilitator: boolean }) {
               Next: {next.label}
             </Button>
           )}
-          <Button variant="default" size="sm" onClick={() => setFormOpen((v) => !v)} aria-expanded={formOpen}>
+          <Button variant="default" size="sm" onClick={toggleForm} aria-expanded={formOpen}>
             Extend
           </Button>
         </>
       )}
       {isFacilitator && state !== 'passed' && (
-        <Button variant="ghost" size="sm" onClick={() => setFormOpen((v) => !v)} aria-expanded={formOpen}>
+        <Button variant="ghost" size="sm" onClick={toggleForm} aria-expanded={formOpen}>
           Set a deadline
         </Button>
       )}
@@ -136,8 +145,8 @@ export function PhaseDeadline({ isFacilitator }: { isFacilitator: boolean }) {
             type="datetime-local"
             required
             value={value}
-            min={toLocalInput(now)}
-            max={toLocalInput(now + DEADLINE_MAX_DAYS * 86_400_000)}
+            min={form?.min}
+            max={form?.max}
             onChange={(e) => setValue(e.target.value)}
             className="rounded-[var(--r-sm)] border border-[var(--line-strong)] bg-[var(--surface)] px-2 py-1 text-[13px] text-[var(--ink)]"
           />

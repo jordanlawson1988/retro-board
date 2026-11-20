@@ -7,6 +7,7 @@ import {
   type BoardState,
 } from '@/lib/board-guards';
 import type { BoardSettings } from '@/types';
+import { phaseSettings } from '@/lib/phases';
 
 const baseSettings: BoardSettings = {
   card_visibility: 'visible',
@@ -33,7 +34,7 @@ function actor(overrides: Partial<BoardActor> = {}): BoardActor {
 
 function state(overrides: Partial<Omit<BoardState, 'settings'>> & { settings?: Partial<BoardSettings> } = {}): BoardState {
   const { settings, ...rest } = overrides;
-  return { archived: false, ...rest, settings: { ...baseSettings, ...settings } };
+  return { archived: false, phase: null, ...rest, settings: { ...baseSettings, ...settings } };
 }
 
 describe('BOARD_ACTIONS contract', () => {
@@ -224,7 +225,7 @@ describe('checkAction fail-closed trustVersion', () => {
       userId: null,
       isFacilitator: false,
     } as BoardActor;
-    const state: BoardState = { archived: false, settings: baseSettings };
+    const state: BoardState = { archived: false, phase: null, settings: baseSettings };
     expect(checkAction('card.edit', actor, state, { authorId: 'p1' }).ok).toBe(false);
   });
 });
@@ -279,5 +280,23 @@ describe('reactionsChangeOnlyTouches', () => {
     expect(
       reactionsChangeOnlyTouches({ '👍': ['p2'], '🎉': ['p1'] }, { '👍': ['p2', 'p1'], '🎉': [] }, 'p1')
     ).toBe(true);
+  });
+});
+
+describe('phase rule in checkAction', () => {
+  const v2Participant = actor();
+  const v2Facilitator = actor({ isFacilitator: true });
+
+  it('an open board (phase null) is untouched by the phase rule', () => {
+    expect(checkAction('card.move', v2Participant, state({ phase: null }))).toEqual({ ok: true });
+  });
+  it('a guided board denies by phase with 409, for the facilitator too', () => {
+    const s = state({ phase: 'vote', settings: { ...baseSettings, ...phaseSettings('vote') } });
+    expect(checkAction('card.create', v2Facilitator, s)).toEqual({ ok: false, status: 409, error: 'Not available during Vote' });
+    expect(checkAction('vote.toggle', v2Participant, s)).toEqual({ ok: true });
+  });
+  it('completed wins over the phase message', () => {
+    expect(checkAction('vote.toggle', v2Participant, state({ archived: true, phase: 'done' })))
+      .toEqual({ ok: false, status: 409, error: 'Board is completed' });
   });
 });

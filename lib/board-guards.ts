@@ -1,5 +1,7 @@
 import type { BoardSettings, CardReactions } from '@/types';
 import type { BoardAction } from '@/lib/constants/board-actions';
+import type { PhaseId } from '@/lib/constants/phases';
+import { phaseDenial } from '@/lib/phases';
 
 export interface BoardActor {
   boardId: string;
@@ -14,6 +16,8 @@ export interface BoardActor {
 export interface BoardState {
   archived: boolean;
   settings: BoardSettings;
+  /** Guided-mode phase; null on an open board. */
+  phase: PhaseId | null;
 }
 
 export interface ActionTarget {
@@ -49,6 +53,11 @@ function isLockable(action: BoardAction): boolean {
 function checkState(action: BoardAction, actor: BoardActor, state: BoardState): GuardResult {
   // Leaving stays possible on a completed board so people can still remove themselves.
   if (state.archived && action !== 'participant.leave') return deny(409, 'Board is completed');
+  // Phase rules bind facilitators too: no bypass.
+  if (state.phase !== null) {
+    const msg = phaseDenial(action, state.phase);
+    if (msg) return deny(409, msg);
+  }
   if (state.settings.board_locked && !actor.isFacilitator && isLockable(action)) {
     return deny(409, 'Board is locked');
   }

@@ -118,7 +118,7 @@ describe('buildActor', () => {
 
 describe('firstDenial', () => {
   const settings = { voting_enabled: true, board_locked: false } as BoardSettings;
-  const state: BoardState = { archived: false, settings };
+  const state: BoardState = { archived: false, phase: null, settings };
   const actor: BoardActor = {
     boardId: 'b',
     trustVersion: 2,

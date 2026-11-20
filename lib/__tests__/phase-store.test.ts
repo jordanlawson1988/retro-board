@@ -400,4 +400,17 @@ describe('updateSettings failure', () => {
     await expect(useBoardStore.getState().updateSettings({ timer: timerPatch })).rejects.toThrow();
     expect(useBoardStore.getState().board?.settings).toEqual(before);
   });
+
+  it('a failure for board A does not touch board B when the user moved on meanwhile', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    fetchMock = vi.fn(async () => { await gate; return json(500, { error: 'boom' }); });
+    vi.stubGlobal('fetch', fetchMock);
+    const failed = useBoardStore.getState().updateSettings({ voting_enabled: true }).catch((e: unknown) => e);
+    const boardB = board({ id: 'b2', settings: { ...DEFAULT_BOARD_SETTINGS, voting_enabled: true } });
+    useBoardStore.setState({ board: boardB });
+    release();
+    expect(await failed).toBeInstanceOf(Error);
+    expect(useBoardStore.getState().board).toBe(boardB);
+  });
 });

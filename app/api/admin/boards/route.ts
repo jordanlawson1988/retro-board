@@ -121,7 +121,7 @@ export async function POST(request: Request) {
   } else if (action === 'unarchive') {
     const [board] = await sql`SELECT to_jsonb(b) ->> 'mode' AS mode FROM boards b WHERE b.id = ${boardId}`;
     if (board?.mode === GUIDED_MODE) {
-      // Back to the reopen phase, only for an archived board (never skips the phase rules).
+      // The archived_at guard stops an admin from resetting an active guided retro to the reopen phase.
       await sql`
         UPDATE boards SET archived_at = NULL, phase = ${REOPEN_PHASE},
           settings = settings || ${JSON.stringify(phaseSettings(REOPEN_PHASE))}::jsonb,

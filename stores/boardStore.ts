@@ -360,9 +360,10 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
     if (!res.ok) {
       // Undo only this call's keys on the board as it is now, so an event that landed while the
-      // request was in flight (a phase move, a rename) is not rolled back with it.
+      // request was in flight (a phase move, a rename) is not rolled back with it. If the user has
+      // since moved to another board, that board is left untouched.
       set((state) => ({
-        board: state.board ? revertSettingsPatch(state.board, prevSettings, settingsUpdate) : state.board,
+        board: state.board && state.board.id === board.id ? revertSettingsPatch(state.board, prevSettings, settingsUpdate) : state.board,
       }));
       throw await failWrite(res, 'Failed to update settings');
     }

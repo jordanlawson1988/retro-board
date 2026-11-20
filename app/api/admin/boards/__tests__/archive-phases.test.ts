@@ -97,6 +97,24 @@ describe('admin unarchive', () => {
     expect(text(1)).toBe('UPDATE boards SET archived_at = NULL WHERE id = ?');
   });
 
+  it('only the guided statement is guarded by archived_at IS NOT NULL', async () => {
+    mocks.sql.mockResolvedValueOnce([{ mode: 'guided' }]).mockResolvedValueOnce([]);
+    await POST(req({ boardId: 'b1', action: 'unarchive' }));
+    expect(text(1)).toContain('archived_at IS NOT NULL');
+    mocks.sql.mockClear();
+    mocks.sql.mockResolvedValueOnce([{ mode: 'open' }]).mockResolvedValueOnce([]);
+    await POST(req({ boardId: 'b1', action: 'unarchive' }));
+    expect(text(1)).not.toContain('archived_at IS NOT NULL');
+  });
+
+  it('a board id with no row answers 200 ok with the open statement', async () => {
+    mocks.sql.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    const res = await POST(req({ boardId: 'nope', action: 'unarchive' }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(text(1)).toBe('UPDATE boards SET archived_at = NULL WHERE id = ?');
+  });
+
   it('reads the mode with to_jsonb so it works before migration 015', async () => {
     mocks.sql.mockResolvedValueOnce([{ mode: null }]).mockResolvedValueOnce([]);
     await POST(req({ boardId: 'b1', action: 'unarchive' }));

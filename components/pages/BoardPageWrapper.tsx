@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AblyProvider } from '@/components/providers/AblyProvider';
 import { BoardPage } from '@/components/pages/BoardPage';
@@ -10,10 +11,13 @@ import { usePresence } from '@/hooks/usePresence';
 import { ChannelProvider } from 'ably/react';
 import { AppShell } from '@/components/Layout';
 import { Button, Input, Modal } from '@/components/common';
+import { BOARD_ACCESS, COMPLETED_CLOSED_MESSAGE } from '@/lib/constants/board-access';
 
 export function BoardPageWrapper({ boardId }: { boardId: string }) {
   const currentParticipantId = useBoardStore((s) => s.currentParticipantId);
   const board = useBoardStore((s) => s.board);
+  const youAre = useBoardStore((s) => s.youAre);
+  const access = useBoardStore((s) => s.access);
   const loading = useBoardStore((s) => s.loading);
   const error = useBoardStore((s) => s.error);
   const fetchBoard = useBoardStore((s) => s.fetchBoard);
@@ -79,6 +83,27 @@ export function BoardPageWrapper({ boardId }: { boardId: string }) {
     );
   }
 
+  // Completed board this browser was never part of (or a viewer with no participant row, who
+  // cannot join a completed board): no join form, no content, no realtime connection.
+  if (access === BOARD_ACCESS[1] || (board.archived_at && !currentParticipantId)) {
+    return (
+      <AppShell>
+        <div className="flex min-h-[60vh] items-center justify-center">
+          <div className="max-w-md px-6 text-center">
+            <h2 className="text-[var(--color-gray-8)]">{board.title}</h2>
+            <p className="mt-2 text-[var(--color-gray-5)]">{COMPLETED_CLOSED_MESSAGE}</p>
+            <Link
+              href="/"
+              className="mt-6 inline-flex items-center justify-center rounded-[var(--r-md)] border border-transparent bg-[var(--ink)] px-3.5 py-2.5 text-[13px] font-medium leading-none text-[var(--bg-elev)] hover:bg-[var(--ink-2)]"
+            >
+              Go Home
+            </Link>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
+
   // Pre-join: show join modal (no Ably needed yet)
   if (!currentParticipantId || showJoinModal) {
     return (
@@ -105,6 +130,7 @@ export function BoardPageWrapper({ boardId }: { boardId: string }) {
               value={participantName}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setParticipantName(e.target.value)}
               onKeyDown={(e: React.KeyboardEvent) => e.key === 'Enter' && handleJoin()}
+              maxLength={50}
               autoFocus
             />
             <div className="flex justify-end gap-3">
@@ -121,9 +147,26 @@ export function BoardPageWrapper({ boardId }: { boardId: string }) {
     );
   }
 
-  // Joined: render with Ably
+  // v2 boards: the Ably token route answers 401 without the server's participant
+  // cookie, so wait until a join + refetch has produced youAre.participantId.
+  const serverParticipantId = youAre?.participantId ?? null;
+  if (board.trust_version === 2 && !serverParticipantId) {
+    return (
+      <AppShell>
+        <div className="flex min-h-[60vh] items-center justify-center">
+          <div className="text-center">
+            <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-[var(--color-gray-2)] border-t-[var(--color-navy)]" />
+            <p className="mt-4 text-[var(--color-gray-5)]">Joining board...</p>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
+
+  // Joined: render with Ably. On v2 the server's participant id is the client id.
+  const ablyClientId = board.trust_version === 2 ? (serverParticipantId as string) : currentParticipantId;
   return (
-    <AblyProvider clientId={currentParticipantId} boardId={boardId}>
+    <AblyProvider key={ablyClientId} clientId={ablyClientId} boardId={boardId}>
       <ChannelProvider channelName={`retro-board:${boardId}`}>
         <ChannelProvider channelName={`retro-board:${boardId}:timer`}>
           <BoardPageInner boardId={boardId} />

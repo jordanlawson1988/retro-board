@@ -1,7 +1,7 @@
 import { sql } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { assertBoardOwner, authzErrorResponse } from '@/lib/auth-helpers';
-import { generateJoinCode } from '@/lib/join-code';
+import { withJoinCodeRetry } from '@/lib/join-code-retry';
 
 // Rotate the board's 5-digit join code, invalidating previously shared codes. Owner only.
 export async function POST(
@@ -17,14 +17,9 @@ export async function POST(
     throw e;
   }
 
-  // Generate a unique code (retry on the rare collision).
-  let joinCode = generateJoinCode();
-  for (let attempts = 0; attempts < 10; attempts++) {
-    const [existing] = await sql`SELECT 1 FROM boards WHERE join_code = ${joinCode}`;
-    if (!existing) break;
-    joinCode = generateJoinCode();
-  }
-
-  await sql`UPDATE boards SET join_code = ${joinCode} WHERE id = ${boardId}`;
+  // Write a fresh code; retry on the rare collision with uq_boards_join_code (no pre-check round-trip).
+  const joinCode = await withJoinCodeRetry(
+    (code) => sql`UPDATE boards SET join_code = ${code} WHERE id = ${boardId}`
+  );
   return NextResponse.json({ joinCode });
 }

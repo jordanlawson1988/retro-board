@@ -8,3 +8,4 @@ jobs:
     with:
       build-env: |
         ABLY_API_KEY=ci.dummy:dummy
+        PARTICIPANT_SESSION_SECRET=ci-dummy-secret-at-least-32-characters-long

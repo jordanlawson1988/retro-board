@@ -12,7 +12,14 @@ export interface Board {
   created_at: string;
   archived_at: string | null;
   deleted_at: string | null;     // null = live; set when soft-deleted (in Trash)
+  trust_version: 1 | 2;          // 1 = legacy client-trusted identity; 2 = signed participant sessions
 }
+
+export type { BoardAccess } from '@/lib/constants/board-access';
+import type { CardVisibility, TimerStatus } from '@/lib/constants/board-settings';
+
+/** What the board GET returns as `board` to someone locked out of a completed board. */
+export type ClosedBoardStub = Pick<Board, 'id' | 'title' | 'archived_at' | 'trust_version'>;
 
 /** Board view-model from /api/user/boards: board fields + activity counts + this user's role. */
 export interface DashboardBoard {
@@ -27,7 +34,7 @@ export interface DashboardBoard {
   card_count: number;
   participant_count: number;
   action_count: number;
-  user_role: string;
+  user_role: BoardUserRole;
 }
 
 export type BoardTemplate =
@@ -41,7 +48,7 @@ export type BoardView = 'grid' | 'swimlane' | 'list' | 'timeline';
 export type ConnectionStatus = 'connected' | 'disconnected' | 'reconnected' | 'polling';
 
 export interface BoardSettings {
-  card_visibility: 'hidden' | 'visible';
+  card_visibility: CardVisibility;
   voting_enabled: boolean;
   max_votes_per_participant: number;
   secret_voting: boolean;
@@ -55,7 +62,7 @@ export interface BoardSettings {
 export interface TimerState {
   duration: number; // total seconds
   remaining: number; // seconds remaining
-  status: 'idle' | 'running' | 'paused' | 'expired';
+  status: TimerStatus;
   started_at: string | null;
 }
 
@@ -86,8 +93,8 @@ export interface Card {
   column_id: string;
   board_id: string;
   text: string;
-  author_name: string;
-  author_id: string;
+  author_name: string | null;    // null when the server withholds it (anonymous_cards)
+  author_id: string | null;      // null when the server withholds it (anonymous_cards)
   color: string | null;
   position: number;
   merged_with: string | null;
@@ -96,6 +103,8 @@ export interface Card {
   updated_at: string;
   votes?: Vote[];
   vote_count?: number;
+  is_mine?: boolean;             // set by the server shaper (lib/board-view.ts)
+  text_hidden?: boolean;         // true when the server withheld the text from this viewer
 }
 
 // Vote types
@@ -108,7 +117,8 @@ export interface Vote {
 }
 
 // Action Item types
-export type ActionItemStatus = 'open' | 'in_progress' | 'done';
+export const ACTION_ITEM_STATUSES = ['open', 'in_progress', 'done'] as const;
+export type ActionItemStatus = (typeof ACTION_ITEM_STATUSES)[number];
 
 export interface ActionItem {
   id: string;
@@ -185,18 +195,26 @@ export interface User {
   createdAt?: Date | string;
 }
 
-// Board membership
-export const BOARD_MEMBER_ROLES = ['owner', 'facilitator', 'participant', 'viewer'] as const;
+// Board membership.
+// Ownership lives in ONE place: boards.owner_id. board_members never stores an owner
+// (migration 014 enforces it with a CHECK); the owner is not a board_members row at all.
+// BOARD_OWNER_ROLE is a derived, display-only label computed from boards.owner_id.
+export const BOARD_MEMBER_ROLES = ['facilitator', 'participant', 'viewer'] as const;
 export type BoardMemberRole = (typeof BOARD_MEMBER_ROLES)[number];
 export function isBoardMemberRole(v: unknown): v is BoardMemberRole {
   return typeof v === 'string' && (BOARD_MEMBER_ROLES as readonly string[]).includes(v);
 }
+export const BOARD_OWNER_ROLE = 'owner' as const;
+/** What a signed-in user is on a board: the derived owner label, or their stored member role. */
+export type BoardUserRole = typeof BOARD_OWNER_ROLE | BoardMemberRole;
 
+/** One row of GET /api/boards/[boardId]/members. The owner row is derived from boards.owner_id. */
 export interface BoardMember {
-  id: string;
+  /** board_members.id; null for the derived owner row. */
+  id: string | null;
   board_id: string;
   user_id: string;
-  role: BoardMemberRole;
+  role: BoardUserRole;
   invited_by: string | null;
   joined_at: string;
   // Joined from user table for display

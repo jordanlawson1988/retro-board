@@ -17,11 +17,26 @@ export async function getSessionOrNull() {
 }
 
 /**
+ * Like getSessionOrNull but bypasses the signed cookie cache and reads the session from the
+ * database, so a revoked session is rejected immediately. Use for privileged decisions
+ * (system admin, board ownership, anything that needs a signed-in user). Board routes that use
+ * `loadBoardActor` instead get the same guarantee from its session-row check in the context query.
+ */
+export async function getFreshSession() {
+  try {
+    const headersList = await headers();
+    return await auth.api.getSession({ headers: headersList, query: { disableCookieCache: true } });
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Get the current session or throw 401.
  * Use in API routes that require authentication (e.g., dashboard, billing).
  */
 export async function requireSession() {
-  const session = await getSessionOrNull();
+  const session = await getFreshSession();
   if (!session?.user) {
     throw new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
@@ -50,12 +65,13 @@ export interface BoardAuthority {
 
 /**
  * Pure decision: given a user's standing on a board, what can they do?
- * Owner OR system admin OR a member with role owner/facilitator may facilitate.
+ * Owner (boards.owner_id, the only place ownership is stored) OR system admin OR a
+ * facilitator member may facilitate.
  */
 export function resolveBoardAuthority(i: BoardAuthorityInput): BoardAuthority {
   const isOwner = i.ownerId !== null && i.ownerId === i.userId;
   const canFacilitate =
-    isOwner || i.isSystemAdmin || i.memberRole === 'owner' || i.memberRole === 'facilitator';
+    isOwner || i.isSystemAdmin || i.memberRole === 'facilitator';
   return { isOwner, canFacilitate, isSystemAdmin: i.isSystemAdmin };
 }
 
@@ -70,13 +86,11 @@ export class AuthzError extends Error {
   }
 }
 
-async function loadBoardAuthority(
-  boardId: string
-): Promise<BoardAuthority & { userId: string }> {
-  const session = await getSessionOrNull();
-  const userId = session?.user?.id ?? null;
-  if (!userId) throw new AuthzError(401, 'Sign in required');
-
+/** Non-throwing: load a known user's standing on a board (owner / member role / system admin). */
+export async function loadBoardAuthorityFor(
+  boardId: string,
+  userId: string
+): Promise<BoardAuthority> {
   const [row] = await sql`
     SELECT
       (SELECT owner_id FROM boards WHERE id = ${boardId})                                 AS owner_id,
@@ -84,12 +98,22 @@ async function loadBoardAuthority(
       EXISTS (SELECT 1 FROM admin_users WHERE id = ${userId})                              AS is_system_admin
   `;
 
-  const authority = resolveBoardAuthority({
+  return resolveBoardAuthority({
     userId,
     ownerId: (row?.owner_id as string | null) ?? null,
     memberRole: (row?.member_role as string | null) ?? null,
     isSystemAdmin: !!row?.is_system_admin,
   });
+}
+
+async function loadBoardAuthority(
+  boardId: string
+): Promise<BoardAuthority & { userId: string }> {
+  const session = await getFreshSession();
+  const userId = session?.user?.id ?? null;
+  if (!userId) throw new AuthzError(401, 'Sign in required');
+
+  const authority = await loadBoardAuthorityFor(boardId, userId);
   return { ...authority, userId };
 }
 
@@ -115,7 +139,7 @@ export async function assertBoardOwner(boardId: string): Promise<{ userId: strin
  * check is UX-only and does not cover /api routes.
  */
 export async function requireSystemAdmin(): Promise<{ userId: string }> {
-  const session = await getSessionOrNull();
+  const session = await getFreshSession();
   const userId = session?.user?.id ?? null;
   if (!userId) throw new AuthzError(401, 'Sign in required');
 

@@ -23,6 +23,13 @@ describe('resolveBoardAuthority', () => {
       isSystemAdmin: false,
     });
   });
+  it("a leftover board_members role 'owner' grants nothing: ownership is boards.owner_id only", () => {
+    expect(resolveBoardAuthority({ ...base, memberRole: 'owner' })).toEqual({
+      isOwner: false,
+      canFacilitate: false,
+      isSystemAdmin: false,
+    });
+  });
   it('participant member cannot facilitate', () => {
     expect(resolveBoardAuthority({ ...base, memberRole: 'participant' }).canFacilitate).toBe(false);
   });

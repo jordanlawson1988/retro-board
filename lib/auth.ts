@@ -47,6 +47,9 @@ function getAuth() {
       session: {
         expiresIn: 60 * 60 * 24 * 7, // 7 days
         updateAge: 60 * 60 * 24, // 1 day
+        // Signed session cookie read without a database trip. A revoked session stays valid for
+        // cached reads for up to maxAge; privileged checks bypass it (see getFreshSession).
+        cookieCache: { enabled: true, maxAge: 60 * 5 },
       },
       plugins: [
         captcha({

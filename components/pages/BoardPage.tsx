@@ -29,6 +29,7 @@ import { usePolling } from '@/hooks/usePolling';
 import { TimerFloating } from '@/components/Timer';
 import { ActionItemsPanel } from '@/components/ActionItems';
 import { exportMarkdown, exportCsv } from '@/utils/export';
+import { displayCardText } from '@/utils/cardText';
 
 export function BoardPage({ boardId }: { boardId: string }) {
   const router = useRouter();
@@ -40,6 +41,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
     participants,
     currentParticipantId,
     youCanFacilitate,
+    youAre,
     addCard,
     updateCard,
     deleteCard,
@@ -266,10 +268,10 @@ export function BoardPage({ boardId }: { boardId: string }) {
           'whitespace-pre-wrap text-[var(--ink)]',
           isChild ? 'text-xs' : 'text-[15px] leading-[1.45]'
         )}>
-          {card.text}
+          {displayCardText(card)}
         </p>
         <span className="mt-1 block text-xs text-[var(--ink-4)]">
-          {card.author_name}
+          {card.author_name ?? 'Anonymous'}
         </span>
       </div>
     );
@@ -287,7 +289,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
   // controls, even if their participant record isn't flagged as admin —
   // covers legacy boards created before user_accounts, cross-device joins,
   // and participants with out-of-sync is_admin flags.
-  const isAdmin = (currentParticipant?.is_admin ?? false) || youCanFacilitate;
+  const isAdmin = (currentParticipant?.is_admin ?? false) || youCanFacilitate || (youAre?.isFacilitator ?? false);
 
   const cardCreationDisabled =
     board.settings.card_creation_disabled || board.settings.board_locked;

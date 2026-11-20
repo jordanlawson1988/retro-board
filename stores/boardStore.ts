@@ -5,10 +5,65 @@ import { nanoid } from 'nanoid';
 import { DEFAULT_BOARD_SETTINGS } from '@/utils/constants';
 import { BOARD_TEMPLATES } from '@/utils/templates';
 import { saveBoardToHistory } from '@/utils/boardHistory';
+import { mergeIncomingCard } from '@/lib/mergeIncomingCard';
 import { useAppSettingsStore } from '@/stores/appSettingsStore';
+import { BOARD_ACCESS } from '@/lib/constants/board-access';
+import type { BoardAccess } from '@/types';
 import type { Board, Column, Card, Vote, ActionItem, Participant, BoardTemplate, BoardSettings, ConnectionStatus } from '@/types';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
+
+/** Who the server says this browser is on this board (GET /api/boards/:id). */
+export interface YouAre {
+  participantId: string | null;
+  isFacilitator: boolean;
+  /** True when the server resolved a participant for this browser (v2: from the cookie). */
+  joined: boolean;
+}
+
+// Boards where this page session already ran the cookie-establishing join, so a
+// failed or repeated join can never loop fetchBoard.
+const autoJoinTried = new Set<string>();
+
+/** Join with an existing display name; resolves to the participant or null on any failure. */
+async function postJoin(boardId: string, displayName: string): Promise<Participant | null> {
+  try {
+    const res = await fetch(`/api/boards/${boardId}/join`, {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ participantId: crypto.randomUUID(), displayName }),
+    });
+    if (!res.ok) return null;
+    const { participant } = await res.json();
+    return (participant as Participant) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+const WRITE_ERROR_MS = 6000;
+
+/**
+ * Turn a failed write response into an Error carrying the server's message,
+ * surface it via lastWriteError, and on a 401 for a v2 board drop the local
+ * participant so the join modal shows. Callers roll back their optimistic
+ * change first, then throw the returned error.
+ */
+async function failWrite(res: Response, fallback: string): Promise<Error> {
+  const data = await res.json().catch(() => null);
+  const message: string = data?.error || fallback;
+  const { board } = useBoardStore.getState();
+  if (res.status === 401 && board?.trust_version === 2) {
+    try { localStorage.removeItem(`retro-pid-${board.id}`); } catch { /* ignore */ }
+    useBoardStore.setState({ currentParticipantId: null, youAre: null, lastWriteError: message });
+  } else {
+    useBoardStore.setState({ lastWriteError: message });
+  }
+  setTimeout(() => {
+    if (useBoardStore.getState().lastWriteError === message) useBoardStore.setState({ lastWriteError: null });
+  }, WRITE_ERROR_MS);
+  return new Error(message);
+}
 
 interface BoardState {
   board: Board | null;
@@ -22,6 +77,11 @@ interface BoardState {
   error: string | null;
   currentParticipantId: string | null;
   youCanFacilitate: boolean;
+  youAre: YouAre | null;
+  /** 'completed-closed' = the board is completed and this browser was not part of it. */
+  access: BoardAccess;
+  lastWriteError: string | null;
+  clearWriteError: () => void;
 
   // Board lifecycle
   createBoard: (title: string, description: string | null, template: BoardTemplate, displayName?: string) => Promise<string>;
@@ -76,6 +136,9 @@ const initialState = {
   error: null as string | null,
   currentParticipantId: null as string | null,
   youCanFacilitate: false,
+  youAre: null as YouAre | null,
+  access: BOARD_ACCESS[0] as BoardAccess,
+  lastWriteError: null as string | null,
   onlineParticipantIds: [] as string[],
 };
 
@@ -85,8 +148,6 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   createBoard: async (title, description, template, displayName?) => {
     const boardId = nanoid(10);
     const templateDef = BOARD_TEMPLATES.find((t) => t.id === template);
-
-    const participantId = crypto.randomUUID();
 
     const columns = templateDef && templateDef.columns.length > 0
       ? templateDef.columns.map((col, i) => ({
@@ -98,9 +159,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
         }))
       : [];
 
-    const participant = displayName
-      ? { id: participantId, displayName, isAdmin: true }
-      : undefined;
+    const participant = displayName ? { displayName } : undefined;
 
     const res = await fetch('/api/boards', {
       method: 'POST',
@@ -110,7 +169,6 @@ export const useBoardStore = create<BoardState>((set, get) => ({
         title,
         description,
         template,
-        createdBy: participantId,
         settings: {
           ...DEFAULT_BOARD_SETTINGS,
           ...(useAppSettingsStore?.getState?.()?.settings?.default_board_settings ?? {}),
@@ -125,8 +183,11 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       throw new Error(err.error || 'Failed to create board');
     }
 
+    // The server generated the creator's participant id (and set the cookie).
+    const { participantId } = (await res.json()) as { participantId: string | null };
+
     // Update local state for auto-joined creator
-    if (displayName) {
+    if (displayName && participantId) {
       localStorage.setItem(`retro-pid-${boardId}`, participantId);
       set((state) => ({
         currentParticipantId: participantId,
@@ -163,23 +224,70 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       set({ loading: true, error: null });
     }
 
-    const res = await fetch(`/api/boards/${boardId}`);
+    // The stored participant id is sent for legacy (v1) boards, where the server has no other
+    // way to know who this is. Boards on the signed-cookie model ignore it.
+    let claimedPid: string | null = null;
+    try { claimedPid = localStorage.getItem(`retro-pid-${boardId}`); } catch { /* ignore */ }
+    const res = await fetch(
+      `/api/boards/${boardId}${claimedPid ? `?pid=${encodeURIComponent(claimedPid)}` : ''}`
+    );
 
     if (!res.ok) {
+      // A transient server failure during a background refresh must not blank a loaded board.
+      if (isRefresh && res.status >= 500) return;
       const err = await res.json();
       set({ loading: false, error: err.error || 'Board not found' });
       return;
     }
 
-    const { board, columns, cards, votes, actionItems, participants, yourParticipantId, youCanFacilitate } = await res.json();
+    const { board, columns, cards, votes, actionItems, participants, yourParticipantId, youCanFacilitate, youAre, access } = await res.json();
 
-    // Prefer the server-resolved participant (matched via the authenticated user's
-    // user_id) over localStorage, so owners/facilitators keep their role when
-    // opening a board from a new device or after clearing site data.
-    const stored = localStorage.getItem(`retro-pid-${boardId}`);
-    const resolvedParticipantId = yourParticipantId || stored || null;
-    if (yourParticipantId && yourParticipantId !== stored) {
-      localStorage.setItem(`retro-pid-${boardId}`, yourParticipantId);
+    // Completed and not part of it: keep only the stub. No history entry, no participant.
+    if (access === BOARD_ACCESS[1]) {
+      set({
+        ...initialState,
+        board: board as Board,
+        access: BOARD_ACCESS[1],
+        youAre: { participantId: null, isFacilitator: false, joined: false },
+        loading: false,
+      });
+      return;
+    }
+
+    const storageKey = `retro-pid-${boardId}`;
+    let resolvedParticipantId: string | null;
+
+    if (board.trust_version === 2) {
+      // v2: the server's cookie is the only identity. localStorage is never trusted.
+      const serverPid: string | null = youAre?.participantId ?? null;
+      const knownName = (id: string | null) =>
+        (participants as Participant[] | undefined)?.find((p) => p.id === id)?.display_name;
+
+      if (!serverPid) {
+        localStorage.removeItem(storageKey);
+        const name = knownName(yourParticipantId ?? null);
+        if (yourParticipantId && name && !autoJoinTried.has(boardId)) {
+          // Signed-in user matched to an existing participant but no cookie here: join to get one.
+          autoJoinTried.add(boardId);
+          if (await postJoin(boardId, name)) {
+            await get().fetchBoard(boardId);
+            return;
+          }
+        }
+        resolvedParticipantId = null;
+      } else {
+        resolvedParticipantId = serverPid;
+        localStorage.setItem(storageKey, serverPid);
+      }
+    } else {
+      // v1: prefer the server-resolved participant (matched via the authenticated
+      // user's user_id) over localStorage, so owners/facilitators keep their role
+      // when opening a board from a new device or after clearing site data.
+      const stored = localStorage.getItem(storageKey);
+      resolvedParticipantId = yourParticipantId || stored || null;
+      if (yourParticipantId && yourParticipantId !== stored) {
+        localStorage.setItem(storageKey, yourParticipantId);
+      }
     }
 
     saveBoardToHistory({
@@ -198,7 +306,15 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       actionItems: actionItems || [],
       participants: participants || [],
       currentParticipantId: resolvedParticipantId,
+      access: BOARD_ACCESS[0],
       youCanFacilitate: !!youCanFacilitate,
+      youAre: youAre
+        ? {
+            participantId: youAre.participantId ?? null,
+            isFacilitator: !!youAre.isFacilitator,
+            joined: youAre.joined ?? (youAre.participantId ?? null) !== null,
+          }
+        : null,
       loading: false,
     });
   },
@@ -216,13 +332,14 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     const res = await fetch(`/api/boards/${board.id}`, {
       method: 'PATCH',
       headers: JSON_HEADERS,
-      body: JSON.stringify({ settings: newSettings }),
+      // Only the keys this action changed: the server merges them, so a concurrent change to a
+      // different key (a co-facilitator's reveal, say) is never overwritten by our stale copy.
+      body: JSON.stringify({ settings: settingsUpdate }),
     });
 
     if (!res.ok) {
       set({ board: { ...board, settings: prevSettings } });
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to update settings');
+      throw await failWrite(res, 'Failed to update settings');
     }
   },
 
@@ -253,15 +370,15 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     if (!res.ok) {
       // Revert
       set({ board });
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to complete board');
+      throw await failWrite(res, 'Failed to complete board');
     }
   },
 
   joinBoard: async (boardId, displayName) => {
     // Check if already joined (e.g., creator who auto-joined in createBoard,
     // or user whose participant was resolved by fetchBoard via user_id)
-    const stored = localStorage.getItem(`retro-pid-${boardId}`);
+    // On v2 boards localStorage proves nothing: only the server cookie counts.
+    const stored = get().board?.trust_version === 2 ? null : localStorage.getItem(`retro-pid-${boardId}`);
     if (stored) {
       const { participants } = get();
       const existing = participants.find((p) => p.id === stored);
@@ -273,17 +390,12 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
     const participantId = crypto.randomUUID();
 
-    // First joiner (no existing admins) becomes the facilitator. The server
-    // has final say — it may reuse an existing participant, or auto-promote
-    // the caller to admin if they own the board.
-    const { participants: currentParticipants } = get();
-    const hasAdmin = currentParticipants.some((p) => p.is_admin);
-    const isAdmin = !hasAdmin;
-
+    // The server decides identity and admin status: it may reuse an existing
+    // participant, generate a new id, or promote an owner/facilitator.
     const res = await fetch(`/api/boards/${boardId}/join`, {
       method: 'POST',
       headers: JSON_HEADERS,
-      body: JSON.stringify({ participantId, displayName, isAdmin }),
+      body: JSON.stringify({ participantId, displayName }),
     });
 
     if (!res.ok) {
@@ -310,6 +422,13 @@ export const useBoardStore = create<BoardState>((set, get) => ({
         participants,
       };
     });
+
+    // v2: the join response set the cookie. Refetch so cards, votes and youAre
+    // are shaped for this participant before the Ably provider mounts.
+    if (get().board?.trust_version === 2) {
+      autoJoinTried.add(boardId);
+      await get().fetchBoard(boardId);
+    }
   },
 
   updateParticipant: async (participantId, updates) => {
@@ -333,8 +452,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
     if (!res.ok) {
       if (prev) set((state) => ({ participants: state.participants.map((p) => (p.id === participantId ? prev : p)) }));
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to update participant');
+      throw await failWrite(res, 'Failed to update participant');
     }
   },
 
@@ -357,8 +475,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
     if (!res.ok) {
       if (prev) set((state) => ({ participants: [...state.participants, prev] }));
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to remove participant');
+      throw await failWrite(res, 'Failed to remove participant');
     }
   },
 
@@ -389,8 +506,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     if (!res.ok) {
       // Revert on failure
       set((state) => ({ columns: state.columns.filter((c) => c.id !== newCol.id) }));
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to add column');
+      throw await failWrite(res, 'Failed to add column');
     }
   },
 
@@ -413,8 +529,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     if (!res.ok) {
       // Revert
       if (prev) set((state) => ({ columns: state.columns.map((c) => (c.id === columnId ? prev : c)) }));
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to update column');
+      throw await failWrite(res, 'Failed to update column');
     }
   },
 
@@ -443,8 +558,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
         columns: prevCol ? [...state.columns, prevCol] : state.columns,
         cards: [...state.cards, ...prevCards],
       }));
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to delete column');
+      throw await failWrite(res, 'Failed to delete column');
     }
   },
 
@@ -480,6 +594,8 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       reactions: {},
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      is_mine: true,
+      text_hidden: false,
     };
     set((state) => ({ cards: [...state.cards, fullCard] }));
 
@@ -492,8 +608,15 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     if (!res.ok) {
       // Revert on failure
       set((state) => ({ cards: state.cards.filter((c) => c.id !== newCard.id) }));
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to add card');
+      throw await failWrite(res, 'Failed to add card');
+    }
+
+    // The response is shaped for us (our own text). Merge, never blindly replace.
+    const created = (await res.json().catch(() => null))?.card as Card | undefined;
+    if (created) {
+      set((state) => ({
+        cards: state.cards.map((c) => (c.id === created.id ? mergeIncomingCard(c, created) : c)),
+      }));
     }
   },
 
@@ -520,8 +643,14 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     if (!res.ok) {
       // Revert
       if (prev) set((state) => ({ cards: state.cards.map((c) => (c.id === cardId ? prev : c)) }));
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to update card');
+      throw await failWrite(res, 'Failed to update card');
+    }
+
+    const updated = (await res.json().catch(() => null))?.card as Card | undefined;
+    if (updated) {
+      set((state) => ({
+        cards: state.cards.map((c) => (c.id === updated.id ? mergeIncomingCard(c, updated) : c)),
+      }));
     }
   },
 
@@ -552,8 +681,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
         cards: prevCard ? [...state.cards, prevCard] : state.cards,
         votes: [...state.votes, ...prevVotes],
       }));
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to delete card');
+      throw await failWrite(res, 'Failed to delete card');
     }
   },
 
@@ -612,8 +740,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
           return c;
         }),
       }));
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to move card');
+      throw await failWrite(res, 'Failed to move card');
     }
 
     // Move children in DB too
@@ -668,8 +795,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
           c.id === childCardId ? { ...c, merged_with: child.merged_with, column_id: child.column_id } : c
         ),
       }));
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to combine cards');
+      throw await failWrite(res, 'Failed to combine cards');
     }
 
     // Re-parent grandchildren
@@ -716,8 +842,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
           c.id === childCardId ? { ...c, merged_with: prevMergedWith } : c
         ),
       }));
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to uncombine card');
+      throw await failWrite(res, 'Failed to uncombine card');
     }
   },
 
@@ -759,7 +884,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       body: JSON.stringify({ cardId, voterId: currentParticipantId, voteId: optimisticVoteId }),
     });
 
-    const data = await res.json().catch(() => null);
+    const data = await res.clone().json().catch(() => null);
 
     if (!res.ok) {
       // Revert optimistic update on failure
@@ -768,10 +893,23 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       } else {
         set((state) => ({ votes: state.votes.filter((v) => v.id !== optimisticVoteId) }));
       }
-      throw new Error(data?.error || 'Failed to toggle vote');
+      throw await failWrite(res, 'Failed to toggle vote');
     }
 
-    // Client and server now use the same vote ID — no replacement needed
+    // Client and server use the same vote ID, so nothing to replace. Under secret
+    // voting no vote event is ever published, so the HTTP response is the only
+    // confirmation: make local state match what the server actually did.
+    set((state) => {
+      if (data?.action === 'removed') {
+        return {
+          votes: state.votes.filter((v) => !(v.card_id === cardId && v.voter_id === currentParticipantId)),
+        };
+      }
+      if (data?.action === 'added' && data.vote && !state.votes.some((v) => v.id === data.vote.id)) {
+        return { votes: [...state.votes, data.vote as Vote] };
+      }
+      return state;
+    });
   },
 
   // --- Reactions ---
@@ -810,6 +948,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       set((state) => ({
         cards: state.cards.map((c) => c.id === cardId ? { ...c, reactions: card.reactions } : c),
       }));
+      await failWrite(res, 'Failed to update reaction');
     }
   },
 
@@ -834,8 +973,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     });
 
     if (!res.ok) {
-      const data = await res.json();
-      throw new Error(data.error || 'Failed to add action item');
+      throw await failWrite(res, 'Failed to add action item');
     }
     // Don't add to state — Ably 'action-item-created' event will do it
   },
@@ -861,8 +999,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
     if (!res.ok) {
       if (prev) set((state) => ({ actionItems: state.actionItems.map((a) => (a.id === itemId ? prev : a)) }));
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to update action item');
+      throw await failWrite(res, 'Failed to update action item');
     }
   },
 
@@ -885,8 +1022,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
     if (!res.ok) {
       if (prev) set((state) => ({ actionItems: [...state.actionItems, prev] }));
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to delete action item');
+      throw await failWrite(res, 'Failed to delete action item');
     }
   },
 
@@ -894,5 +1030,10 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
   setOnlineParticipantIds: (ids) => set({ onlineParticipantIds: ids }),
 
-  reset: () => set({ ...initialState, connectionStatus: 'connected', onlineParticipantIds: [] }),
+  clearWriteError: () => set({ lastWriteError: null }),
+
+  reset: () => {
+    autoJoinTried.clear();
+    set({ ...initialState, connectionStatus: 'connected', onlineParticipantIds: [] });
+  },
 }));

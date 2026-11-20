@@ -15,6 +15,7 @@ import {
 } from '@/components/Dashboard';
 import { useAuthStore } from '@/stores/authStore';
 import { cn } from '@/utils/cn';
+import { BOARD_OWNER_ROLE } from '@/types';
 import type { DashboardBoard } from '@/types';
 
 type Filter = 'all' | 'active' | 'completed' | 'trash';
@@ -127,8 +128,8 @@ export function DashboardPage() {
     : boards;
 
   const isTrash = filter === 'trash';
-  const ownedBoards = filteredBoards.filter((b) => b.user_role === 'owner');
-  const sharedBoards = filteredBoards.filter((b) => b.user_role !== 'owner');
+  const ownedBoards = filteredBoards.filter((b) => b.user_role === BOARD_OWNER_ROLE);
+  const sharedBoards = filteredBoards.filter((b) => b.user_role !== BOARD_OWNER_ROLE);
 
   return (
     <AppShell>

@@ -13,6 +13,7 @@ import {
 import { cn } from '@/utils/cn';
 import { Button } from '@/components/common';
 import { BoardCardMenu } from './BoardCardMenu';
+import { BOARD_OWNER_ROLE } from '@/types';
 import type { DashboardBoard } from '@/types';
 
 interface BoardCardProps {
@@ -40,7 +41,7 @@ export function BoardCard({
 }: BoardCardProps) {
   const isCompleted = !!board.archived_at;
   const isTrashed = !!board.deleted_at;
-  const isOwner = board.user_role === 'owner';
+  const isOwner = board.user_role === BOARD_OWNER_ROLE;
   const date = new Date(
     isTrashed && board.deleted_at ? board.deleted_at : board.created_at
   ).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });

@@ -3,6 +3,8 @@ import {
   DEADLINE_MAX_DAYS,
   DEFAULT_PHASE_CONFIG,
   FINAL_PHASE,
+  GUIDED_MODE,
+  OPEN_MODE,
   PHASES,
   PHASE_IDS,
   isPhaseId,
@@ -185,7 +187,7 @@ export function uiGates(
   mode: BoardMode,
   phase: PhaseId | null,
 ): { addLocked: boolean; editLocked: boolean; moveLocked: boolean } {
-  if (mode !== 'guided' || !phase) return { addLocked: false, editLocked: false, moveLocked: false };
+  if (mode !== GUIDED_MODE || !phase) return { addLocked: false, editLocked: false, moveLocked: false };
   const { profile } = PHASES[phase];
   return {
     addLocked: !profile.canWriteCards,
@@ -220,7 +222,7 @@ export function withPhaseDefaults<T extends object>(
   const b = board as Partial<{ mode: BoardMode; phase: PhaseId | null; phase_config: PhaseConfig }>;
   return {
     ...board,
-    mode: b.mode ?? 'open',
+    mode: b.mode ?? OPEN_MODE,
     phase: b.phase ?? null,
     phase_config: b.phase_config ?? { ...DEFAULT_PHASE_CONFIG },
   };

@@ -25,7 +25,7 @@ interface PhaseStepperProps {
 export function PhaseStepper({ isFacilitator, onCompleteRetro }: PhaseStepperProps) {
   const joined = useBoardStore((s) => !!s.currentParticipantId);
   const [tipsOpen, setTipsOpen] = useState(false);
-  const { phase, next, moving, readyCount, onlineTotal, confirming, go, onNext, stay, moveOn } =
+  const { phase, next, canBack, moving, readyCount, onlineTotal, confirming, go, onNext, stay, moveOn } =
     usePhaseAdvance({ onCompleteRetro });
 
   if (!phase) return null;
@@ -70,7 +70,7 @@ export function PhaseStepper({ isFacilitator, onCompleteRetro }: PhaseStepperPro
         {joined && <ReadyButton className="min-h-11 px-3" />}
         {isFacilitator && next && (
           <>
-            {phase !== 'reflect' && (
+            {canBack && (
               <button
                 type="button"
                 aria-label="Back"

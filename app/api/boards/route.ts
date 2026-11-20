@@ -8,7 +8,7 @@ import { setParticipantCookie } from '@/lib/participant-session';
 import { readJsonObject } from '@/lib/request-body';
 import { validateNewBoard, INVALID_BODY } from '@/lib/board-validation';
 import { canUse } from '@/lib/can-use';
-import { FIRST_PHASE, DEFAULT_PHASE_CONFIG } from '@/lib/constants/phases';
+import { FIRST_PHASE, DEFAULT_PHASE_CONFIG, GUIDED_MODE } from '@/lib/constants/phases';
 import { phaseSettings } from '@/lib/phases';
 
 export async function POST(request: Request) {
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
 
     // Guided mode is gated by a feature flag. A failed lookup throws into the catch below, so no
     // board is created. Open boards never read feature_flags.
-    if (mode === 'guided' && !(await canUse('guided_mode', ownerId))) {
+    if (mode === GUIDED_MODE && !(await canUse('guided_mode', ownerId))) {
       return NextResponse.json({ error: 'Guided mode is not available' }, { status: 403 });
     }
 
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
       sqlTransaction((txn) => [
         // Only the guided insert names the migration-015 columns, so an open create is unchanged
         // and keeps working on a database that does not have them yet.
-        mode === 'guided'
+        mode === GUIDED_MODE
           ? txn`
         INSERT INTO boards (id, title, description, template, created_by, owner_id, join_code, settings, trust_version, mode, phase, phase_config)
         VALUES (${id}, ${title}, ${description}, ${template}, ${creatorId}, ${ownerId}, ${joinCode}, ${JSON.stringify({ ...settings, ...phaseSettings(FIRST_PHASE) })}, 2, ${mode}, ${FIRST_PHASE}, ${JSON.stringify(DEFAULT_PHASE_CONFIG)}::jsonb)

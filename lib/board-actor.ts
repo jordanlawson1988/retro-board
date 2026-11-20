@@ -8,6 +8,8 @@ import type { BoardSettings } from '@/types';
 import { DEFAULT_BOARD_SETTINGS } from '@/utils/constants';
 import {
   DEFAULT_PHASE_CONFIG,
+  GUIDED_MODE,
+  OPEN_MODE,
   isBoardMode,
   isPhaseId,
   type BoardMode,
@@ -141,11 +143,11 @@ export async function loadBoardActor(
   const archivedAt = (row.archived_at as string | null) ?? null;
 
   // A row from before migration 015 has no mode key: it is an open board.
-  const rawMode = row.mode === undefined ? 'open' : row.mode;
+  const rawMode = row.mode === undefined ? OPEN_MODE : row.mode;
   if (!isBoardMode(rawMode)) throw new Error(`Invalid mode for board ${boardId}`);
   const mode: BoardMode = rawMode;
   let phase: PhaseId | null = null;
-  if (mode === 'guided') {
+  if (mode === GUIDED_MODE) {
     if (!isPhaseId(row.phase)) throw new Error(`Invalid phase for board ${boardId}`);
     phase = row.phase;
   }

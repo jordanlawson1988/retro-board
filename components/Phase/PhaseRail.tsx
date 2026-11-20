@@ -15,7 +15,7 @@ interface PhaseRailProps {
 
 /** The five guided phases, with the facilitator's Back and Next controls. */
 export function PhaseRail({ isFacilitator, onCompleteRetro }: PhaseRailProps) {
-  const { phase, next, hasReady, moving, readyCount, onlineTotal, confirming, go, onNext, stay, moveOn } =
+  const { phase, next, canBack, hasReady, moving, readyCount, onlineTotal, confirming, go, onNext, stay, moveOn } =
     usePhaseAdvance({ onCompleteRetro });
 
   if (!phase) return null;
@@ -58,7 +58,7 @@ export function PhaseRail({ isFacilitator, onCompleteRetro }: PhaseRailProps) {
 
       {isFacilitator && next && (
         <div className="flex items-center gap-2">
-          {phase !== 'reflect' && (
+          {canBack && (
             <Button variant="ghost" size="sm" disabled={moving} onClick={() => go('back')}>
               Back
             </Button>

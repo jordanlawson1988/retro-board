@@ -5,7 +5,7 @@ import { Clock } from 'lucide-react';
 import { Button, Pill } from '@/components/common';
 import { useBoardStore } from '@/stores/boardStore';
 import { usePhaseStore } from '@/stores/phaseStore';
-import { DEADLINE_MAX_DAYS, PHASES, type PhaseId } from '@/lib/constants/phases';
+import { DEADLINE_MAX_DAYS, GUIDED_MODE, PHASES, type PhaseId } from '@/lib/constants/phases';
 import { deadlineState, nextStep, formatDeadlineDay, formatDeadlineTime } from '@/lib/phases';
 
 /** setTimeout cannot wait longer than about 24.8 days. */
@@ -57,7 +57,7 @@ export function PhaseDeadline({ isFacilitator }: { isFacilitator: boolean }) {
     return () => document.removeEventListener('keydown', onKey);
   }, [formOpen, closeForm]);
 
-  if (!board || board.mode !== 'guided' || !board.phase) return null;
+  if (!board || board.mode !== GUIDED_MODE || !board.phase) return null;
   const phase = board.phase;
   const next = nextStep(phase);
   // Nothing is timed once the retro is done.

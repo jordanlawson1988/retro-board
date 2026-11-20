@@ -2,7 +2,7 @@
 
 import { useBoardStore } from '@/stores/boardStore';
 import { uiGates } from '@/lib/phases';
-import type { PhaseId } from '@/lib/constants/phases';
+import { GUIDED_MODE, OPEN_MODE, type PhaseId } from '@/lib/constants/phases';
 
 export function usePhaseGates(): {
   guided: boolean;
@@ -11,7 +11,7 @@ export function usePhaseGates(): {
   editLocked: boolean;
   moveLocked: boolean;
 } {
-  const mode = useBoardStore((s) => s.board?.mode ?? 'open');
+  const mode = useBoardStore((s) => s.board?.mode ?? OPEN_MODE);
   const phase = useBoardStore((s) => s.board?.phase ?? null);
-  return { guided: mode === 'guided', phase, ...uiGates(mode, phase) };
+  return { guided: mode === GUIDED_MODE, phase, ...uiGates(mode, phase) };
 }

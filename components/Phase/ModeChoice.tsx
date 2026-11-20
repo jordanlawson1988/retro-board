@@ -3,7 +3,7 @@
 import { useId, useRef } from 'react';
 import type { KeyboardEvent } from 'react';
 import { Check } from 'lucide-react';
-import { BOARD_MODES, type BoardMode } from '@/lib/constants/phases';
+import { BOARD_MODES, GUIDED_MODE, type BoardMode } from '@/lib/constants/phases';
 import { cn } from '@/utils/cn';
 
 interface ModeChoiceProps {
@@ -83,7 +83,7 @@ export function ModeChoice({ mode, anonymous, onChange }: ModeChoiceProps) {
           );
         })}
       </div>
-      {mode === 'guided' && (
+      {mode === GUIDED_MODE && (
         <label className="flex min-h-11 cursor-pointer items-center gap-2.5 text-[13px] text-[var(--ink-2)]">
           <input
             type="checkbox"

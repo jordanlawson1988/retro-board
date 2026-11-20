@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { useBoardStore, failWrite, WRITE_ERROR_MS } from '@/stores/boardStore';
 import { applyPhaseChanged, type PhaseTarget } from '@/lib/phases';
-import type { PhaseId } from '@/lib/constants/phases';
+import { GUIDED_MODE, type PhaseId } from '@/lib/constants/phases';
 import type { Board } from '@/types';
 
 const NETWORK_ERROR = 'Could not reach the server. Check your connection and try again.';
@@ -33,7 +33,7 @@ export function currentReadyPhase(
 /** POST to the phase route and apply the answer. No optimistic change: the server decides. */
 async function postPhase(body: Record<string, unknown>, fallback: string): Promise<void> {
   const { board } = useBoardStore.getState();
-  if (!board || board.mode !== 'guided') return;
+  if (!board || board.mode !== GUIDED_MODE) return;
   // The phase this request was made from. If an event or a refetch moves the client on while the
   // POST is in flight, the answer is older than what the client already shows and is ignored.
   const sentFrom = board.phase;
@@ -69,7 +69,7 @@ export const usePhaseStore = create<PhaseState>((set, get) => ({
   movePhase: async (to) => {
     if (get().moving) return;
     const { board } = useBoardStore.getState();
-    if (!board || board.mode !== 'guided' || !board.phase) return;
+    if (!board || board.mode !== GUIDED_MODE || !board.phase) return;
     set({ moving: true });
     try {
       await postPhase({ action: 'move', from: board.phase, to }, 'Failed to change phase');
@@ -86,7 +86,7 @@ export const usePhaseStore = create<PhaseState>((set, get) => ({
 
   setReady: (ready) => {
     const { board } = useBoardStore.getState();
-    if (!board || board.mode !== 'guided' || !board.phase) return;
+    if (!board || board.mode !== GUIDED_MODE || !board.phase) return;
     set(ready ? { iAmReadyFor: board.phase, readyBoardId: board.id } : { iAmReadyFor: null, readyBoardId: null });
   },
 }));

@@ -2,7 +2,7 @@
 
 import { useBoardStore } from '@/stores/boardStore';
 import { usePhaseStore, currentReadyPhase } from '@/stores/phaseStore';
-import { PHASES } from '@/lib/constants/phases';
+import { GUIDED_MODE, PHASES } from '@/lib/constants/phases';
 import { cn } from '@/utils/cn';
 
 /** Lets a joined participant say they are done with the current phase. Press again to undo. */
@@ -12,7 +12,7 @@ export function ReadyButton({ className }: { className?: string } = {}) {
   const readyBoardId = usePhaseStore((s) => s.readyBoardId);
   const setReady = usePhaseStore((s) => s.setReady);
 
-  if (!board || board.mode !== 'guided' || !board.phase || !PHASES[board.phase].hasReady) return null;
+  if (!board || board.mode !== GUIDED_MODE || !board.phase || !PHASES[board.phase].hasReady) return null;
   const pressed = currentReadyPhase({ iAmReadyFor, readyBoardId }, board) === board.phase;
 
   return (

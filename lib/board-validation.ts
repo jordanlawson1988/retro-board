@@ -1,7 +1,7 @@
 import { ACTION_ITEM_STATUSES } from '@/types';
 import type { BoardSettings } from '@/types';
 import { isPlainObject } from '@/lib/request-body';
-import { isBoardMode, type BoardMode } from '@/lib/constants/phases';
+import { isBoardMode, OPEN_MODE, type BoardMode } from '@/lib/constants/phases';
 import {
   CARD_VISIBILITIES,
   TIMER_STATUSES,
@@ -168,7 +168,7 @@ export function validateNewBoard(
   if (!isPlainObject(b.settings)) return { ok: false, error: 'Invalid settings' };
   if (!Array.isArray(b.columns) || b.columns.length > MAX_COLUMNS) return { ok: false, error: 'Invalid columns' };
   if (b.mode !== undefined && !isBoardMode(b.mode)) return { ok: false, error: 'Invalid mode' };
-  const mode: BoardMode = b.mode === undefined ? 'open' : (b.mode as BoardMode);
+  const mode: BoardMode = b.mode === undefined ? OPEN_MODE : (b.mode as BoardMode);
 
   const columns: NewBoardInput['columns'] = [];
   for (const c of b.columns as unknown[]) {

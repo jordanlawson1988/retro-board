@@ -7,7 +7,7 @@ import { BOARD_TEMPLATES } from '@/utils';
 import { useBoardStore } from '@/stores/boardStore';
 import { useAppSettingsStore } from '@/stores/appSettingsStore';
 import { ModeChoice } from '@/components/Phase/ModeChoice';
-import type { BoardMode } from '@/lib/constants/phases';
+import { OPEN_MODE, type BoardMode } from '@/lib/constants/phases';
 import { guidedModeEnabled } from '@/lib/phases';
 import { cn } from '@/utils/cn';
 import type { BoardTemplate } from '@/types';
@@ -21,7 +21,7 @@ export function CreateBoardModal({ onClose }: Props) {
   const [description, setDescription] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState<BoardTemplate>('mad-sad-glad');
   const [creating, setCreating] = useState(false);
-  const [mode, setMode] = useState<BoardMode>('open');
+  const [mode, setMode] = useState<BoardMode>(OPEN_MODE);
   const [anonymous, setAnonymous] = useState(true);
   const [createError, setCreateError] = useState<string | null>(null);
   const router = useRouter();

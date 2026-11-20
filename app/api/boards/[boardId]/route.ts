@@ -11,7 +11,7 @@ import { INVALID_BODY, validateSettingsPatch } from '@/lib/board-validation';
 import { patchNeedsSettingsGuard, resolveYouAre } from '@/lib/board-write-rules';
 import { boardAccessFrom } from '@/lib/board-access-loader';
 import { BOARD_ACCESS } from '@/lib/constants/board-access';
-import { REOPEN_PHASE, FINAL_PHASE, type PhaseId } from '@/lib/constants/phases';
+import { REOPEN_PHASE, FINAL_PHASE, GUIDED_MODE, type PhaseId } from '@/lib/constants/phases';
 import { phaseSettings, phaseOwnedKeysIn } from '@/lib/phases';
 import {
   getSessionOrNull,
@@ -181,7 +181,7 @@ export async function PATCH(
     const denied = guardResponse(checkAction('board.settings', loaded.actor, loaded.state));
     if (denied) return denied;
     // On a guided board the phase owns these settings; the phase route changes them.
-    if (loaded.board.mode === 'guided' && settingsPatch !== null && phaseOwnedKeysIn(settingsPatch).length > 0) {
+    if (loaded.board.mode === GUIDED_MODE && settingsPatch !== null && phaseOwnedKeysIn(settingsPatch).length > 0) {
       return NextResponse.json({ error: 'This setting follows the phase on a guided board' }, { status: 409 });
     }
     prevSettings = loaded.state.settings;
@@ -266,7 +266,7 @@ export async function POST(
     // Merge in the database so a settings change committed since the load is not undone.
     // A guided board also moves to its final phase and takes that phase's settings. Only the
     // guided statement names `phase`, so an open board's statement is unchanged.
-    const guidedBoard = loaded.board.mode === 'guided';
+    const guidedBoard = loaded.board.mode === GUIDED_MODE;
     const phase: PhaseId | null = guidedBoard ? FINAL_PHASE : null;
     const [done] = guidedBoard
       ? await sql`
@@ -299,7 +299,7 @@ export async function POST(
     }
     // Open board: clear archived_at and unlock; leave card_visibility as-is (facilitator can
     // re-hide). Guided board: back to the reopen phase with that phase's settings.
-    const guidedBoard = boardMode === 'guided';
+    const guidedBoard = boardMode === GUIDED_MODE;
     const phase: PhaseId | null = guidedBoard ? REOPEN_PHASE : null;
     const [board] = guidedBoard
       ? await sql`

@@ -189,7 +189,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
         settings: {
           ...DEFAULT_BOARD_SETTINGS,
           ...(useAppSettingsStore?.getState?.()?.settings?.default_board_settings ?? {}),
-          ...(options?.mode === 'guided' ? { anonymous_cards: options.anonymous ?? true } : {}),
+          ...(options?.mode === GUIDED_MODE ? { anonymous_cards: options.anonymous ?? true } : {}),
         },
         ...(options?.mode ? { mode: options.mode } : {}),
         columns,
@@ -376,7 +376,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
         ...board,
         archived_at: archivedAt,
         settings: completedSettings,
-        ...(board.mode === 'guided' ? { phase: FINAL_PHASE } : {}),
+        ...(board.mode === GUIDED_MODE ? { phase: FINAL_PHASE } : {}),
       },
     });
 

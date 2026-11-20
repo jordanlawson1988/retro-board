@@ -33,6 +33,7 @@ import { TimerFloating } from '@/components/Timer';
 import { ActionItemsPanel } from '@/components/ActionItems';
 import { exportMarkdown, exportCsv } from '@/utils/export';
 import { displayCardText } from '@/utils/cardText';
+import { GUIDED_MODE } from '@/lib/constants/phases';
 
 /** A drag distance no pointer reaches: used to switch dragging off. */
 const DRAG_NEVER_PX = 100_000;
@@ -124,7 +125,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
 
   const liveEventsEnabled = useFeatureFlagStore((s) => s.isEnabled('live_events'));
 
-  const guidedBoard = useBoardStore((s) => s.board?.mode === 'guided');
+  const guidedBoard = useBoardStore((s) => s.board?.mode === GUIDED_MODE);
   const openTimer = useTimer({
     boardId: boardId || '',
     liveSync: liveEventsEnabled && !!currentParticipantId && !guidedBoard,

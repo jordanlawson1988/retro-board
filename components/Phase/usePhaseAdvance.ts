@@ -3,8 +3,8 @@
 import { useCallback, useState } from 'react';
 import { useBoardStore } from '@/stores/boardStore';
 import { usePhaseStore } from '@/stores/phaseStore';
-import { PHASES, type PhaseId } from '@/lib/constants/phases';
-import { nextStep, needsMoveOnConfirm } from '@/lib/phases';
+import { GUIDED_MODE, PHASES, type PhaseId } from '@/lib/constants/phases';
+import { canGoBack, nextStep, needsMoveOnConfirm } from '@/lib/phases';
 
 /**
  * The facilitator's Back and Next logic, shared by the desktop rail and the mobile stepper:
@@ -28,8 +28,9 @@ export function usePhaseAdvance({ onCompleteRetro }: { onCompleteRetro: () => vo
   );
   const stay = useCallback(() => setConfirmPhase(null), []);
 
-  const phase = board && board.mode === 'guided' ? board.phase : null;
+  const phase = board && board.mode === GUIDED_MODE ? board.phase : null;
   const next = phase ? nextStep(phase) : null;
+  const canBack = phase ? canGoBack(phase) : false;
   const confirming = !!phase && confirmPhase === phase;
   const hasReady = phase ? PHASES[phase].hasReady : false;
 
@@ -49,5 +50,5 @@ export function usePhaseAdvance({ onCompleteRetro }: { onCompleteRetro: () => vo
     if (confirming) go('next');
   };
 
-  return { phase, next, hasReady, moving, readyCount, onlineTotal, confirming, go, onNext, stay, moveOn };
+  return { phase, next, canBack, hasReady, moving, readyCount, onlineTotal, confirming, go, onNext, stay, moveOn };
 }

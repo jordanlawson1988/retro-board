@@ -43,3 +43,27 @@ export function ungroupAll<C extends { merged_with: string | null; group_title?:
 export function hasGrouping(cards: readonly Pick<Card, 'merged_with' | 'group_title'>[]): boolean {
   return cards.some((c) => c.merged_with !== null || (c.group_title ?? null) !== null);
 }
+
+export const NOT_A_GROUP_ERROR = 'Only a group can have a title';
+export const CARD_NOT_FOUND_ERROR = 'Card not found';
+
+export type GroupTitleOutcome = 'ok' | 'card-missing' | 'not-a-group' | 'phase-changed';
+
+/**
+ * Maps the rows of the set-title statement. The statement always returns the target row when
+ * the card exists; the updated columns are null when the update matched nothing.
+ */
+export function groupTitleOutcome(
+  rows: readonly { target_is_lead: boolean; id: string | null }[],
+): GroupTitleOutcome {
+  const row = rows[0];
+  if (!row) return 'card-missing';
+  if (!row.target_is_lead) return 'not-a-group';
+  if (row.id === null) return 'phase-changed';
+  return 'ok';
+}
+
+/** Maps the row of the reset statement: no board match means the phase moved (or the board closed). */
+export function groupResetOutcome(row: { board_ok: boolean; cleared: number }): 'ok' | 'phase-changed' {
+  return row.board_ok ? 'ok' : 'phase-changed';
+}

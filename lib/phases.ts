@@ -251,3 +251,15 @@ export function phaseConfigAfterClose(config: PhaseConfig, payload: unknown): Ph
   const phase = payload && typeof payload === 'object' ? (payload as { phase?: unknown }).phase : undefined;
   return isPhaseId(phase) ? { ...config, deadline: null } : config;
 }
+
+/**
+ * Which refetch an event payload gets. Nothing unless it asks (`refetch: true`). A guided
+ * payload (it carries a valid phase) goes through the one coalesced per-board runner so it
+ * cannot race a phase refetch; an open payload keeps the direct fetch it always had.
+ */
+export function refetchRouteFor(payload: unknown): 'none' | 'direct' | 'coalesced' {
+  if (!payload || typeof payload !== 'object') return 'none';
+  const p = payload as { refetch?: unknown; phase?: unknown };
+  if (p.refetch !== true) return 'none';
+  return isPhaseId(p.phase) ? 'coalesced' : 'direct';
+}

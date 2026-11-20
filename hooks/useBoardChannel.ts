@@ -4,7 +4,7 @@ import { useEffect, useMemo } from 'react';
 import { useAbly, useChannel } from 'ably/react';
 import { useBoardStore, refetchBoardCoalesced } from '@/stores/boardStore';
 import { mergeIncomingCard } from '@/lib/mergeIncomingCard';
-import { applyPhaseChanged, phaseConfigAfterClose } from '@/lib/phases';
+import { applyPhaseChanged, phaseConfigAfterClose, refetchRouteFor } from '@/lib/phases';
 import { isPhaseId } from '@/lib/constants/phases';
 import type { Card, Column, Vote, Participant, ActionItem } from '@/types';
 
@@ -23,6 +23,14 @@ export function useBoardChannel(boardId: string) {
   // server-shaped board then. Coalesced: one in flight, bursts collapse to one trailing run.
   // The same per-board runner serves the phase-changed refetch, so two guided refetches never race.
   const refetchBoard = useMemo(() => () => void refetchBoardCoalesced(boardId), [boardId]);
+
+  // Complete and reopen on a guided board refetch through that same runner, so a GET that started
+  // before the event cannot land last and leave phase and archived_at stale. Open boards keep
+  // the direct refetch.
+  const refetchCompletionEvent = (data: { refetch?: boolean; phase?: unknown } | undefined) => {
+    if (refetchRouteFor(data) === 'coalesced') void refetchBoardCoalesced(boardId);
+    else refetchIfAsked(data);
+  };
 
   const ably = useAbly();
 
@@ -122,7 +130,7 @@ export function useBoardChannel(boardId: string) {
             ? { ...state.board, archived_at: null, settings: data.settings, ...(isPhaseId(data.phase) ? { phase: data.phase, phase_config: phaseConfigAfterClose(state.board.phase_config, data) } : {}) }
             : null,
         }));
-        refetchIfAsked(data);
+        refetchCompletionEvent(data);
         break;
       case 'board-completed':
         store.setState((state) => ({
@@ -130,7 +138,7 @@ export function useBoardChannel(boardId: string) {
             ? { ...state.board, archived_at: data.archivedAt, settings: data.settings, ...(isPhaseId(data.phase) ? { phase: data.phase, phase_config: phaseConfigAfterClose(state.board.phase_config, data) } : {}) }
             : null,
         }));
-        refetchIfAsked(data);
+        refetchCompletionEvent(data);
         break;
 
       // Guided phase: idempotent, the same payload twice leaves the same board

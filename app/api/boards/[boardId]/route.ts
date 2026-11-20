@@ -305,7 +305,7 @@ export async function POST(
       ? await sql`
       UPDATE boards SET archived_at = NULL, phase = ${REOPEN_PHASE},
         settings = settings || ${JSON.stringify(phaseSettings(REOPEN_PHASE))}::jsonb
-      WHERE id = ${boardId}
+      WHERE id = ${boardId} AND archived_at IS NOT NULL
       RETURNING settings
     `
       : await sql`
@@ -313,6 +313,8 @@ export async function POST(
       WHERE id = ${boardId}
       RETURNING settings
     `;
+    // A guided reopen only applies to a completed board; otherwise it would skip the phase rules.
+    if (!board && guidedBoard) return NextResponse.json({ error: 'Board is not completed' }, { status: 409 });
     if (!board) return BOARD_NOT_FOUND();
     const settings = board.settings;
     await channel.publish('board-reopened', { settings, phase, refetch: true });

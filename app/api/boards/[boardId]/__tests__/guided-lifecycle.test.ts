@@ -114,6 +114,28 @@ describe('reopen', () => {
     expect(mocks.publish).toHaveBeenCalledWith('board-reopened', { settings: DEFAULT_BOARD_SETTINGS, phase: null, refetch: true });
   });
 
+  it('a guided board that is not completed: the UPDATE returns no row, 409, nothing published', async () => {
+    mocks.sql.mockResolvedValueOnce([authority({ board_mode: 'guided' })]).mockResolvedValueOnce([]);
+    const res = await POST(postReq({ action: 'reopen' }), ctx);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: 'Board is not completed' });
+    expect(mocks.sql).toHaveBeenCalledTimes(2);
+    expect(mocks.publish).not.toHaveBeenCalled();
+  });
+
+  it('the guided reopen statement requires archived_at IS NOT NULL; the open one does not', async () => {
+    mocks.sql.mockResolvedValueOnce([authority({ board_mode: 'guided' })]).mockResolvedValueOnce([{ settings: DEFAULT_BOARD_SETTINGS }]);
+    await POST(postReq({ action: 'reopen' }), ctx);
+    expect(sqlText(1)).toContain('archived_at IS NOT NULL');
+    mocks.sql.mockClear();
+    mocks.sql.mockResolvedValueOnce([authority()]).mockResolvedValueOnce([{ settings: DEFAULT_BOARD_SETTINGS }]);
+    await POST(postReq({ action: 'reopen' }), ctx);
+    expect(sqlText(1)).not.toContain('archived_at IS NOT NULL');
+    expect(sqlText(1)).toBe(
+      ` UPDATE boards SET archived_at = NULL, settings = settings || '{"board_locked":false}'::jsonb WHERE id = ? RETURNING settings `
+    );
+  });
+
   it('a non-owner is still refused 403 before any UPDATE', async () => {
     mocks.fresh.mockResolvedValue({ user: { id: 'stranger' } });
     mocks.sql.mockResolvedValueOnce([authority({ board_mode: 'guided' })]);

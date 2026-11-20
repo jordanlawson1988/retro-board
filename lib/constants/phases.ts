@@ -102,5 +102,9 @@ export interface PhaseConfig {
 }
 export const DEFAULT_PHASE_CONFIG: PhaseConfig = { deadline: null };
 
+/** Phase route refusals, declared once. */
+export const NOT_GUIDED_ERROR = 'This board is not in guided mode';
+export const PHASE_CHANGED_ERROR = 'The phase already changed';
+
 /** Furthest a phase deadline may be set, in days. */
 export const DEADLINE_MAX_DAYS = 30;

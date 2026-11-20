@@ -62,6 +62,8 @@ export interface BoardSettings {
   anonymous_cards: boolean;
   timer: TimerState;
   highlighted_card_id: string | null;
+  /** Guided boards only; absent on open boards, read as 1. */
+  max_votes_per_card?: number;
 }
 
 export interface TimerState {
@@ -103,6 +105,7 @@ export interface Card {
   color: string | null;
   position: number;
   merged_with: string | null;
+  group_title?: string | null;   // guided boards only; shown on a lead card
   reactions: CardReactions;
   created_at: string;
   updated_at: string;
@@ -118,6 +121,7 @@ export interface Vote {
   card_id: string;
   board_id: string;
   voter_id: string;
+  count?: number;                // absent before migration 016; a row without it weighs 1
   created_at: string;
 }
 

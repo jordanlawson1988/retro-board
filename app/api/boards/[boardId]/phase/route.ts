@@ -6,7 +6,15 @@ import { checkAction } from '@/lib/board-guards';
 import { readJsonObject } from '@/lib/request-body';
 import { INVALID_BODY } from '@/lib/board-validation';
 import { DEFAULT_BOARD_SETTINGS } from '@/utils/constants';
-import { DEFAULT_PHASE_CONFIG, GUIDED_MODE, isPhaseId, type PhaseConfig, type PhaseId } from '@/lib/constants/phases';
+import {
+  DEFAULT_PHASE_CONFIG,
+  GUIDED_MODE,
+  NOT_GUIDED_ERROR,
+  PHASE_CHANGED_ERROR,
+  isPhaseId,
+  type PhaseConfig,
+  type PhaseId,
+} from '@/lib/constants/phases';
 import {
   phaseSettings,
   resolvePhaseMove,
@@ -15,8 +23,6 @@ import {
   type PhaseTarget,
 } from '@/lib/phases';
 import type { BoardSettings } from '@/types';
-
-const PHASE_CHANGED = 'The phase already changed';
 
 function isPhaseTarget(v: unknown): v is PhaseTarget {
   return v === 'next' || v === 'back' || isPhaseId(v);
@@ -57,11 +63,11 @@ export async function POST(
   if (!loaded) return BOARD_NOT_FOUND();
   const denied = guardResponse(checkAction('board.settings', loaded.actor, loaded.state));
   if (denied) return denied;
-  if (loaded.board.mode !== GUIDED_MODE) return fail('This board is not in guided mode', 409);
+  if (loaded.board.mode !== GUIDED_MODE) return fail(NOT_GUIDED_ERROR, 409);
 
   let row;
   if (action === 'move') {
-    if (from !== loaded.board.phase) return fail(PHASE_CHANGED, 409);
+    if (from !== loaded.board.phase) return fail(PHASE_CHANGED_ERROR, 409);
     const move = resolvePhaseMove(from as PhaseId, to as PhaseTarget);
     if (!move.ok) return fail(move.error, 409);
     // Conditional on the phase the request named, so two facilitators cannot both win.
@@ -81,7 +87,7 @@ export async function POST(
       RETURNING phase, settings, phase_config
     `;
   }
-  if (!row) return fail(PHASE_CHANGED, 409);
+  if (!row) return fail(PHASE_CHANGED_ERROR, 409);
 
   const phase = row.phase as PhaseId;
   const settings = { ...DEFAULT_BOARD_SETTINGS, ...(row.settings as Partial<BoardSettings>) } as BoardSettings;

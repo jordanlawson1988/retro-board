@@ -81,7 +81,6 @@ export async function GET(
         title: board.title,
         archived_at: board.archived_at,
         trust_version: viewBoard.trust_version,
-        ...modeFields,
       },
       columns: [],
       cards: [],

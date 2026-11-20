@@ -61,11 +61,11 @@ describe('board GET mode and phase', () => {
     expect(json.board.phase_config).toEqual({ deadline: null });
   });
 
-  it('the minimal no-access payload carries them too, and still reads one row only', async () => {
+  it('the minimal no-access payload keeps its exact four board keys, even for a guided board', async () => {
     mocks.sql.mockResolvedValue([ctxRow({ archived_at: '2026-01-01', cp_id: null, mode: 'guided', phase: 'done', phase_config: { deadline: null } })]);
     const json = await (await call()).json();
     expect(json.access).toBe('completed-closed');
-    expect(json.board).toMatchObject({ mode: 'guided', phase: 'done', phase_config: { deadline: null } });
+    expect(Object.keys(json.board).sort()).toEqual(['archived_at', 'id', 'title', 'trust_version']);
     expect(mocks.tx).not.toHaveBeenCalled();
   });
 });

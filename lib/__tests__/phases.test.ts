@@ -13,6 +13,7 @@ import {
   needsMoveOnConfirm,
   formatDeadlineDay,
   formatDeadlineTime,
+  guidedModeEnabled,
 } from '@/lib/phases';
 import { DEFAULT_BOARD_SETTINGS } from '@/utils/constants';
 
@@ -163,5 +164,23 @@ describe('needsMoveOnConfirm', () => {
     expect(needsMoveOnConfirm('reflect', 3, 3)).toBe(false);
     expect(needsMoveOnConfirm('reflect', 0, 0)).toBe(false);
     expect(needsMoveOnConfirm('discuss', 3, 0)).toBe(false);
+  });
+});
+
+describe('guidedModeEnabled', () => {
+  const flag = (key: string, is_enabled: boolean) => ({ id: key, key, is_enabled });
+  it('is true only when a guided_mode flag is present and on', () => {
+    expect(guidedModeEnabled({ flags: [flag('guided_mode', true)] })).toBe(true);
+    expect(guidedModeEnabled({ flags: [flag('live_events', true), flag('guided_mode', true)] })).toBe(true);
+  });
+  it('is false when the flag is off or absent', () => {
+    expect(guidedModeEnabled({ flags: [flag('guided_mode', false)] })).toBe(false);
+    expect(guidedModeEnabled({ flags: [flag('live_events', true)] })).toBe(false);
+    expect(guidedModeEnabled({ flags: [] })).toBe(false);
+  });
+  it('is false for a malformed response', () => {
+    for (const bad of [null, undefined, 'x', 3, {}, { flags: null }, { flags: 'guided_mode' }, { flags: [null, 3, 'a'] }, { flags: [{ key: 'guided_mode', is_enabled: 'true' }] }]) {
+      expect(guidedModeEnabled(bad)).toBe(false);
+    }
   });
 });

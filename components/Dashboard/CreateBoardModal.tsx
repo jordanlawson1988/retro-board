@@ -6,9 +6,9 @@ import { Modal, Input, Textarea, Button } from '@/components/common';
 import { BOARD_TEMPLATES } from '@/utils';
 import { useBoardStore } from '@/stores/boardStore';
 import { useAppSettingsStore } from '@/stores/appSettingsStore';
-import { useFeatureFlagStore } from '@/stores/featureFlagStore';
 import { ModeChoice } from '@/components/Phase/ModeChoice';
 import type { BoardMode } from '@/lib/constants/phases';
+import { guidedModeEnabled } from '@/lib/phases';
 import { cn } from '@/utils/cn';
 import type { BoardTemplate } from '@/types';
 
@@ -28,20 +28,29 @@ export function CreateBoardModal({ onClose }: Props) {
   const createBoard = useBoardStore((s) => s.createBoard);
   const appSettings = useAppSettingsStore((s) => s.settings);
   const fetchAppSettings = useAppSettingsStore((s) => s.fetchSettings);
-  const fetchFlags = useFeatureFlagStore((s) => s.fetchFlags);
-  // isEnabled() reads a missing flag as on; the choice needs the flag to be present and on,
-  // so while flags load, or if the fetch fails, the modal stays as it was: an open board.
-  const showModeChoice = useFeatureFlagStore((s) =>
-    s.flags.some((f) => f.key === 'guided_mode' && f.is_enabled)
-  );
+  // The choice needs a guided_mode flag that is present and on. This reads the flags into the
+  // modal's own state and never touches the shared flag store, which BoardPage reads with a
+  // missing flag counting as on. While loading, or if the request fails, the modal is as it was.
+  const [showModeChoice, setShowModeChoice] = useState(false);
 
   useEffect(() => {
     fetchAppSettings();
   }, [fetchAppSettings]);
 
   useEffect(() => {
-    fetchFlags();
-  }, [fetchFlags]);
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const res = await fetch('/api/feature-flags', { signal: controller.signal });
+        if (!res.ok) return;
+        const body = await res.json();
+        if (!controller.signal.aborted) setShowModeChoice(guidedModeEnabled(body));
+      } catch {
+        // Leave the dialog as an open-board dialog.
+      }
+    })();
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     if (appSettings?.default_template) {

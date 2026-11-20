@@ -208,3 +208,17 @@ export function withPhaseDefaults<T extends object>(
     phase_config: b.phase_config ?? { ...DEFAULT_PHASE_CONFIG },
   };
 }
+
+/**
+ * Whether a /api/feature-flags response says guided mode is on. A missing flag, a failed or
+ * malformed response all read as off, unlike the shared store's isEnabled, which reads a
+ * missing flag as on.
+ */
+export function guidedModeEnabled(response: unknown): boolean {
+  if (!response || typeof response !== 'object') return false;
+  const flags = (response as { flags?: unknown }).flags;
+  if (!Array.isArray(flags)) return false;
+  return flags.some(
+    (f) => !!f && typeof f === 'object' && (f as { key?: unknown }).key === 'guided_mode' && (f as { is_enabled?: unknown }).is_enabled === true,
+  );
+}

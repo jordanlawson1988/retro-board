@@ -31,6 +31,9 @@ import { POST } from '@/app/api/boards/[boardId]/votes/route';
 import { NextRequest } from 'next/server';
 import { phaseSettings } from '@/lib/phases';
 import { ctxRow } from './vote-test-helpers';
+import { DEFAULT_BOARD_SETTINGS } from '@/utils/constants';
+import { OPEN_MAX_VOTES_PER_CARD } from '@/lib/constants/board-settings';
+import { votesPerCardError } from '@/lib/votes';
 
 const ctx = { params: Promise.resolve({ boardId: 'b1' }) };
 const call = (body: unknown) =>
@@ -61,7 +64,7 @@ const txTexts = () => {
 };
 const saved = { id: 'v1', card_id: 'c1', board_id: 'b1', voter_id: 'p1', count: 2, created_at: '2026-11-20T00:00:00Z' };
 const addRow = (o: Record<string, unknown> = {}) =>
-  ({ card_found: 1, card_parent: null, spent: 1, on_card: 1, team_used_before: 4, tally_at: 1_700_000_000_000, ...saved, ...o });
+  ({ card_found: 1, card_parent: null, spent: 1, on_card: 1, per_person: 5, per_card: 3, team_used_before: 4, tally_at: 1_700_000_000_000, ...saved, ...o });
 const NO_VOTE = { id: null, card_id: null, board_id: null, voter_id: null, count: null, created_at: null };
 
 describe('guided add', () => {
@@ -77,7 +80,11 @@ describe('guided add', () => {
     expect(lock.values).toEqual(['b1:votes']);
     expect(stmt.text).toContain('ON CONFLICT (card_id, voter_id) DO UPDATE SET count = votes.count + 1');
     expect(stmt.text).toContain('SUM(count)');
-    expect(stmt.values).toEqual(expect.arrayContaining([5, 3]));
+    expect(stmt.text).toContain("settings ->> 'max_votes_per_participant'");
+    expect(stmt.text).toContain("settings ->> 'max_votes_per_card'");
+    expect(stmt.text).toContain('FROM boards WHERE id = ?');
+    expect(stmt.text).toContain('mine.spent < lim.per_person AND mine.on_card < lim.per_card');
+    expect(stmt.values).toEqual(expect.arrayContaining([DEFAULT_BOARD_SETTINGS.max_votes_per_participant, OPEN_MAX_VOTES_PER_CARD]));
     expect(mocks.publish).not.toHaveBeenCalled();
     expect(mocks.tally).toHaveBeenCalledWith('b1', { used: 5, at: 1_700_000_000_000 });
   });
@@ -96,6 +103,22 @@ describe('guided add', () => {
     expect(await (await call({ cardId: 'c1', action: 'add' })).json()).toEqual({ error: 'Vote limit reached', maxVotes: 5 });
     expect(mocks.tally).not.toHaveBeenCalled();
   });
+  it('the limits the statement returns decide a per-person refusal, not the earlier load', async () => {
+    mocks.sql.mockResolvedValueOnce([guidedRow({ max_votes_per_participant: 5 })]);
+    mocks.tx.mockResolvedValueOnce([[], [addRow({ ...NO_VOTE, spent: 3, on_card: 0, per_person: 3 })]]);
+    const res = await call({ cardId: 'c1', action: 'add' });
+    expect(res.status).toBe(422);
+    expect(await res.json()).toEqual({ error: 'Vote limit reached', maxVotes: 3 });
+    expect(mocks.tally).not.toHaveBeenCalled();
+  });
+  it('the limits the statement returns decide a per-card refusal, not the earlier load', async () => {
+    mocks.sql.mockResolvedValueOnce([guidedRow({ max_votes_per_card: 3 })]);
+    mocks.tx.mockResolvedValueOnce([[], [addRow({ ...NO_VOTE, spent: 1, on_card: 1, per_card: 1 })]]);
+    const res = await call({ cardId: 'c1', action: 'add' });
+    expect(res.status).toBe(422);
+    expect(await res.json()).toEqual({ error: votesPerCardError(1), maxVotesPerCard: 1 });
+    expect(mocks.tally).not.toHaveBeenCalled();
+  });
   it('404 for an unknown card, 409 for a card inside a group', async () => {
     mocks.sql.mockResolvedValueOnce([guidedRow()]);
     mocks.tx.mockResolvedValueOnce([[], [addRow({ ...NO_VOTE, card_found: 0 })]]);
@@ -109,7 +132,7 @@ describe('guided add', () => {
   });
   it('a guided board without max_votes_per_card allows 1 per card', async () => {
     mocks.sql.mockResolvedValueOnce([guidedRow({ max_votes_per_card: undefined })]);
-    mocks.tx.mockResolvedValueOnce([[], [addRow({ ...NO_VOTE, on_card: 1 })]]);
+    mocks.tx.mockResolvedValueOnce([[], [addRow({ ...NO_VOTE, on_card: 1, per_card: 1 })]]);
     expect(await (await call({ cardId: 'c1', action: 'add' })).json()).toEqual({ error: 'You can put at most 1 vote on one card', maxVotesPerCard: 1 });
   });
   it('passes the identity from the cookie, never the body, and a generated id when voteId is absent', async () => {

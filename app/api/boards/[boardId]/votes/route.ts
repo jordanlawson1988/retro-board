@@ -8,11 +8,12 @@ import { readJsonObject, isPlainObject } from '@/lib/request-body';
 import { INVALID_BODY } from '@/lib/board-validation';
 import { isVoteAction } from '@/lib/constants/votes';
 import { GUIDED_MODE, NOT_GUIDED_ERROR } from '@/lib/constants/phases';
+import { OPEN_MAX_VOTES_PER_CARD } from '@/lib/constants/board-settings';
+import { DEFAULT_BOARD_SETTINGS } from '@/utils/constants';
 import {
   GROUP_VOTE_ERROR,
   GUIDED_ACTION_REQUIRED_ERROR,
   NO_VOTE_TO_REMOVE_ERROR,
-  maxVotesPerCard,
   teamUsedAfter,
   voteLockKey,
   votesPerCardError,
@@ -147,9 +148,6 @@ async function guidedVote(
   const voterId = loaded.actor.participantId;
   if (voterId === null) return NextResponse.json({ error: 'Join the board first' }, { status: 401 });
 
-  const settings = loaded.state.settings;
-  const perPerson = settings.max_votes_per_participant;
-  const perCard = maxVotesPerCard(settings);
   const lockKey = voteLockKey(boardId);
 
   if (action === 'remove') {
@@ -201,18 +199,22 @@ async function guidedVote(
         FROM votes WHERE board_id = ${boardId} AND voter_id = ${voterId}
       ), team AS (
         SELECT COALESCE(SUM(count), 0)::int AS used FROM votes WHERE board_id = ${boardId}
+      ), lim AS (
+        SELECT COALESCE((settings ->> 'max_votes_per_participant')::int, ${DEFAULT_BOARD_SETTINGS.max_votes_per_participant}::int) AS per_person,
+               COALESCE((settings ->> 'max_votes_per_card')::int, ${OPEN_MAX_VOTES_PER_CARD}::int) AS per_card
+        FROM boards WHERE id = ${boardId}
       ), upserted AS (
         INSERT INTO votes (id, card_id, board_id, voter_id, count)
-        SELECT ${newVoteId}, ${cardId}, ${boardId}, ${voterId}, 1 FROM card, mine
-        WHERE card.merged_with IS NULL AND mine.spent < ${perPerson}::int AND mine.on_card < ${perCard}::int
+        SELECT ${newVoteId}, ${cardId}, ${boardId}, ${voterId}, 1 FROM card, mine, lim
+        WHERE card.merged_with IS NULL AND mine.spent < lim.per_person AND mine.on_card < lim.per_card
         ON CONFLICT (card_id, voter_id) DO UPDATE SET count = votes.count + 1
         RETURNING *
       )
       SELECT (SELECT COUNT(*) FROM card)::int AS card_found, (SELECT merged_with FROM card) AS card_parent,
-             mine.spent, mine.on_card, team.used AS team_used_before,
+             mine.spent, mine.on_card, lim.per_person, lim.per_card, team.used AS team_used_before,
              floor(extract(epoch from clock_timestamp()) * 1000)::float8 AS tally_at,
              u.id, u.card_id, u.board_id, u.voter_id, u.count, u.created_at
-      FROM mine CROSS JOIN team LEFT JOIN upserted u ON true
+      FROM mine CROSS JOIN team CROSS JOIN lim LEFT JOIN upserted u ON true
     `,
   ]);
   const row = (addedRows as Record<string, unknown>[])[0];
@@ -221,6 +223,9 @@ async function guidedVote(
   }
   if (row.id === null) {
     if (row.card_parent) return NextResponse.json({ error: GROUP_VOTE_ERROR }, { status: 409 });
+    // The limits come from the statement, read under the lock, not from the earlier load.
+    const perPerson = Number(row.per_person);
+    const perCard = Number(row.per_card);
     if (Number(row.spent) >= perPerson) {
       return NextResponse.json({ error: 'Vote limit reached', maxVotes: perPerson }, { status: 422 });
     }

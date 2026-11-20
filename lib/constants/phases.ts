@@ -1,6 +1,8 @@
 /** The one list of board modes. `open` is the classic free-form board. */
 export const BOARD_MODES = ['open', 'guided'] as const;
 export type BoardMode = (typeof BOARD_MODES)[number];
+export const OPEN_MODE: BoardMode = BOARD_MODES[0];
+export const GUIDED_MODE: BoardMode = BOARD_MODES[1];
 export function isBoardMode(v: unknown): v is BoardMode {
   return typeof v === 'string' && (BOARD_MODES as readonly string[]).includes(v);
 }

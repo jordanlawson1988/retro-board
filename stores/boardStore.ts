@@ -9,7 +9,8 @@ import { mergeIncomingCard } from '@/lib/mergeIncomingCard';
 import { useAppSettingsStore } from '@/stores/appSettingsStore';
 import { BOARD_ACCESS } from '@/lib/constants/board-access';
 import { withPhaseDefaults } from '@/lib/phases';
-import { FINAL_PHASE, type BoardMode } from '@/lib/constants/phases';
+import { createKeyedCoalescer } from '@/lib/coalescedRunner';
+import { FINAL_PHASE, GUIDED_MODE, type BoardMode } from '@/lib/constants/phases';
 import type { BoardAccess } from '@/types';
 import type { Board, Column, Card, Vote, ActionItem, Participant, BoardTemplate, BoardSettings, ConnectionStatus } from '@/types';
 
@@ -43,7 +44,14 @@ async function postJoin(boardId: string, displayName: string): Promise<Participa
   }
 }
 
-const WRITE_ERROR_MS = 6000;
+export const WRITE_ERROR_MS = 6000;
+
+/**
+ * The one way to refetch a guided board: per board, never two GETs in flight, and a trigger that
+ * arrives mid-flight gets one trailing run. Without it an older response could land last and
+ * overwrite a newer phase.
+ */
+export const refetchBoardCoalesced = createKeyedCoalescer((boardId) => useBoardStore.getState().fetchBoard(boardId));
 
 /**
  * Turn a failed write response into an Error carrying the server's message,
@@ -65,8 +73,8 @@ export async function failWrite(res: Response, fallback: string): Promise<Error>
     if (useBoardStore.getState().lastWriteError === message) useBoardStore.setState({ lastWriteError: null });
   }, WRITE_ERROR_MS);
   // A refused write on a guided board usually means the phase moved under us: pull the fresh phase.
-  if (res.status === 409 && board?.mode === 'guided') {
-    try { await useBoardStore.getState().fetchBoard(board.id); } catch { /* the message is already surfaced */ }
+  if (res.status === 409 && board?.mode === GUIDED_MODE) {
+    await refetchBoardCoalesced(board.id); // never rejects; the message is already surfaced
   }
   return new Error(message);
 }

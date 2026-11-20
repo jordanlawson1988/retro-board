@@ -2,10 +2,9 @@
 
 import { useEffect, useMemo } from 'react';
 import { useAbly, useChannel } from 'ably/react';
-import { createCoalescedRunner } from '@/lib/coalescedRunner';
-import { useBoardStore } from '@/stores/boardStore';
+import { useBoardStore, refetchBoardCoalesced } from '@/stores/boardStore';
 import { mergeIncomingCard } from '@/lib/mergeIncomingCard';
-import { applyPhaseChanged } from '@/lib/phases';
+import { applyPhaseChanged, phaseConfigAfterClose } from '@/lib/phases';
 import { isPhaseId } from '@/lib/constants/phases';
 import type { Card, Column, Vote, Participant, ActionItem } from '@/types';
 
@@ -22,10 +21,8 @@ export function useBoardChannel(boardId: string) {
   // Ably does not replay what was published before we attached, so anything between the
   // initial GET and the attach (or during a gap without continuity) is lost. Refetch the
   // server-shaped board then. Coalesced: one in flight, bursts collapse to one trailing run.
-  const refetchBoard = useMemo(
-    () => createCoalescedRunner(() => store.getState().fetchBoard(boardId)),
-    [store, boardId]
-  );
+  // The same per-board runner serves the phase-changed refetch, so two guided refetches never race.
+  const refetchBoard = useMemo(() => () => void refetchBoardCoalesced(boardId), [boardId]);
 
   const ably = useAbly();
 
@@ -122,7 +119,7 @@ export function useBoardChannel(boardId: string) {
       case 'board-reopened':
         store.setState((state) => ({
           board: state.board
-            ? { ...state.board, archived_at: null, settings: data.settings, ...(isPhaseId(data.phase) ? { phase: data.phase } : {}) }
+            ? { ...state.board, archived_at: null, settings: data.settings, ...(isPhaseId(data.phase) ? { phase: data.phase, phase_config: phaseConfigAfterClose(state.board.phase_config, data) } : {}) }
             : null,
         }));
         refetchIfAsked(data);
@@ -130,7 +127,7 @@ export function useBoardChannel(boardId: string) {
       case 'board-completed':
         store.setState((state) => ({
           board: state.board
-            ? { ...state.board, archived_at: data.archivedAt, settings: data.settings, ...(isPhaseId(data.phase) ? { phase: data.phase } : {}) }
+            ? { ...state.board, archived_at: data.archivedAt, settings: data.settings, ...(isPhaseId(data.phase) ? { phase: data.phase, phase_config: phaseConfigAfterClose(state.board.phase_config, data) } : {}) }
             : null,
         }));
         refetchIfAsked(data);
@@ -141,7 +138,7 @@ export function useBoardChannel(boardId: string) {
         store.setState((state) => ({
           board: state.board ? applyPhaseChanged(state.board, data) : null,
         }));
-        refetchIfAsked(data);
+        if (data?.refetch === true) refetchBoard();
         break;
 
       // Action Items

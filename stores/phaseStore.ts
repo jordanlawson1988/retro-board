@@ -1,11 +1,10 @@
 import { create } from 'zustand';
-import { useBoardStore, failWrite } from '@/stores/boardStore';
+import { useBoardStore, failWrite, WRITE_ERROR_MS } from '@/stores/boardStore';
 import { applyPhaseChanged, type PhaseTarget } from '@/lib/phases';
 import type { PhaseId } from '@/lib/constants/phases';
 import type { Board } from '@/types';
 
 const NETWORK_ERROR = 'Could not reach the server. Check your connection and try again.';
-const WRITE_ERROR_MS = 6000;
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
 interface PhaseState {
@@ -35,6 +34,9 @@ export function currentReadyPhase(
 async function postPhase(body: Record<string, unknown>, fallback: string): Promise<void> {
   const { board } = useBoardStore.getState();
   if (!board || board.mode !== 'guided') return;
+  // The phase this request was made from. If an event or a refetch moves the client on while the
+  // POST is in flight, the answer is older than what the client already shows and is ignored.
+  const sentFrom = board.phase;
   let res: Response;
   try {
     res = await fetch(`/api/boards/${board.id}/phase`, {
@@ -53,7 +55,7 @@ async function postPhase(body: Record<string, unknown>, fallback: string): Promi
   if (!res.ok) throw await failWrite(res, fallback);
   const data = await res.json().catch(() => null);
   useBoardStore.setState((state) => ({
-    board: state.board ? applyPhaseChanged(state.board, data) : null,
+    board: state.board && state.board.phase === sentFrom ? applyPhaseChanged(state.board, data) : state.board,
   }));
 }
 

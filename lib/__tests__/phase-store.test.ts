@@ -106,6 +106,20 @@ describe('movePhase', () => {
     expect(useBoardStore.getState().board?.phase).toBe('group');
   });
 
+  it('does not regress the phase when an event moved the client on while the POST was in flight', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    fetchMock = vi.fn(async () => { await gate; return movedResponse(); }); // answers: group
+    vi.stubGlobal('fetch', fetchMock);
+    const pending = usePhaseStore.getState().movePhase('next');
+    // A later phase-changed event (vote) lands first.
+    useBoardStore.setState((state) => ({ board: state.board ? { ...state.board, phase: 'vote' } : null }));
+    release();
+    await pending;
+    expect(useBoardStore.getState().board?.phase).toBe('vote');
+    expect(usePhaseStore.getState().moving).toBe(false);
+  });
+
   it('on 409 it rejects with the message, refetches the board and sets lastWriteError', async () => {
     routes({
       'POST /api/boards/b1/phase': () => json(409, { error: 'The phase already changed' }),

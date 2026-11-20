@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  tallyAfterFetch, EMPTY_VOTE_SLOT, startVoteClick, finishVoteClick, voteResult,
+  tallyAfterFetch, EMPTY_VOTE_SLOT, startVoteClick, finishVoteClick, voteResult, errorMessageOf,
 } from '@/lib/votes';
 import {
   currentTallyVersion, bumpTallyVersion,
@@ -38,36 +38,76 @@ describe('tally version counter', () => {
 });
 
 describe('vote click slot', () => {
+  const ok = (at: number, vote: Vote | null) => ({ kind: 'ok' as const, at, vote });
+  const failed = (over: Partial<{ refetched: boolean; delta: 1 | -1; currentCount: number }> = {}) =>
+    ({ kind: 'failed' as const, refetched: false, delta: 1 as const, currentCount: -1, ...over });
+  const two = () => startVoteClick(startVoteClick(EMPTY_VOTE_SLOT, 1), 2);
+
   it('counts clicks in flight and settles only when the last one is answered', () => {
-    let slot = startVoteClick(startVoteClick(EMPTY_VOTE_SLOT));
+    let slot = two();
     expect(slot.pending).toBe(2);
-    let r = finishVoteClick(slot, { at: 20, vote: row(2) });
+    let r = finishVoteClick(slot, ok(20, row(2)));
     expect(r.settle).toBeNull();
+    expect(r.refetch).toBe(false);
     slot = r.slot;
-    r = finishVoteClick(slot, { at: 10, vote: row(1) });
+    r = finishVoteClick(slot, ok(10, row(1)));
     expect(r.settle).toEqual({ vote: row(2) });
     expect(r.slot).toEqual(EMPTY_VOTE_SLOT);
   });
   it('the newest result by tally.at wins, not the last to arrive', () => {
-    let slot = startVoteClick(startVoteClick(EMPTY_VOTE_SLOT));
-    slot = finishVoteClick(slot, { at: 10, vote: row(1) }).slot;
-    const r = finishVoteClick(slot, { at: 20, vote: row(2) });
-    expect(r.settle).toEqual({ vote: row(2) });
+    const slot = finishVoteClick(two(), ok(10, row(1))).slot;
+    expect(finishVoteClick(slot, ok(20, row(2))).settle).toEqual({ vote: row(2) });
   });
   it('a removal to zero is a result with no vote row', () => {
-    const r = finishVoteClick(startVoteClick(EMPTY_VOTE_SLOT), { at: 5, vote: null });
+    const r = finishVoteClick(startVoteClick(EMPTY_VOTE_SLOT, 0), ok(5, null));
     expect(r.settle).toEqual({ vote: null });
   });
-  it('a lone failed click settles nothing', () => {
-    const r = finishVoteClick(startVoteClick(EMPTY_VOTE_SLOT), null);
+  it('a lone failed click settles nothing and asks for a refetch', () => {
+    const r = finishVoteClick(startVoteClick(EMPTY_VOTE_SLOT, 1), failed());
     expect(r.settle).toBeNull();
+    expect(r.refetch).toBe(true);
     expect(r.slot).toEqual(EMPTY_VOTE_SLOT);
   });
-  it('a failed click still lets the newest success settle when it is the last answer', () => {
-    let slot = startVoteClick(startVoteClick(EMPTY_VOTE_SLOT));
-    slot = finishVoteClick(slot, { at: 10, vote: row(1) }).slot;
-    const r = finishVoteClick(slot, null);
+  it('a failure whose own handling already refetched does not ask for another', () => {
+    expect(finishVoteClick(startVoteClick(EMPTY_VOTE_SLOT, 1), failed({ refetched: true })).refetch).toBe(false);
+  });
+  it('a failed click still lets the newest success settle when it is the last answer, and the burst refetches', () => {
+    const slot = finishVoteClick(two(), ok(10, row(1))).slot;
+    const r = finishVoteClick(slot, failed());
     expect(r.settle).toEqual({ vote: row(1) });
+    expect(r.refetch).toBe(true);
+  });
+  it('a failure in the middle of a burst defers the refetch to the end of the burst', () => {
+    let r = finishVoteClick(two(), failed());
+    expect(r.refetch).toBe(false);
+    r = finishVoteClick(r.slot, ok(9, row(1)));
+    expect(r.refetch).toBe(true);
+  });
+});
+
+describe('reversing a failed click', () => {
+  it('reverses when the row still has the count this burst expects, and lowers the expectation', () => {
+    const slot = startVoteClick(EMPTY_VOTE_SLOT, 1);
+    const r = finishVoteClick(startVoteClick(slot, 2), { kind: 'failed', refetched: false, delta: 1, currentCount: 2 });
+    expect(r.reverse).toBe(true);
+    expect(r.slot.expected).toBe(1);
+  });
+  it('does not reverse when a refetch replaced the rows (count differs from the expectation)', () => {
+    const slot = startVoteClick(startVoteClick(EMPTY_VOTE_SLOT, 2), 3);
+    const r = finishVoteClick(slot, { kind: 'failed', refetched: false, delta: 1, currentCount: 1 });
+    expect(r.reverse).toBe(false);
+    expect(r.slot.expected).toBe(3);
+  });
+  it('reverses a failed removal by adding back', () => {
+    const r = finishVoteClick(startVoteClick(EMPTY_VOTE_SLOT, 0), { kind: 'failed', refetched: false, delta: -1, currentCount: 0 });
+    expect(r.reverse).toBe(true);
+  });
+});
+
+describe('errorMessageOf', () => {
+  it('takes the server message and falls back otherwise', () => {
+    expect(errorMessageOf({ error: 'Nope' }, 'Fallback')).toBe('Nope');
+    for (const bad of [null, {}, { error: '' }, { error: 3 }, 'x']) expect(errorMessageOf(bad, 'Fallback')).toBe('Fallback');
   });
 });
 

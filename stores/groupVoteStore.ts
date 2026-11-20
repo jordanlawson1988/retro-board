@@ -4,7 +4,7 @@ import { NETWORK_ERROR } from '@/stores/phaseStore';
 import { GUIDED_MODE } from '@/lib/constants/phases';
 import { validateGroupTitle, ungroupAll, SET_TITLE_FALLBACK, RESET_GROUPING_FALLBACK } from '@/lib/groups';
 import {
-  ADD_VOTE_FALLBACK, REMOVE_VOTE_FALLBACK, EMPTY_VOTE_SLOT, applyVoteDelta, applyVoteTally, finishVoteClick,
+  ADD_VOTE_FALLBACK, REMOVE_VOTE_FALLBACK, EMPTY_VOTE_SLOT, applyVoteDelta, applyVoteTally, errorMessageOf, finishVoteClick,
   maxVotesPerCard, myVotesOn, settleOwnVote, startVoteClick, voteControlState, voteResult, votesUsedBy,
   type VoteSlot,
 } from '@/lib/votes';
@@ -34,13 +34,24 @@ function guidedBoard(): Board | null {
 const onBoard = (boardId: string) => useBoardStore.getState().board?.id === boardId;
 
 /**
- * Reject through failWrite (message, banner, 401 handling, phase refetch on 409). A 5xx, or a
- * request that never got an answer, may have been saved by the server anyway, so those also pull
- * the real state back through the coalesced refetch.
+ * The error a failed write rejects with. While the board is still the current one it goes through
+ * failWrite (message, banner, 401 handling, phase refetch on 409), and a 5xx or unanswered request,
+ * which the server may have saved anyway, also pulls the real state back through the coalesced
+ * refetch (`refetch: false` leaves that to the caller). For a board the user has left it applies
+ * NOTHING: the error only carries the server's message.
  */
-async function rejectWrite(res: Response, fallback: string, boardId: string): Promise<Error> {
-  const err = await failWrite(res, fallback);
-  if (res.status >= 500) await refetchBoardCoalesced(boardId); // never rejects
+async function failAction(
+  res: Response | null,
+  fallback: string,
+  boardId: string,
+  opts: { refetch: boolean } = { refetch: true },
+): Promise<Error> {
+  if (!onBoard(boardId)) {
+    const data = res ? await res.json().catch(() => null) : null;
+    return new Error(errorMessageOf(data, fallback));
+  }
+  const err = await failWrite(res ?? noAnswer(), fallback);
+  if (opts.refetch && (!res || res.status >= 500) && onBoard(boardId)) await refetchBoardCoalesced(boardId);
   return err;
 }
 
@@ -55,27 +66,43 @@ async function castVote(cardId: string, action: 'add' | 'remove'): Promise<void>
   const delta = action === 'add' ? 1 : -1;
   const fallback = action === 'add' ? ADD_VOTE_FALLBACK : REMOVE_VOTE_FALLBACK;
   const key = `${boardId}:${cardId}`;
+  const myCount = () => myVotesOn(useBoardStore.getState().votes, cardId, voterId);
 
   useBoardStore.setState((s) => ({
     votes: applyVoteDelta(s.votes, { boardId, cardId, voterId, voteId, delta, nowIso: new Date().toISOString() }),
   }));
-  slots.set(key, startVoteClick(slots.get(key) ?? EMPTY_VOTE_SLOT));
+  slots.set(key, startVoteClick(slots.get(key) ?? EMPTY_VOTE_SLOT, myCount()));
 
-  // Close this click: optionally reverse its own delta, then settle on the newest answer when it
-  // was the last one in flight. Nothing touches a board the user has left.
-  const finish = (result: { at: number; vote: Vote | null } | null, reverse: boolean) => {
-    const done = finishVoteClick(slots.get(key) ?? EMPTY_VOTE_SLOT, result);
+  // Close this click. A failed click's delta comes off only when the row still holds the count the
+  // burst expects; when the last click of the burst finishes the newest answer settles the row and
+  // a burst with a failure pulls the server's truth. Nothing touches a board the user has left.
+  // Returns whether the caller must refetch.
+  const finish = (outcome: { kind: 'ok'; at: number; vote: Vote | null } | { kind: 'failed'; refetched: boolean }): boolean => {
+    const current = onBoard(boardId);
+    const done = finishVoteClick(
+      slots.get(key) ?? EMPTY_VOTE_SLOT,
+      outcome.kind === 'ok' ? outcome : { ...outcome, delta, currentCount: current ? myCount() : -1 },
+    );
     if (done.slot.pending === 0) slots.delete(key);
     else slots.set(key, done.slot);
-    if (!onBoard(boardId)) return;
+    if (!current) return false;
     useBoardStore.setState((s) => {
       let next = s.votes;
-      if (reverse) {
+      if (done.reverse) {
         next = applyVoteDelta(next, { boardId, cardId, voterId, voteId, delta: delta === 1 ? -1 : 1, nowIso: new Date().toISOString() });
       }
       if (done.settle) next = settleOwnVote(next, { cardId, voterId, vote: done.settle.vote });
       return { votes: next };
     });
+    return done.refetch;
+  };
+
+  const fail = async (res: Response | null, message: string): Promise<never> => {
+    const refetchedByFailWrite = res?.status === 409;
+    const needsRefetch = finish({ kind: 'failed', refetched: refetchedByFailWrite });
+    const err = await failAction(res, message, boardId, { refetch: false });
+    if (needsRefetch && onBoard(boardId)) await refetchBoardCoalesced(boardId); // never rejects
+    throw err;
   };
 
   let res: Response;
@@ -86,28 +113,22 @@ async function castVote(cardId: string, action: 'add' | 'remove'): Promise<void>
       body: JSON.stringify(action === 'add' ? { cardId, action, voteId } : { cardId, action }),
     });
   } catch {
-    finish(null, true);
-    throw await rejectWrite(noAnswer(), NETWORK_ERROR, boardId);
+    return fail(null, NETWORK_ERROR);
   }
 
-  if (!res.ok) {
-    finish(null, true);
-    throw await rejectWrite(res, fallback, boardId);
-  }
+  if (!res.ok) return fail(res, fallback);
 
-  const local = useBoardStore.getState().votes.find((v) => v.card_id === cardId && v.voter_id === voterId);
-  const result = voteResult(await res.json().catch(() => null), local, { boardId, cardId, voterId, nowIso: new Date().toISOString() });
-  if (!result) {
-    // The server answered 200 but not in a shape we understand: its state is unknown, so refetch.
-    finish(null, true);
-    throw await rejectWrite(noAnswer(), fallback, boardId);
-  }
+  const result = voteResult(await res.json().catch(() => null), useBoardStore.getState().votes.find((v) => v.card_id === cardId && v.voter_id === voterId), {
+    boardId, cardId, voterId, nowIso: new Date().toISOString(),
+  });
+  // A 200 in a shape we do not understand leaves the server's state unknown: treat it as a failure.
+  if (!result) return fail(noAnswer(), fallback);
 
   if (onBoard(boardId)) {
     bumpTallyVersion();
     useBoardStore.setState((s) => ({ voteTally: applyVoteTally(s.voteTally, result.tally) }));
   }
-  finish({ at: result.tally.at, vote: result.vote }, false);
+  finish({ kind: 'ok', at: result.tally.at, vote: result.vote });
 }
 
 /** A `vote-tally` event for this board: newer wins, and a GET already in flight must not undo it. */
@@ -181,11 +202,11 @@ export const useGroupVoteStore = create<GroupVoteState>((set, get) => ({
       });
     } catch {
       revert();
-      throw await rejectWrite(noAnswer(), NETWORK_ERROR, boardId);
+      throw await failAction(null, NETWORK_ERROR, boardId);
     }
     if (!res.ok) {
       revert();
-      throw await rejectWrite(res, SET_TITLE_FALLBACK, boardId);
+      throw await failAction(res, SET_TITLE_FALLBACK, boardId);
     }
   },
 
@@ -204,9 +225,9 @@ export const useGroupVoteStore = create<GroupVoteState>((set, get) => ({
           body: JSON.stringify({ action: 'reset' }),
         });
       } catch {
-        throw await rejectWrite(noAnswer(), NETWORK_ERROR, boardId);
+        throw await failAction(null, NETWORK_ERROR, boardId);
       }
-      if (!res.ok) throw await rejectWrite(res, RESET_GROUPING_FALLBACK, boardId);
+      if (!res.ok) throw await failAction(res, RESET_GROUPING_FALLBACK, boardId);
       if (onBoard(boardId)) useBoardStore.setState((s) => ({ cards: ungroupAll(s.cards) }));
     } finally {
       set({ resetting: false });

@@ -43,8 +43,9 @@ function json(status: number, body: unknown): Response {
 
 function deferred<T>() {
   let resolve!: (v: T) => void;
-  const promise = new Promise<T>((r) => { resolve = r; });
-  return { promise, resolve };
+  let reject!: (e: unknown) => void;
+  const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
 }
 
 const store = new Map<string, string>();
@@ -119,12 +120,15 @@ describe('guided votes', () => {
 
   it('a refused add reverses only its own delta and rejects with the server message', async () => {
     useBoardStore.setState({ votes: [vote(3)] });
-    routes({ 'POST /api/boards/b1/votes': () => json(422, { error: 'You can put at most 3 votes on one card', maxVotesPerCard: 3 }) });
+    routes({
+      'POST /api/boards/b1/votes': () => json(422, { error: 'You can put at most 3 votes on one card', maxVotesPerCard: 3 }),
+      'GET /api/boards/b1': getBoardResponse(board(), { votes: [vote(3)] }),
+    });
     useBoardStore.setState({ board: board({ settings: { ...useBoardStore.getState().board!.settings, max_votes_per_card: 4 } }) });
     await expect(useGroupVoteStore.getState().addVote('c1')).rejects.toThrow('You can put at most 3 votes on one card');
     expect(useBoardStore.getState().votes).toEqual([vote(3)]);
     expect(useBoardStore.getState().lastWriteError).toBe('You can put at most 3 votes on one card');
-    expect(calls()).toEqual(['POST /api/boards/b1/votes']);
+    expect(calls()).toEqual(['POST /api/boards/b1/votes', 'GET /api/boards/b1']);
   });
 
   it('addVote at the per-card limit sends nothing', async () => {
@@ -394,5 +398,133 @@ describe('open boards', () => {
     await s.resetGrouping();
     expect(fetchMock).not.toHaveBeenCalled();
     expect(useBoardStore.getState().votes).toEqual([vote(1)]);
+  });
+});
+
+describe('a failure on a board the user has left touches nothing', () => {
+  const answers: Array<[string, (d: ReturnType<typeof deferred<Response>>) => void, string]> = [
+    ['a 500', (d) => d.resolve(json(500, { error: 'Server broke' })), 'Server broke'],
+    ['a 401', (d) => d.resolve(json(401, { error: 'Sign in again' })), 'Sign in again'],
+    ['a thrown fetch', (d) => d.reject(new TypeError('offline')), 'Could not reach the server'],
+  ];
+  const actions: Array<[string, () => Promise<void>]> = [
+    ['addVote', () => useGroupVoteStore.getState().addVote('c1')],
+    ['setGroupTitle', () => useGroupVoteStore.getState().setGroupTitle('c1', 'New')],
+    ['resetGrouping', () => useGroupVoteStore.getState().resetGrouping()],
+  ];
+
+  for (const [actionName, run] of actions) {
+    for (const [label, answer, message] of answers) {
+      it(`${actionName} then ${label}: rejects, and board B is exactly as it was`, async () => {
+        useBoardStore.setState({ cards: [{ ...cardFixture('c1'), group_title: 'Old' }, { ...cardFixture('c2'), merged_with: 'c1' }] });
+        const d = deferred<Response>();
+        fetchMock = vi.fn(() => d.promise); vi.stubGlobal('fetch', fetchMock);
+        const p = run();
+        const settled = p.then(() => null, (e: Error) => e);
+        const B = {
+          board: board({ id: 'b2' }),
+          votes: [{ ...vote(2), board_id: 'b2', card_id: 'x1' }],
+          cards: [{ ...cardFixture('x1'), board_id: 'b2' }],
+          voteTally: { used: 2, at: 5 },
+          currentParticipantId: 'p9',
+          lastWriteError: null,
+        };
+        useBoardStore.setState(B);
+        answer(d);
+        const err = await settled;
+        expect(err).toBeInstanceOf(Error);
+        expect(err!.message).toContain(message);
+        const now = useBoardStore.getState();
+        expect({ board: now.board, votes: now.votes, cards: now.cards, voteTally: now.voteTally,
+          currentParticipantId: now.currentParticipantId, lastWriteError: now.lastWriteError }).toEqual(B);
+        expect(calls()).toHaveLength(1);
+        expect(store.size).toBe(0);
+      });
+    }
+  }
+});
+
+describe('failed votes settle from the server', () => {
+  it('(a) a refetch between two clicks and a later refusal never leaves the count below the server', async () => {
+    useBoardStore.setState({ votes: [vote(1)] });
+    const first = deferred<Response>(); const second = deferred<Response>();
+    let gets = 0;
+    fetchMock = vi.fn(async (_u: string, init?: RequestInit) => {
+      if (init?.method === 'POST') return ((fetchMock.mock.calls as FetchCall[]).filter((c) => c[1]?.method === 'POST').length === 1 ? first : second).promise;
+      gets += 1;
+      return getBoardResponse(board(), { votes: [vote(2)], voteTally: { used: 2, at: 0 } })();
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const a = useGroupVoteStore.getState().addVote('c1');
+    const b = useGroupVoteStore.getState().addVote('c1');
+    expect(useBoardStore.getState().votes[0].count).toBe(3);
+    useBoardStore.setState({ votes: [vote(1)] }); // a refetch replaced the rows
+    first.resolve(json(200, { action: 'added', vote: vote(2), tally: { used: 2, at: 20 } }));
+    await a;
+    second.resolve(json(422, { error: 'Vote limit reached' }));
+    await expect(b).rejects.toThrow('Vote limit reached');
+    expect(useBoardStore.getState().votes).toEqual([vote(2)]);
+    expect(useBoardStore.getState().votes[0].count).not.toBe(0);
+    expect(gets).toBe(1);
+  });
+
+  it('(b) a single refused add reverses at once, rejects with the server message, then one coalesced GET follows', async () => {
+    useBoardStore.setState({ votes: [vote(1)] });
+    let atGet: Vote[] | null = null;
+    routes({
+      'POST /api/boards/b1/votes': () => json(422, { error: 'Vote limit reached' }),
+      'GET /api/boards/b1': () => { atGet = useBoardStore.getState().votes; return getBoardResponse(board(), { votes: [vote(1)] })(); },
+    });
+    await expect(useGroupVoteStore.getState().addVote('c1')).rejects.toThrow('Vote limit reached');
+    expect(atGet).toEqual([vote(1)]);
+    expect(useBoardStore.getState().votes).toEqual([vote(1)]);
+    expect(useBoardStore.getState().lastWriteError).toBe('Vote limit reached');
+    expect(calls()).toEqual(['POST /api/boards/b1/votes', 'GET /api/boards/b1']);
+  });
+});
+
+describe('scrambled answer orders', () => {
+  const countOn = () => useBoardStore.getState().votes[0]?.count;
+
+  it('three adds answered third, first, second end at the third count and its tally', async () => {
+    const d = [deferred<Response>(), deferred<Response>(), deferred<Response>()];
+    fetchMock = vi.fn().mockReturnValueOnce(d[0].promise).mockReturnValueOnce(d[1].promise).mockReturnValueOnce(d[2].promise);
+    vi.stubGlobal('fetch', fetchMock);
+    const p = [1, 2, 3].map(() => useGroupVoteStore.getState().addVote('c1'));
+    expect(countOn()).toBe(3);
+    d[2].resolve(json(200, { action: 'added', vote: vote(3), tally: { used: 3, at: 30 } }));
+    await p[2];
+    expect(countOn()).toBe(3);
+    expect(useBoardStore.getState().voteTally).toEqual({ used: 3, at: 30 });
+    d[0].resolve(json(200, { action: 'added', vote: vote(1), tally: { used: 1, at: 10 } }));
+    await p[0];
+    expect(countOn()).toBe(3);
+    expect(useBoardStore.getState().voteTally).toEqual({ used: 3, at: 30 });
+    d[1].resolve(json(200, { action: 'added', vote: vote(2), tally: { used: 2, at: 20 } }));
+    await p[1];
+    expect(countOn()).toBe(3);
+    expect(useBoardStore.getState().voteTally).toEqual({ used: 3, at: 30 });
+  });
+
+  it('add, add, remove answered scrambled end at the server final count and newest tally', async () => {
+    const d = [deferred<Response>(), deferred<Response>(), deferred<Response>()];
+    fetchMock = vi.fn().mockReturnValueOnce(d[0].promise).mockReturnValueOnce(d[1].promise).mockReturnValueOnce(d[2].promise);
+    vi.stubGlobal('fetch', fetchMock);
+    const a1 = useGroupVoteStore.getState().addVote('c1');
+    const a2 = useGroupVoteStore.getState().addVote('c1');
+    const r = useGroupVoteStore.getState().removeVote('c1');
+    expect(countOn()).toBe(1);
+    d[2].resolve(json(200, { action: 'removed', voteId: 'v1', count: 1, tally: { used: 1, at: 30 } }));
+    await r;
+    expect(countOn()).toBe(1);
+    expect(useBoardStore.getState().voteTally).toEqual({ used: 1, at: 30 });
+    d[1].resolve(json(200, { action: 'added', vote: vote(2), tally: { used: 2, at: 20 } }));
+    await a2;
+    expect(countOn()).toBe(1);
+    d[0].resolve(json(200, { action: 'added', vote: vote(1), tally: { used: 1, at: 10 } }));
+    await a1;
+    expect(countOn()).toBe(1);
+    expect(useBoardStore.getState().votes).toEqual([expect.objectContaining({ card_id: 'c1', voter_id: 'p1', count: 1 })]);
+    expect(useBoardStore.getState().voteTally).toEqual({ used: 1, at: 30 });
   });
 });

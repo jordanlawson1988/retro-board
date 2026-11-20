@@ -244,30 +244,68 @@ export interface VoteResult {
   vote: Vote | null;
 }
 
-/** Clicks in flight for one card, and the newest answer seen so far (by `tally.at`). */
+/**
+ * Clicks in flight for one card. `expected` is the count on my row that the burst's own optimistic
+ * deltas should have produced; `refetch` is set once a failure needs the server's truth.
+ */
 export interface VoteSlot {
   pending: number;
   newest: { at: number; vote: Vote | null } | null;
+  expected: number;
+  failed: boolean;
 }
 
-export const EMPTY_VOTE_SLOT: VoteSlot = { pending: 0, newest: null };
+export const EMPTY_VOTE_SLOT: VoteSlot = { pending: 0, newest: null, expected: 0, failed: false };
 
-export function startVoteClick(slot: VoteSlot): VoteSlot {
-  return { ...slot, pending: slot.pending + 1 };
+/** A click was applied optimistically; `expectedAfter` is my count on the card right after it. */
+export function startVoteClick(slot: VoteSlot, expectedAfter: number): VoteSlot {
+  return { ...slot, pending: slot.pending + 1, expected: expectedAfter };
 }
+
+export type VoteClickOutcome =
+  | { kind: 'ok'; at: number; vote: Vote | null }
+  | {
+      kind: 'failed';
+      /** True when the failure's own handling already refetched the board (a 409 on a guided board). */
+      refetched: boolean;
+      /** The failed click's own optimistic delta. */
+      delta: 1 | -1;
+      /** My count on the card right now, or -1 when the board is no longer the current one. */
+      currentCount: number;
+    };
 
 /**
- * One click is answered (`result`) or failed (null). When it was the last one in flight, `settle`
- * carries the newest answer, whatever order they arrived in; otherwise the optimistic row stays.
+ * One click is answered or failed. A failed click's delta is reversed at once only when the row
+ * still holds the count this burst expects (no refetch replaced it meanwhile); otherwise nothing
+ * is subtracted. When the last click of a burst finishes: the newest answer settles the row, and
+ * `refetch` says whether a failure in the burst needs the server's truth fetched.
  */
 export function finishVoteClick(
   slot: VoteSlot,
-  result: { at: number; vote: Vote | null } | null,
-): { slot: VoteSlot; settle: { vote: Vote | null } | null } {
-  const newest = result && (!slot.newest || result.at >= slot.newest.at) ? result : slot.newest;
+  outcome: VoteClickOutcome,
+): { slot: VoteSlot; settle: { vote: Vote | null } | null; reverse: boolean; refetch: boolean } {
+  let newest = slot.newest;
+  let expected = slot.expected;
+  let failed = slot.failed;
+  let reverse = false;
+  if (outcome.kind === 'ok') {
+    if (!newest || outcome.at >= newest.at) newest = { at: outcome.at, vote: outcome.vote };
+  } else {
+    if (!outcome.refetched) failed = true;
+    if (outcome.currentCount === slot.expected) {
+      reverse = true;
+      expected = slot.expected - outcome.delta;
+    }
+  }
   const pending = Math.max(0, slot.pending - 1);
-  if (pending > 0) return { slot: { pending, newest }, settle: null };
-  return { slot: EMPTY_VOTE_SLOT, settle: newest ? { vote: newest.vote } : null };
+  if (pending > 0) return { slot: { pending, newest, expected, failed }, settle: null, reverse, refetch: false };
+  return { slot: EMPTY_VOTE_SLOT, settle: newest ? { vote: newest.vote } : null, reverse, refetch: failed };
+}
+
+/** The server's message from an error body, or the action's fallback. */
+export function errorMessageOf(data: unknown, fallback: string): string {
+  const e = data && typeof data === 'object' ? (data as { error?: unknown }).error : undefined;
+  return typeof e === 'string' && e !== '' ? e : fallback;
 }
 
 /** Reads a 200 answer from the guided vote route; null when it is not one. */

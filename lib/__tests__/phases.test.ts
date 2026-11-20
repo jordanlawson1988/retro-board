@@ -14,6 +14,7 @@ import {
   formatDeadlineDay,
   formatDeadlineTime,
   guidedModeEnabled,
+  phaseConfigAfterClose,
 } from '@/lib/phases';
 import { DEFAULT_BOARD_SETTINGS } from '@/utils/constants';
 
@@ -182,5 +183,19 @@ describe('guidedModeEnabled', () => {
     for (const bad of [null, undefined, 'x', 3, {}, { flags: null }, { flags: 'guided_mode' }, { flags: [null, 3, 'a'] }, { flags: [{ key: 'guided_mode', is_enabled: 'true' }] }]) {
       expect(guidedModeEnabled(bad)).toBe(false);
     }
+  });
+});
+
+describe('phaseConfigAfterClose', () => {
+  const cfg = { deadline: '2026-12-01T00:00:00.000Z' };
+  it('clears the deadline when the event carries a phase (guided board)', () => {
+    expect(phaseConfigAfterClose(cfg, { phase: 'done' })).toEqual({ deadline: null });
+    expect(phaseConfigAfterClose(cfg, { phase: 'discuss' })).toEqual({ deadline: null });
+  });
+  it('leaves the config alone for an open board (phase null or missing) or garbage', () => {
+    expect(phaseConfigAfterClose(cfg, { phase: null })).toBe(cfg);
+    expect(phaseConfigAfterClose(cfg, {})).toBe(cfg);
+    expect(phaseConfigAfterClose(cfg, undefined)).toBe(cfg);
+    expect(phaseConfigAfterClose(cfg, { phase: 'bogus' })).toBe(cfg);
   });
 });

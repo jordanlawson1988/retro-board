@@ -271,7 +271,8 @@ export async function POST(
     const [done] = guidedBoard
       ? await sql`
       UPDATE boards SET archived_at = ${archivedAt}, phase = ${FINAL_PHASE},
-        settings = settings || ${JSON.stringify(phaseSettings(FINAL_PHASE))}::jsonb
+        settings = settings || ${JSON.stringify(phaseSettings(FINAL_PHASE))}::jsonb,
+        phase_config = phase_config || '{"deadline":null}'::jsonb
       WHERE id = ${boardId}
       RETURNING settings
     `
@@ -303,7 +304,8 @@ export async function POST(
     const [board] = guidedBoard
       ? await sql`
       UPDATE boards SET archived_at = NULL, phase = ${REOPEN_PHASE},
-        settings = settings || ${JSON.stringify(phaseSettings(REOPEN_PHASE))}::jsonb
+        settings = settings || ${JSON.stringify(phaseSettings(REOPEN_PHASE))}::jsonb,
+        phase_config = phase_config || '{"deadline":null}'::jsonb
       WHERE id = ${boardId} AND archived_at IS NOT NULL
       RETURNING settings
     `

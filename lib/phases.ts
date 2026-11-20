@@ -222,3 +222,13 @@ export function guidedModeEnabled(response: unknown): boolean {
     (f) => !!f && typeof f === 'object' && (f as { key?: unknown }).key === 'guided_mode' && (f as { is_enabled?: unknown }).is_enabled === true,
   );
 }
+
+/**
+ * The phase config after a board-completed or board-reopened event. Those events carry a phase
+ * only for a guided board, and both clear its deadline on the server; an open board has no
+ * phase config to change, so it is returned as it was.
+ */
+export function phaseConfigAfterClose(config: PhaseConfig, payload: unknown): PhaseConfig {
+  const phase = payload && typeof payload === 'object' ? (payload as { phase?: unknown }).phase : undefined;
+  return isPhaseId(phase) ? { ...config, deadline: null } : config;
+}

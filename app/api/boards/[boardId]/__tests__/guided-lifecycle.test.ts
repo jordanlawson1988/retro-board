@@ -69,6 +69,17 @@ describe('complete', () => {
     expect(payload).toMatchObject({ phase: FINAL_PHASE, settings: doneSettings, refetch: true });
   });
 
+  it('the guided statement clears the phase deadline; the open one never mentions phase_config', async () => {
+    mocks.sql.mockResolvedValueOnce([guided('discuss')]).mockResolvedValueOnce([{ settings: DEFAULT_BOARD_SETTINGS }]);
+    await POST(postReq({ action: 'complete' }), ctx);
+    expect(mocks.sql).toHaveBeenCalledTimes(2);
+    expect(sqlText(1)).toContain(`phase_config = phase_config || '{"deadline":null}'::jsonb`);
+    mocks.sql.mockClear();
+    mocks.sql.mockResolvedValueOnce([ctxRow()]).mockResolvedValueOnce([{ settings: DEFAULT_BOARD_SETTINGS }]);
+    await POST(postReq({ action: 'complete' }), ctx);
+    expect(sqlText(1)).not.toContain('phase_config');
+  });
+
   it('an open board keeps its exact statement and publishes phase null', async () => {
     mocks.sql.mockResolvedValueOnce([ctxRow()]).mockResolvedValueOnce([{ settings: DEFAULT_BOARD_SETTINGS }]);
     const res = await POST(postReq({ action: 'complete' }), ctx);
@@ -112,6 +123,17 @@ describe('reopen', () => {
     expect(sqlText(1)).not.toContain('mode');
     expect(sqlText(1)).toContain(`'{"board_locked":false}'::jsonb`);
     expect(mocks.publish).toHaveBeenCalledWith('board-reopened', { settings: DEFAULT_BOARD_SETTINGS, phase: null, refetch: true });
+  });
+
+  it('the guided reopen clears the phase deadline in the same statement; the open one never mentions phase_config', async () => {
+    mocks.sql.mockResolvedValueOnce([authority({ board_mode: 'guided' })]).mockResolvedValueOnce([{ settings: DEFAULT_BOARD_SETTINGS }]);
+    await POST(postReq({ action: 'reopen' }), ctx);
+    expect(mocks.sql).toHaveBeenCalledTimes(2);
+    expect(sqlText(1)).toContain(`phase_config = phase_config || '{"deadline":null}'::jsonb`);
+    mocks.sql.mockClear();
+    mocks.sql.mockResolvedValueOnce([authority()]).mockResolvedValueOnce([{ settings: DEFAULT_BOARD_SETTINGS }]);
+    await POST(postReq({ action: 'reopen' }), ctx);
+    expect(sqlText(1)).not.toContain('phase_config');
   });
 
   it('a guided board that is not completed: the UPDATE returns no row, 409, nothing published', async () => {

@@ -3,6 +3,7 @@
 import { useCallback, useState } from 'react';
 import { ChevronLeft, ChevronRight, ListOrdered } from 'lucide-react';
 import { MobileSheet } from '@/components/common/Sheet';
+import { SummaryLinkBar } from '@/components/Summary/SummaryLinkBar';
 import { AgendaList } from './AgendaList';
 import { TopicPanel, ViewingAnotherBar } from './TopicPanel';
 import { useDiscussTopics } from './useDiscussTopics';
@@ -73,6 +74,7 @@ export function MobileDiscuss({ isFacilitator }: { isFacilitator: boolean }) {
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain px-4 pt-3 pb-[calc(84px+var(--safe-bottom))]">
+        <SummaryLinkBar layout="phone" />
         {controls.viewingAnother && <ViewingAnotherBar />}
         {item === null ? (
           <p className="text-[13px] text-[var(--ink-3)]">{NO_TOPICS_TEXT}</p>

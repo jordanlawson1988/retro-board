@@ -444,3 +444,30 @@
 /* Mobile bottom-sheet enter animations (used by MobileSheet) */
 @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* summary print: start */
+[data-summary-root] [data-print-only] { display: none; }
+@page rb-summary { margin: 16mm 14mm; }
+@media print {
+  html:has([data-summary-root]),
+  html:has([data-summary-root]) body,
+  html:has([data-summary-root]) main { background: white !important; }
+  html:has([data-summary-root]) header { display: none !important; }
+  html:has([data-summary-root]) { color-scheme: light !important; }
+  [data-summary-root] {
+    page: rb-summary;
+    color: black;
+    background: white;
+    --ink: black; --ink-2: black; --ink-3: black; --ink-4: black;
+    --bg: white; --bg-elev: white; --surface: white; --surface-muted: white;
+    --line: black; --accent: black; --accent-soft: white;
+  }
+  [data-summary-root] * { box-shadow: none !important; }
+  [data-summary-root] [data-print-hide] { display: none !important; }
+  [data-summary-root] [data-print-only] { display: block !important; }
+  [data-summary-root] [data-print-avoid-break] { break-inside: avoid; }
+  [data-summary-root] [data-print-keep-next] + h4 { break-before: avoid; }
+  [data-summary-root] h2, [data-summary-root] h3, [data-summary-root] h4 { break-after: avoid; }
+  [data-summary-root] a { color: black; text-decoration: underline; }
+}
+/* summary print: end */

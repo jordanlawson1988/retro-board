@@ -1,3 +1,5 @@
+import { GUIDED_MODE_FEATURE } from '@/lib/constants/features';
+import { flagEnabled } from '@/lib/feature-flags';
 import type { BoardAction } from '@/lib/constants/board-actions';
 import {
   DEADLINE_MAX_DAYS,
@@ -289,12 +291,7 @@ export function withPhaseDefaults<T extends object>(
  * missing flag as on.
  */
 export function guidedModeEnabled(response: unknown): boolean {
-  if (!response || typeof response !== 'object') return false;
-  const flags = (response as { flags?: unknown }).flags;
-  if (!Array.isArray(flags)) return false;
-  return flags.some(
-    (f) => !!f && typeof f === 'object' && (f as { key?: unknown }).key === 'guided_mode' && (f as { is_enabled?: unknown }).is_enabled === true,
-  );
+  return flagEnabled(response, GUIDED_MODE_FEATURE);
 }
 
 /**

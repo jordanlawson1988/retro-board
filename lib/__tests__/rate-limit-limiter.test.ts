@@ -209,6 +209,14 @@ describe('wiring: each guarded route calls the limiter first (static assertion)'
       file: 'app/api/boards/[boardId]/comments/route.ts', name: 'comment', limit: 300, window: 60,
       call: 'COMMENT_RATE_LIMIT.key, COMMENT_RATE_LIMIT.limit, COMMENT_RATE_LIMIT.window',
     },
+    {
+      file: 'app/api/user/email-preferences/route.ts', name: 'email-prefs', limit: 30, window: 60,
+      call: 'EMAIL_PREFS_RATE_LIMIT.key, EMAIL_PREFS_RATE_LIMIT.limit, EMAIL_PREFS_RATE_LIMIT.window',
+    },
+    {
+      file: 'app/api/email/unsubscribe/route.ts', name: 'unsubscribe', limit: 300, window: 60,
+      call: 'UNSUBSCRIBE_RATE_LIMIT.key, UNSUBSCRIBE_RATE_LIMIT.limit, UNSUBSCRIBE_RATE_LIMIT.window',
+    },
   ];
 
   it.each(routes)('$file: POST limits "$name" at $limit / $window s, before any other work', ({ file, name, limit, window, call }) => {
@@ -226,6 +234,12 @@ describe('wiring: each guarded route calls the limiter first (static assertion)'
   it('the comment route\'s shared limit is the one pinned above', async () => {
     const { COMMENT_RATE_LIMIT } = await import('@/lib/constants/comments');
     expect(COMMENT_RATE_LIMIT).toEqual({ key: 'comment', limit: 300, window: 60 });
+  });
+
+  it('the email routes\' shared limits are the ones pinned above', async () => {
+    const { EMAIL_PREFS_RATE_LIMIT, UNSUBSCRIBE_RATE_LIMIT } = await import('@/lib/constants/email');
+    expect(EMAIL_PREFS_RATE_LIMIT).toEqual({ key: 'email-prefs', limit: 30, window: 60 });
+    expect(UNSUBSCRIBE_RATE_LIMIT).toEqual({ key: 'unsubscribe', limit: 300, window: 60 });
   });
 
   it('every limiter name is unique, so no two routes share a bucket', () => {

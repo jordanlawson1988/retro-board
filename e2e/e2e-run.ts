@@ -2,6 +2,9 @@ import { neon } from '@neondatabase/serverless';
 
 /** Title prefix of every board `createBoard` makes. */
 export const E2E_TITLE_PREFIX = 'e2e ';
+/** Address prefix and domain of every throwaway account a test creates. The domain is reserved and can never receive mail. */
+export const E2E_USER_EMAIL_PREFIX = 'e2e-';
+export const E2E_USER_EMAIL_DOMAIN = '@example.com';
 /** Env var carrying this run's start time (ISO, from the database clock) to workers and teardown. */
 export const RUN_START_ENV = 'E2E_RUN_STARTED_AT';
 

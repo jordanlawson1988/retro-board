@@ -231,3 +231,17 @@ export const useDiscussStore = create<DiscussState>((set, get) => ({
   },
 }));
 
+
+// A viewed topic belongs to one board in one phase: it is dropped when either changes, so leaving
+// Discuss and coming back (or completing and reopening) follows the facilitator's topic again.
+// One listener for the module's life; on an unchanged board it compares two primitives and returns.
+let seenBoardId: string | null = useBoardStore.getState().board?.id ?? null;
+let seenPhase: string | null = useBoardStore.getState().board?.phase ?? null;
+useBoardStore.subscribe((state) => {
+  const id = state.board?.id ?? null;
+  const phase = state.board?.phase ?? null;
+  if (id === seenBoardId && phase === seenPhase) return;
+  seenBoardId = id;
+  seenPhase = phase;
+  if (useDiscussStore.getState().viewed !== null) useDiscussStore.setState({ viewed: null });
+});

@@ -104,6 +104,43 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+describe('a viewed topic does not outlive its phase', () => {
+  const viewed = () => useDiscussStore.getState().viewed;
+
+  it('clears when the phase changes away from Discuss and stays clear when it returns', () => {
+    useDiscussStore.getState().viewTopic('c3');
+    expect(viewed()).toEqual({ boardId: 'b1', phase: 'discuss', cardId: 'c3' });
+    useBoardStore.setState({ board: board({ phase: 'group' } as Partial<Board>) });
+    expect(viewed()).toBeNull();
+    useBoardStore.setState({ board: board() });
+    expect(viewed()).toBeNull();
+  });
+
+  it('clears when the board id changes', () => {
+    useDiscussStore.getState().viewTopic('c3');
+    useBoardStore.setState({ board: board({ id: 'b2' }) });
+    expect(viewed()).toBeNull();
+  });
+
+  it('is kept across unrelated changes in the same phase', () => {
+    useDiscussStore.getState().viewTopic('c3');
+    useBoardStore.setState((s) => ({ cards: s.cards.map((c) => ({ ...c, text: 'edited' })) }));
+    useBoardStore.setState((s) => ({ board: s.board && { ...s.board, title: 'Renamed' } }));
+    useBoardStore.setState({ votes: [] });
+    expect(viewed()).toEqual({ boardId: 'b1', phase: 'discuss', cardId: 'c3' });
+  });
+
+  it('a phase change with nothing viewed does not wake the discuss store', () => {
+    let wakes = 0;
+    const unsubscribe = useDiscussStore.subscribe(() => { wakes += 1; });
+    useBoardStore.setState({ board: board({ phase: 'group' } as Partial<Board>) });
+    useBoardStore.setState({ board: board({ id: 'b2' }) });
+    unsubscribe();
+    expect(wakes).toBe(0);
+    expect(viewed()).toBeNull();
+  });
+});
+
 describe('fetchBoard and comments', () => {
   it('sets comments from the GET', async () => {
     routes({ 'GET /api/boards/b1': getBoardResponse(board(), { comments: [comment({ id: 'm1' })] }) });

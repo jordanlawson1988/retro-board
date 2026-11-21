@@ -67,6 +67,7 @@ describe('board GET round-trip budget', () => {
     mocks.pid.mockReturnValue('p1');
     const json = await (await call()).json();
     expect('voteTally' in json).toBe(false);
+    expect('comments' in json).toBe(false);
     const texts: string[] = [];
     mocks.tx.mock.calls[0][0]((s: TemplateStringsArray) => {
       texts.push(s.join('?'));

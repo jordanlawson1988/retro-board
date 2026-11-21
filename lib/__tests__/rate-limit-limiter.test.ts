@@ -204,6 +204,7 @@ describe('wiring: each guarded route calls the limiter first (static assertion)'
     { file: 'app/api/boards/[boardId]/action-items/route.ts', name: 'action-item', limit: 120, window: 60 },
     { file: 'app/api/boards/[boardId]/phase/route.ts', name: 'phase', limit: 60, window: 60 },
     { file: 'app/api/boards/[boardId]/groups/route.ts', name: 'groups', limit: 120, window: 60 },
+    { file: 'app/api/boards/[boardId]/comments/route.ts', name: 'comment', limit: 300, window: 60 },
   ];
 
   it.each(routes)('$file: POST limits "$name" at $limit / $window s, before any other work', ({ file, name, limit, window }) => {

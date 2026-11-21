@@ -600,6 +600,7 @@ export function BoardColumn({
                               isCompleted={isCompleted}
                               canMerge={false}
                               participants={participants}
+                              isChildCard
                             />
                           </div>
                         </div>

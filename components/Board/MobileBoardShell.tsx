@@ -12,7 +12,7 @@
  * No new store fields, no new API calls — same data, different layout.
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { StickyNote } from 'lucide-react';
 import { MobileColumnTabs } from './MobileColumnTabs';
 import { MobileVoteTracker } from './MobileVoteTracker';
@@ -30,6 +30,7 @@ import { sortCards, effectiveCardSort } from '@/utils/sortCards';
 import { isMine } from '@/utils/isMine';
 import { leadCardVotes, voteSortKey, voteTotalsByCard, votesUsedBy } from '@/lib/votes';
 import { useCardText } from '@/hooks/useCardText';
+import { useTeamVotesLeft } from '@/hooks/useTeamVotesLeft';
 import type { Column, Card, Vote, ActionItem, CardReactions, Participant, CardSort, BoardSettings } from '@/types';
 
 interface MobileBoardShellProps {
@@ -120,9 +121,13 @@ export function MobileBoardShell({
     () => sortedColumns[0]?.id ?? ''
   );
   const { guided, phase } = usePhaseGates();
+  const teamLeft = useTeamVotesLeft();
   const stepperShown = guided && !!phase;
   const [moreOpen, setMoreOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
+  // A stable function: the sheet re-registers its Escape and Back handling whenever this changes,
+  // and a re-render while the sheet is open (a saved setting, a joiner) would then close it.
+  const closeMore = useCallback(() => setMoreOpen(false), []);
 
   // Keep activeColumnId valid when columns change (e.g., real-time add/delete)
   const safeActiveColumnId = useMemo(() => {
@@ -185,7 +190,7 @@ export function MobileBoardShell({
 
       {/* Vote tracker row — only shown when voting is enabled and user has joined */}
       {votingEnabled && !!currentParticipantId && (
-        <MobileVoteTracker used={votesUsed} total={maxVotesPerParticipant} />
+        <MobileVoteTracker used={votesUsed} total={maxVotesPerParticipant} teamLeft={teamLeft} />
       )}
 
       {/* Column tab strip */}
@@ -312,7 +317,7 @@ export function MobileBoardShell({
       {/* More sheet */}
       <MobileMoreSheet
         open={moreOpen}
-        onClose={() => setMoreOpen(false)}
+        onClose={closeMore}
         boardTitle={boardTitle}
         joinCode={joinCode}
         participants={participants}

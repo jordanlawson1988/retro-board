@@ -91,6 +91,24 @@ export function voteControlKind(
   return mode === GUIDED_MODE && maxVotesPerCard(settings) > 1 ? 'stepper' : 'toggle';
 }
 
+export type VoteSurface = 'pill' | 'stepper' | 'child';
+
+/**
+ * Which vote control a card renders. Anything but a guided board with voting on (and not
+ * completed) keeps the existing pill; there a child card gets the child control and a root card
+ * gets the stepper when the per-card limit is above 1.
+ */
+export function voteSurface(
+  mode: BoardMode,
+  settings: Pick<BoardSettings, 'max_votes_per_card'>,
+  votingOn: boolean,
+  childCard: boolean,
+): VoteSurface {
+  if (mode !== GUIDED_MODE || !votingOn) return 'pill';
+  if (childCard) return 'child';
+  return voteControlKind(mode, settings) === 'stepper' ? 'stepper' : 'pill';
+}
+
 export function votesPerCardError(n: number): string {
   return `You can put at most ${n} ${n === 1 ? 'vote' : 'votes'} on one card`;
 }

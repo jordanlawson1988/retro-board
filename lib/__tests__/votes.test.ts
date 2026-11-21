@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  voteWeight, voteTotalsByCard, votesUsedBy, myVotesOn, sumVoteCounts, groupScore, leadCardVotes, voteSortKey, maxVotesPerCard,
+  voteWeight, voteTotalsByCard, votesUsedBy, myVotesOn, sumVoteCounts, groupScore, leadCardVotes, voteSortKey, voteSurface, maxVotesPerCard,
   guidedVoteDefaults, voteControlKind, voteControlState, applyVoteDelta, settleOwnVote, applyVoteTally,
   teamVotesRemaining, teamVotesLeftFor, teamVotesLabel, votesPerCardError, voteLimitProblem, limitRefusal,
   hasLimitKey, voteLimitsEditable, teamUsedAfter, GROUP_VOTE_ERROR, NO_VOTES_LEFT, VOTE_LIMIT_RELATION_ERROR,
@@ -50,6 +50,27 @@ describe('vote arithmetic', () => {
     expect(voteSortKey(true, cards, totals)('c1')).toBe(5);
     expect(voteSortKey(false, cards, totals)('c1')).toBe(1);
     expect(voteSortKey(true, cards, totals)('missing')).toBe(0);
+  });
+});
+
+describe('which vote control a card shows', () => {
+  const one = { max_votes_per_card: 1 };
+  const three = { max_votes_per_card: 3 };
+  it('an open board always keeps the existing pill', () => {
+    expect(voteSurface('open', three, true, false)).toBe('pill');
+    expect(voteSurface('open', three, true, true)).toBe('pill');
+  });
+  it('a guided board with voting on gives a root the stepper above 1 per card, else the pill', () => {
+    expect(voteSurface('guided', three, true, false)).toBe('stepper');
+    expect(voteSurface('guided', one, true, false)).toBe('pill');
+  });
+  it('a guided child card gets the child control whatever the limit', () => {
+    expect(voteSurface('guided', three, true, true)).toBe('child');
+    expect(voteSurface('guided', one, true, true)).toBe('child');
+  });
+  it('a guided board with voting off or completed keeps the pill', () => {
+    expect(voteSurface('guided', three, false, false)).toBe('pill');
+    expect(voteSurface('guided', three, false, true)).toBe('pill');
   });
 });
 

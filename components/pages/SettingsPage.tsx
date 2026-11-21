@@ -10,6 +10,16 @@ import { cn } from '@/utils/cn';
 import { authClient } from '@/lib/auth-client';
 import { avatarBackground } from '@/utils/avatarHue';
 import type { User } from '@/types';
+import { flagEnabled } from '@/lib/feature-flags';
+import { SUMMARY_EMAIL_FEATURE } from '@/lib/constants/features';
+import {
+  EMAIL_SECTION_DESCRIPTION,
+  EMAIL_SECTION_TITLE,
+  PREFERENCE_SAVED,
+  PREFERENCE_SAVE_FAILED,
+  SUMMARY_EMAIL_SETTING_LABEL,
+} from '@/lib/constants/email';
+import { preferenceFromResponse } from '@/lib/email-ui';
 
 function Section({ title, description, children }: {
   title: string;
@@ -125,6 +135,90 @@ function ProfileSection({ user }: { user: User }) {
         <span>{user.email}</span>
       </div>
       <p className="text-[12px] text-[var(--ink-4)] mt-1.5">Your email is your username and can&apos;t be changed.</p>
+    </Section>
+  );
+}
+
+const EMAIL_PREFERENCES_PATH = '/api/user/email-preferences';
+
+/**
+ * Renders nothing unless the public flags response says summary_email is on. Only then does it
+ * read the preference (production has no email_preferences table while the flag is off).
+ */
+function EmailSection() {
+  const [value, setValue] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    (async () => {
+      try {
+        const flagsRes = await fetch('/api/feature-flags', { signal: ctrl.signal });
+        const flags = flagsRes.ok ? await flagsRes.json() : null;
+        if (!flagEnabled(flags, SUMMARY_EMAIL_FEATURE)) return;
+        const res = await fetch(EMAIL_PREFERENCES_PATH, { signal: ctrl.signal });
+        const body = await res.json().catch(() => null);
+        const stored = preferenceFromResponse(res.status, body);
+        if (stored !== null) setValue(stored);
+      } catch {
+        // A failed or aborted read leaves the section out.
+      }
+    })();
+    return () => ctrl.abort();
+  }, []);
+
+  if (value === null) return null;
+
+  const change = async (next: boolean) => {
+    const previous = value;
+    setValue(next);
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await fetch(EMAIL_PREFERENCES_PATH, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ summaryEmail: next }),
+      });
+      if (res.status === 200) {
+        setMsg({ kind: 'ok', text: PREFERENCE_SAVED });
+      } else {
+        setValue(previous);
+        setMsg({ kind: 'err', text: PREFERENCE_SAVE_FAILED });
+      }
+    } catch {
+      setValue(previous);
+      setMsg({ kind: 'err', text: PREFERENCE_SAVE_FAILED });
+    }
+    setBusy(false);
+  };
+
+  return (
+    <Section title={EMAIL_SECTION_TITLE} description={EMAIL_SECTION_DESCRIPTION}>
+      <div className="flex items-center gap-3 min-h-[44px]">
+        <input
+          id="settings-summary-email"
+          type="checkbox"
+          checked={value}
+          disabled={busy}
+          onChange={(e) => change(e.target.checked)}
+          aria-describedby={msg ? 'settings-summary-email-msg' : undefined}
+          className="h-5 w-5 shrink-0 accent-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+        />
+        <label htmlFor="settings-summary-email" className="flex-1 py-2 text-[14px] text-[var(--ink-2)] cursor-pointer">
+          {SUMMARY_EMAIL_SETTING_LABEL}
+        </label>
+      </div>
+      {msg && (
+        <p
+          id="settings-summary-email-msg"
+          role={msg.kind === 'err' ? 'alert' : 'status'}
+          className={cn('text-[12px] mt-1', msg.kind === 'ok' ? 'text-[var(--success)]' : 'text-[var(--danger)]')}
+        >
+          {msg.text}
+        </p>
+      )}
     </Section>
   );
 }
@@ -334,6 +428,7 @@ export function SettingsPage() {
         <div className="flex flex-col gap-4">
           <AppearanceSection />
           <ProfileSection user={user} />
+          <EmailSection />
           <SecuritySection />
           <DangerZoneSection />
         </div>

@@ -27,7 +27,7 @@ import {
   setSummaryPreferenceDirect,
   summarySendsDirect,
 } from './helpers';
-import { signUnsubscribeToken } from '../lib/email-unsubscribe';
+import { signUnsubscribeToken, verifyUnsubscribeToken } from '../lib/email-unsubscribe';
 import { SUMMARY_EMAIL_FEATURE } from '../lib/constants/features';
 import { COMPLETED_CLOSED_MESSAGE } from '../lib/constants/board-access';
 
@@ -43,7 +43,8 @@ import { COMPLETED_CLOSED_MESSAGE } from '../lib/constants/board-access';
 const rand = () => randomBytes(5).toString('hex').toUpperCase();
 
 test.describe.configure({ timeout: 120_000 });
-// The unsubscribe test's links carry a signed token, and a kept trace would record them, so no trace is kept for this file.
+// Playwright cannot set a trace option inside a describe block, so splitting tests 1 to 3 from the rest is not a small change.
+// The email tests' links carry a signed token that a kept trace would record, so no trace is kept for this file.
 test.use({ trace: 'off' });
 
 const contexts: BrowserContext[] = [];
@@ -161,21 +162,23 @@ async function retro(browser: Browser): Promise<Retro> {
 }
 
 type User = { id: string; email: string; name: string };
-interface Users { u1: User; u2: User; u3: User; u4: User }
+interface Users { u1: User; u2: User; u3: User; u4: User; u5: User }
 
-/** U1, U2, U3 verified; U4 not. */
+/** U1, U2, U3, U5 verified; U4 not. */
 async function makeUsers(): Promise<Users> {
   return {
     u1: await createUserDirect({ verified: true }),
     u2: await createUserDirect({ verified: true }),
     u3: await createUserDirect({ verified: true }),
     u4: await createUserDirect({ verified: false }),
+    u5: await createUserDirect({ verified: true }),
   };
 }
 
 /**
  * U1 owns the board. U2's participant (B) is linked AND U2 is a member: one email. With `full`, U3 is a
- * verified member who opted out and U4 (unverified) is linked to a third participant.
+ * verified member who opted out, U4 is an UNVERIFIED member, and U5 (verified) has a participant row
+ * linked to the account but NO membership row: the person who was removed or left, who gets nothing.
  */
 async function linkUsers(r: Retro, u: Users, full: boolean) {
   await setBoardOwnerDirect(r.boardId, u.u1.id);
@@ -184,7 +187,8 @@ async function linkUsers(r: Retro, u: Users, full: boolean) {
   if (full) {
     await addMemberDirect(r.boardId, u.u3.id, 'participant');
     await setSummaryPreferenceDirect(u.u3.id, false);
-    await linkParticipantUserDirect(r.boardId, r.cId, u.u4.id);
+    await addMemberDirect(r.boardId, u.u4.id, 'participant');
+    await linkParticipantUserDirect(r.boardId, r.cId, u.u5.id);
   }
 }
 
@@ -194,6 +198,16 @@ async function pollOutbox(boardId: string, count: number) {
 
 const rowHaystack = (row: { text_body: string; html_body: string; headers: Record<string, string>; subject: string }) =>
   [row.subject, row.text_body, row.html_body, JSON.stringify(row.headers)].join('\n');
+
+/** Set equality on strings, ignoring order and database collation. */
+const sameSet = (a: string[], b: string[]) => a.length === b.length && new Set(a).size === a.length && b.every((x) => a.includes(x));
+
+/** The token query value of the first URL in `text` that follows `label`, or null. Never printed. */
+const tokenAfter = (text: string, label: string): string | null => {
+  const m = new RegExp(`${label}: (\\S+)`).exec(text);
+  if (!m) return null;
+  try { return new URL(m[1]).searchParams.get('token'); } catch { return null; }
+};
 
 /** Whether `email` appears in `haystack` (the matcher the address absence checks use, proven on a positive below). */
 const containsAddress = (haystack: string, email: string) => haystack.toLowerCase().includes(email.toLowerCase());
@@ -227,21 +241,26 @@ async function openSummary(ctx: BrowserContext, boardId: string, viewport?: { wi
 test('completing a guided retro records one summary email per eligible account, once', async ({ browser }) => {
   const r = await retro(browser);
   const users = await makeUsers();
-  const { u1, u2, u3, u4 } = users;
+  const { u1, u2, u3, u4, u5 } = users;
   await linkUsers(r, users, true);
 
   await ok(await apiComplete(r.ctxA.request, r.boardId), 'complete');
   await pollOutbox(r.boardId, 2);
   const rows = await outboxRowsDirect(r.boardId);
-  expect(rows.map((row) => row.to_address)).toEqual([u1.email, u2.email].sort());
+  expect(sameSet(rows.map((row) => row.to_address), [u1.email, u2.email]), 'recipients are exactly U1 and U2').toBe(true);
   // Exactly one recipient per row, on the reserved domain.
-  for (const row of rows) expect(row.to_address).toMatch(/^[^,;\s<>]+@example\.com$/);
+  expect(
+    rows.filter((row) => /^[^,;\s<>]+@example\.com$/.test(row.to_address)).length,
+    'rows with one example.com recipient'
+  ).toBe(rows.length);
 
   const sends = await summarySendsDirect(r.boardId);
-  expect(sends.map((s) => [s.user_id, s.status]).sort()).toEqual(
-    [[u1.id, 'recorded'], [u2.id, 'recorded']].sort()
-  );
-  expect(sends.some((s) => s.user_id === u3.id || s.user_id === u4.id)).toBe(false);
+  expect(sends.length, 'send rows').toBe(2);
+  expect(sameSet(sends.map((s) => s.user_id), [u1.id, u2.id]), 'send rows are exactly U1 and U2').toBe(true);
+  expect(sends.every((s) => s.status === 'recorded'), 'every send row is recorded').toBe(true);
+  // U3 opted out, U4 is unverified, U5 has no membership: none of them has a row of either kind.
+  expect(sends.some((s) => [u3.id, u4.id, u5.id].includes(s.user_id)), 'a send row for U3, U4 or U5').toBe(false);
+  expect(rows.some((row) => [u3.email, u4.email, u5.email].includes(row.to_address)), 'an outbox row for U3, U4 or U5').toBe(false);
 
   for (const row of rows) {
     expect(row.subject).toBe(`Retro summary: e2e ${r.boardId}`);
@@ -268,21 +287,31 @@ test('completing a guided retro records one summary email per eligible account, 
   await expect(pageB.getByText(r.commentText).first()).toBeVisible({ timeout: 15_000 });
   await expect(pageB.getByText(r.childText).first()).toBeVisible();
 
-  // Privacy: no other recipient's address in any row's subject, bodies or headers, and only the
-  // recipient's own account id in the unsubscribe links.
-  const everyone = [u1, u2, u3, u4];
+  // Privacy: one recipient per row, and no other account's address or id anywhere in a row.
+  const everyone = [u1, u2, u3, u4, u5];
+  const byEmail = new Map(everyone.map((u) => [u.email, u]));
+  expect(sameSet(rows.map((row) => byEmail.get(row.to_address)?.id ?? ''), [u1.id, u2.id]), 'rows map to U1 and U2').toBe(true);
   for (const row of rows) {
-    const own = row.to_address === u1.email ? u1 : u2;
+    const own = byEmail.get(row.to_address)!;
     const hay = rowHaystack(row);
-    // Control: the matcher finds an address that IS there (the row's own, once joined to its haystack).
-    expect(containsAddress(`${row.to_address}\n${hay}`, own.email)).toBe(true);
     for (const other of everyone.filter((u) => u.id !== own.id)) {
       expect(containsAddress(hay, other.email), 'another account address appears in a row').toBe(false);
       expect(hay.includes(other.id), 'another account id appears in a row').toBe(false);
     }
-    // Control: the row's own account id is in its unsubscribe links, so the id check above can fire.
-    expect(row.text_body.includes(`token=${own.id}.`)).toBe(true);
-    expect((row.headers['List-Unsubscribe'] ?? '').includes(`token=${own.id}.`)).toBe(true);
+    // Controls: the matcher does find an address that is there (checked on a made-up haystack), and the
+    // row's unsubscribe links verify for its OWN account id and for no other.
+    expect(containsAddress(`x ${own.email} y`, own.email), 'the address matcher finds a present address').toBe(true);
+    const pageTok = tokenAfter(row.text_body, 'Stop getting summary emails');
+    const postTok = /^<(.+)>$/.exec(row.headers['List-Unsubscribe'] ?? '');
+    let postToken: string | null = null;
+    try { postToken = postTok ? new URL(postTok[1]).searchParams.get('token') : null; } catch { postToken = null; }
+    for (const tok of [pageTok, postToken]) {
+      expect(tok !== null, 'the row carries an unsubscribe token').toBe(true);
+      expect(verifyUnsubscribeToken(tok)?.userId === own.id, 'the unsubscribe link verifies for the recipient').toBe(true);
+      for (const other of everyone.filter((u) => u.id !== own.id)) {
+        expect(verifyUnsubscribeToken(tok)?.userId === other.id, 'the unsubscribe link verifies for another account').toBe(false);
+      }
+    }
   }
 
   // A second complete is refused, and nothing more is recorded.
@@ -301,18 +330,23 @@ test('with the summary_email flag off, completing records and sends nothing', as
   await setFlagDirect(SUMMARY_EMAIL_FEATURE, false);
   try {
     await ok(await apiComplete(r.ctxA.request, r.boardId), 'complete');
-    // The flag is read after the response, so give the dispatch time to run before looking.
-    const page = await r.ctxA.newPage();
-    await page.waitForTimeout(5000);
-    expect(await outboxRowsDirect(r.boardId)).toEqual([]);
-    expect(await summarySendsDirect(r.boardId)).toEqual([]);
-    // Control: the same setup is eligible. Test 1 recorded two rows for it with the flag on.
-    // Here the board has a verified owner, so only the flag stood between it and a row.
+    // A round trip after the completion: the dispatch is scheduled to run straight after the response.
     const board = await getBoard(r.ctxA.request, r.boardId);
     expect(board.board.archived_at).toBeTruthy();
   } finally {
     await setFlagDirect(SUMMARY_EMAIL_FEATURE, true);
   }
+
+  // Sentinel: a second board set up the same way, completed with the flag back on, must record rows.
+  // That proves the dispatch pipeline works in this very test and that enough time has passed for the
+  // first board's dispatch to have run, if it was going to.
+  const sentinel = await retro(browser);
+  await linkUsers(sentinel, users, true);
+  await ok(await apiComplete(sentinel.ctxA.request, sentinel.boardId), 'complete sentinel');
+  await pollOutbox(sentinel.boardId, 2);
+
+  expect(await outboxRowsDirect(r.boardId), 'outbox rows of the flag-off board').toEqual([]);
+  expect(await summarySendsDirect(r.boardId), 'send rows of the flag-off board').toEqual([]);
 });
 
 test('the unsubscribe link: a GET changes nothing, the one-click POST opts out, the next retro skips that person', async ({ browser, playwright, baseURL }) => {
@@ -581,10 +615,16 @@ test('an open board: completing sends nothing, the summary is not found, and no 
 
   await ok(await apiComplete(ctxA.request, boardId), 'complete');
   const page = await ctxA.newPage();
-  await page.waitForTimeout(5000);
-  // Control: with the flag on, a guided completion with the same kind of owner recorded rows (test 1).
-  expect(await outboxRowsDirect(boardId)).toEqual([]);
-  expect(await summarySendsDirect(boardId)).toEqual([]);
+
+  // Sentinel: a guided board completed AFTER the open one, with a verified owner, must record rows
+  // (the flag is on). That proves the pipeline works in this test and that time has passed.
+  const sentinel = await retro(browser);
+  await linkUsers(sentinel, await makeUsers(), false);
+  await ok(await apiComplete(sentinel.ctxA.request, sentinel.boardId), 'complete sentinel');
+  await pollOutbox(sentinel.boardId, 2);
+
+  expect(await outboxRowsDirect(boardId), 'outbox rows of the open board').toEqual([]);
+  expect(await summarySendsDirect(boardId), 'send rows of the open board').toEqual([]);
 
   // The summary page is a real 404 for an open board and for a board that does not exist.
   for (const id of [boardId, 'zzzzzzzzzz']) {
@@ -595,8 +635,8 @@ test('an open board: completing sends nothing, the summary is not found, and no 
 
   // The completed open board shows no summary link, and its payload has no comments key.
   await page.goto(`/board/${boardId}`);
-  await expect(page.locator('body')).toBeVisible();
-  await page.waitForTimeout(1000);
+  // Wait for the completed state to be on screen first, so the absence below is not a page still loading.
+  await expect(page.getByText('Completed', { exact: true }).filter({ visible: true }).first()).toBeVisible({ timeout: 15_000 });
   await expect(visibleSummaryLink(page)).toHaveCount(0);
   expect('comments' in (await getBoard(ctxA.request, boardId))).toBe(false);
 });

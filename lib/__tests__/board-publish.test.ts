@@ -1,7 +1,23 @@
-import { describe, it, expect } from 'vitest';
-import { cardEventPayload, commentDeletedPayload, commentEventPayload, voteEventPayload, voteTallyPayload } from '@/lib/board-publish';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import {
+  cardEventPayload,
+  commentDeletedPayload,
+  commentEventPayload,
+  publishComment,
+  publishCommentDeleted,
+  voteEventPayload,
+  voteTallyPayload,
+} from '@/lib/board-publish';
+import { COMMENT_CREATED, COMMENT_DELETED, COMMENT_UPDATED } from '@/lib/constants/comments';
 import type { BoardSettings, Card, Comment } from '@/types';
 import type { ViewBoard } from '@/lib/board-view';
+
+const ably = vi.hoisted(() => {
+  const publish = vi.fn();
+  const get = vi.fn(() => ({ publish }));
+  return { publish, get };
+});
+vi.mock('@/lib/ably-server', () => ({ ablyServer: { channels: { get: ably.get } } }));
 
 const settings = (o: Partial<BoardSettings>) =>
   ({ card_visibility: 'visible', secret_voting: false, anonymous_cards: false, ...o }) as BoardSettings;
@@ -79,3 +95,32 @@ describe('comment payloads', () => {
     expect(Object.keys(commentDeletedPayload(['m2'], null)).sort()).toEqual(['ids', 'tombstone']);
   });
 });
+
+describe('publishComment and publishCommentDeleted', () => {
+  beforeEach(() => {
+    ably.publish.mockReset();
+    ably.get.mockClear();
+  });
+  it('publish created and updated comments on the board channel with the public payload', async () => {
+    const c = comment({ is_anonymous: true, is_mine: true });
+    await publishComment('b1', COMMENT_CREATED, c);
+    await publishComment('b1', COMMENT_UPDATED, c);
+    expect(ably.get).toHaveBeenCalledWith('retro-board:b1');
+    expect(ably.publish.mock.calls).toEqual([
+      ['comment-created', commentEventPayload(c)],
+      ['comment-updated', commentEventPayload(c)],
+    ]);
+  });
+  it('publish a deleted comment with ids and the public tombstone', async () => {
+    const tomb = comment({ deleted_at: 'y', body: '' });
+    await publishCommentDeleted('b1', ['m2'], tomb);
+    expect(ably.get).toHaveBeenCalledWith('retro-board:b1');
+    expect(ably.publish).toHaveBeenCalledWith('comment-deleted', commentDeletedPayload(['m2'], tomb));
+  });
+});
+
+// Compile-time only: tsc fails if publishComment ever accepts the deleted event.
+export function neverCalledTypeCheck(): void {
+  // @ts-expect-error the deleted event carries ids, not a comment
+  void publishComment('b1', COMMENT_DELETED, comment());
+}

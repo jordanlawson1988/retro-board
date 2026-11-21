@@ -310,6 +310,14 @@ describe('shapeComment', () => {
     expect(shapeComment(left, { participantId: 'p2' })).toMatchObject({ author_participant_id: null, is_mine: false });
     expect(shapeComment(left, PUBLIC_VIEWER).is_mine).toBe(false);
   });
+  it('fails closed when is_anonymous is not exactly false', () => {
+    for (const bad of [undefined, null, 'false', 0, 'true']) {
+      const out = shapeComment(comment({ is_anonymous: bad as never }), { participantId: 'p1' });
+      expect(out).toMatchObject({ author_participant_id: null, author_name: null, is_anonymous: true });
+    }
+    expect(shapeComment(comment({ is_anonymous: undefined as never }), { participantId: 'p2' }).is_mine).toBe(true);
+    expect(shapeComment(comment({ is_anonymous: false }), PUBLIC_VIEWER).is_anonymous).toBe(false);
+  });
   it('unknown keys never pass through', () => {
     expect('secret' in shapeComment({ ...comment(), secret: 1 } as never, PUBLIC_VIEWER)).toBe(false);
   });

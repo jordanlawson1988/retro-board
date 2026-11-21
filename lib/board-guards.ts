@@ -1,6 +1,6 @@
 import type { BoardSettings, CardReactions } from '@/types';
 import type { BoardAction } from '@/lib/constants/board-actions';
-import type { PhaseId } from '@/lib/constants/phases';
+import { NOT_GUIDED_ERROR, type PhaseId } from '@/lib/constants/phases';
 import { phaseDenial } from '@/lib/phases';
 
 export interface BoardActor {
@@ -36,6 +36,16 @@ function deny(status: 401 | 403 | 409, error: string): GuardResult {
 }
 
 const FACILITATOR_REQUIRED = 'Facilitator access required';
+const JOIN_FIRST = 'Join the board first';
+
+/** Actions that exist only on a guided board: the guard refuses them on an open board. */
+const GUIDED_ONLY_ACTIONS: ReadonlySet<BoardAction> = new Set<BoardAction>([
+  'topic.set',
+  'comment.create',
+  'comment.edit',
+  'comment.delete',
+  'action-item.link',
+]);
 
 function isLockable(action: BoardAction): boolean {
   return (
@@ -58,6 +68,7 @@ function isLockable(action: BoardAction): boolean {
 function checkState(action: BoardAction, actor: BoardActor, state: BoardState): GuardResult {
   // Leaving stays possible on a completed board so people can still remove themselves.
   if (state.archived && action !== 'participant.leave') return deny(409, 'Board is completed');
+  if (state.phase === null && GUIDED_ONLY_ACTIONS.has(action)) return deny(409, NOT_GUIDED_ERROR);
   // Phase rules bind facilitators too: no bypass.
   if (state.phase !== null) {
     const msg = phaseDenial(action, state.phase);
@@ -86,7 +97,7 @@ function checkIdentity(
   target: ActionTarget
 ): GuardResult {
   if (actor.participantId === null && !actor.isFacilitator) {
-    return deny(401, 'Join the board first');
+    return deny(401, JOIN_FIRST);
   }
 
   switch (action) {
@@ -105,6 +116,10 @@ function checkIdentity(
     case 'group.reset':
     case 'topic.set':
       return actor.isFacilitator ? OK : deny(403, FACILITATOR_REQUIRED);
+    case 'comment.create':
+    case 'comment.edit':
+      // A comment needs an author, so a facilitator without a participant row cannot write one.
+      return actor.participantId === null ? deny(401, JOIN_FIRST) : OK;
     case 'participant.leave': {
       const isSelf =
         actor.participantId !== null &&
@@ -119,8 +134,6 @@ function checkIdentity(
     case 'card.react':
     case 'vote.toggle':
     case 'action-item.write':
-    case 'comment.create':
-    case 'comment.edit':
     case 'comment.delete':
     case 'action-item.link':
       return OK;

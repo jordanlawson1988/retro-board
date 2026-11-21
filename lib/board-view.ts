@@ -78,7 +78,9 @@ export function isRevealingChange(prev: BoardSettings, next: BoardSettings): boo
  */
 export function shapeComment(c: Comment, viewer: Viewer): Comment {
   const deleted = c.deleted_at !== null;
-  const hideAuthor = deleted || c.is_anonymous;
+  // Fail closed: the author shows only when is_anonymous is exactly false.
+  const anonymous = c.is_anonymous !== false;
+  const hideAuthor = deleted || anonymous;
   const isMine =
     !deleted &&
     viewer.participantId !== null &&
@@ -91,7 +93,7 @@ export function shapeComment(c: Comment, viewer: Viewer): Comment {
     parent_id: c.parent_id,
     author_participant_id: hideAuthor ? null : c.author_participant_id,
     author_name: hideAuthor ? null : c.author_name,
-    is_anonymous: c.is_anonymous,
+    is_anonymous: anonymous,
     body: deleted ? '' : c.body,
     created_at: c.created_at,
     edited_at: c.edited_at,

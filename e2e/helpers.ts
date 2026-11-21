@@ -426,3 +426,175 @@ export async function actionRowsDirect(boardId: string): Promise<
     assignee: (r.assignee as string | null) ?? null,
   }));
 }
+
+// ---- wrap-up helpers: throwaway accounts, the summary email outbox ----------------------------
+//
+// Every helper below carries the same two dev-only guards as voteRowsDirect and touches only rows this
+// run created: accounts whose id starts with `e2e` and whose address is `e2e-...@example.com`, and
+// boards titled `e2e <id>`. None of them selects, returns or logs any other row of "user". The
+// outbox readers return only the rows of the board id they are given, and fail (printing only a
+// count) if any address does not end in @example.com.
+
+const E2E_USER_ID_PREFIX = 'e2e';
+const E2E_ADDRESS_SUFFIX = '@example.com';
+
+/** Create a throwaway account (verified or not) with an `e2e-<random>@example.com` address. */
+export async function createUserDirect(opts: {
+  verified: boolean;
+}): Promise<{ id: string; email: string; name: string }> {
+  const url = process.env.DATABASE_URL ?? '';
+  if (process.env.NEON_BRANCH !== 'dev') throw new Error('createUserDirect refuses to run unless NEON_BRANCH=dev');
+  if (url.includes('ep-delicate-star')) throw new Error('createUserDirect refuses to run against the production host');
+  const db = neon(url);
+  // Read the table's shape once: if a required column appears that this insert does not fill, say so clearly.
+  const filled = ['id', 'name', 'email', 'emailVerified', 'createdAt', 'updatedAt'];
+  const required = await db`
+    SELECT column_name FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'user' AND is_nullable = 'NO' AND column_default IS NULL`;
+  const missing = required.map((r) => r.column_name as string).filter((c) => !filled.includes(c));
+  if (missing.length > 0) {
+    throw new Error(`createUserDirect: "user" has NOT NULL columns without a default that this helper does not fill: ${missing.join(', ')}`);
+  }
+  const id = E2E_USER_ID_PREFIX + nanoid(20);
+  const name = `E2E User ${nanoid(6)}`;
+  const email = `e2e-${nanoid(10).toLowerCase()}${E2E_ADDRESS_SUFFIX}`;
+  await db`
+    INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
+    VALUES (${id}, ${name}, ${email}, ${opts.verified}, now(), now())`;
+  return { id, name, email };
+}
+
+function requireE2eUserId(who: string, userId: string) {
+  if (!userId.startsWith(E2E_USER_ID_PREFIX)) throw new Error(`${who} only touches throwaway accounts (id starting "e2e")`);
+}
+
+/** Make a throwaway account the owner of ONE board we created. Same dev-only guards. */
+export async function setBoardOwnerDirect(boardId: string, userId: string): Promise<void> {
+  const url = process.env.DATABASE_URL ?? '';
+  if (process.env.NEON_BRANCH !== 'dev') throw new Error('setBoardOwnerDirect refuses to run unless NEON_BRANCH=dev');
+  if (url.includes('ep-delicate-star')) throw new Error('setBoardOwnerDirect refuses to run against the production host');
+  requireE2eUserId('setBoardOwnerDirect', userId);
+  const db = neon(url);
+  const rows = await db`
+    UPDATE boards SET owner_id = ${userId}
+    WHERE id = ${boardId} AND title = ${`e2e ${boardId}`}
+      AND EXISTS (SELECT 1 FROM "user" WHERE id = ${userId} AND email LIKE ${'e2e-%' + E2E_ADDRESS_SUFFIX})
+    RETURNING id`;
+  if (rows.length !== 1) throw new Error(`setBoardOwnerDirect touched ${rows.length} rows`);
+}
+
+/** Link ONE participant of a board we created to a throwaway account. Same dev-only guards. */
+export async function linkParticipantUserDirect(boardId: string, participantId: string, userId: string): Promise<void> {
+  const url = process.env.DATABASE_URL ?? '';
+  if (process.env.NEON_BRANCH !== 'dev') throw new Error('linkParticipantUserDirect refuses to run unless NEON_BRANCH=dev');
+  if (url.includes('ep-delicate-star')) throw new Error('linkParticipantUserDirect refuses to run against the production host');
+  requireE2eUserId('linkParticipantUserDirect', userId);
+  const db = neon(url);
+  const rows = await db`
+    UPDATE participants SET user_id = ${userId}
+    WHERE id = ${participantId} AND board_id = ${boardId}
+      AND EXISTS (SELECT 1 FROM boards WHERE id = ${boardId} AND title = ${`e2e ${boardId}`})
+      AND EXISTS (SELECT 1 FROM "user" WHERE id = ${userId} AND email LIKE ${'e2e-%' + E2E_ADDRESS_SUFFIX})
+    RETURNING id`;
+  if (rows.length !== 1) throw new Error(`linkParticipantUserDirect touched ${rows.length} rows`);
+}
+
+/** Add a throwaway account as a member of ONE board we created. Same dev-only guards. */
+export async function addMemberDirect(
+  boardId: string,
+  userId: string,
+  role: 'facilitator' | 'participant' | 'viewer'
+): Promise<void> {
+  const url = process.env.DATABASE_URL ?? '';
+  if (process.env.NEON_BRANCH !== 'dev') throw new Error('addMemberDirect refuses to run unless NEON_BRANCH=dev');
+  if (url.includes('ep-delicate-star')) throw new Error('addMemberDirect refuses to run against the production host');
+  requireE2eUserId('addMemberDirect', userId);
+  const db = neon(url);
+  const rows = await db`
+    INSERT INTO board_members (board_id, user_id, role)
+    SELECT b.id, u.id, ${role}
+    FROM boards b, "user" u
+    WHERE b.id = ${boardId} AND b.title = ${`e2e ${boardId}`}
+      AND u.id = ${userId} AND u.email LIKE ${'e2e-%' + E2E_ADDRESS_SUFFIX}
+    RETURNING id`;
+  if (rows.length !== 1) throw new Error(`addMemberDirect inserted ${rows.length} rows`);
+}
+
+/** The same upsert as the account setting and the unsubscribe route, for a throwaway account only. Same dev-only guards. */
+export async function setSummaryPreferenceDirect(userId: string, enabled: boolean): Promise<void> {
+  const url = process.env.DATABASE_URL ?? '';
+  if (process.env.NEON_BRANCH !== 'dev') throw new Error('setSummaryPreferenceDirect refuses to run unless NEON_BRANCH=dev');
+  if (url.includes('ep-delicate-star')) throw new Error('setSummaryPreferenceDirect refuses to run against the production host');
+  requireE2eUserId('setSummaryPreferenceDirect', userId);
+  const db = neon(url);
+  const rows = await db`
+    INSERT INTO email_preferences (user_id, summary_email, updated_at)
+    SELECT ${userId}, ${enabled}::boolean, now()
+    WHERE EXISTS (SELECT 1 FROM "user" WHERE id = ${userId} AND email LIKE ${'e2e-%' + E2E_ADDRESS_SUFFIX})
+    ON CONFLICT (user_id) DO UPDATE SET summary_email = EXCLUDED.summary_email, updated_at = now()
+    RETURNING user_id`;
+  if (rows.length !== 1) throw new Error(`setSummaryPreferenceDirect wrote ${rows.length} rows`);
+}
+
+/** A throwaway account's stored preference, or null when it has no row. Read-only. Same dev-only guards. */
+export async function preferenceDirect(userId: string): Promise<boolean | null> {
+  const url = process.env.DATABASE_URL ?? '';
+  if (process.env.NEON_BRANCH !== 'dev') throw new Error('preferenceDirect refuses to run unless NEON_BRANCH=dev');
+  if (url.includes('ep-delicate-star')) throw new Error('preferenceDirect refuses to run against the production host');
+  requireE2eUserId('preferenceDirect', userId);
+  const db = neon(url);
+  const rows = await db`SELECT summary_email FROM email_preferences WHERE user_id = ${userId}`;
+  return rows.length === 0 ? null : (rows[0].summary_email as boolean);
+}
+
+/**
+ * Every outbox row of ONE board we created, ordered by address. Read-only (a SELECT), same dev-only guards.
+ * Fails loudly, printing only a count, if any row is addressed outside @example.com.
+ */
+export async function outboxRowsDirect(boardId: string): Promise<
+  { to_address: string; subject: string; text_body: string; html_body: string; headers: Record<string, string> }[]
+> {
+  const url = process.env.DATABASE_URL ?? '';
+  if (process.env.NEON_BRANCH !== 'dev') throw new Error('outboxRowsDirect refuses to run unless NEON_BRANCH=dev');
+  if (url.includes('ep-delicate-star')) throw new Error('outboxRowsDirect refuses to run against the production host');
+  const db = neon(url);
+  const rows = await db`
+    SELECT o.to_address, o.subject, o.text_body, o.html_body, o.headers
+    FROM email_outbox o JOIN boards b ON b.id = o.board_id
+    WHERE o.board_id = ${boardId} AND b.title = ${`e2e ${boardId}`}
+    ORDER BY o.to_address`;
+  const offending = rows.filter((r) => !(r.to_address as string).endsWith(E2E_ADDRESS_SUFFIX)).length;
+  if (offending > 0) throw new Error(`${offending} outbox row(s) are addressed outside ${E2E_ADDRESS_SUFFIX}`);
+  return rows.map((r) => ({
+    to_address: r.to_address as string,
+    subject: r.subject as string,
+    text_body: r.text_body as string,
+    html_body: r.html_body as string,
+    headers: r.headers as Record<string, string>,
+  }));
+}
+
+/** Every summary-send row of ONE board we created, ordered by user id. Read-only. Same dev-only guards. */
+export async function summarySendsDirect(
+  boardId: string
+): Promise<{ user_id: string; status: string; error: string | null }[]> {
+  const url = process.env.DATABASE_URL ?? '';
+  if (process.env.NEON_BRANCH !== 'dev') throw new Error('summarySendsDirect refuses to run unless NEON_BRANCH=dev');
+  if (url.includes('ep-delicate-star')) throw new Error('summarySendsDirect refuses to run against the production host');
+  const db = neon(url);
+  const rows = await db`
+    SELECT s.user_id, s.status, s.error
+    FROM summary_email_sends s JOIN boards b ON b.id = s.board_id
+    WHERE s.board_id = ${boardId} AND b.title = ${`e2e ${boardId}`}
+    ORDER BY s.user_id`;
+  return rows.map((r) => ({
+    user_id: r.user_id as string,
+    status: r.status as string,
+    error: (r.error as string | null) ?? null,
+  }));
+}
+
+/** Complete a board through the board route (`{ action: 'complete' }`). Returns the raw response. */
+export function apiComplete(request: APIRequestContext, boardId: string) {
+  return request.post(`/api/boards/${boardId}`, { data: { action: 'complete' } });
+}

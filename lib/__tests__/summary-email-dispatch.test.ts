@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   txn: vi.fn(),
   canUse: vi.fn(),
   send: vi.fn(),
+  renderThrowOn: null as string | null,
 }));
 
 vi.mock('@/lib/db', () => ({
@@ -17,6 +18,17 @@ vi.mock('@/lib/can-use', () => ({
   FEATURES: ['guided_mode', 'summary_email'],
 }));
 vi.mock('@/lib/mail/send', () => ({ sendMail: (...a: unknown[]) => mocks.send(...a) }));
+
+vi.mock('@/lib/summary-email/render', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/summary-email/render')>('@/lib/summary-email/render');
+  return {
+    ...actual,
+    renderSummaryEmail: (...a: Parameters<typeof actual.renderSummaryEmail>) => {
+      if (mocks.renderThrowOn !== null && a[1] === mocks.renderThrowOn) throw new Error('RENDER-SECRET ' + a[1]);
+      return actual.renderSummaryEmail(...a);
+    },
+  };
+});
 
 import { dispatchSummaryEmail } from '@/lib/summary-email/dispatch';
 
@@ -61,7 +73,8 @@ function setup(opts: { rows?: unknown[]; snapshotRows?: unknown[][] } = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  for (const m of Object.values(mocks)) m.mockReset();
+  for (const m of [mocks.sql, mocks.txn, mocks.canUse, mocks.send]) m.mockReset();
+  mocks.renderThrowOn = null;
   vi.stubEnv('PARTICIPANT_SESSION_SECRET', SECRET);
   mocks.send.mockResolvedValue({ ok: true, transport: 'outbox' });
 });
@@ -204,5 +217,92 @@ describe('dispatchSummaryEmail', () => {
     expect(line).toContain('TypeError');
     expect(line).not.toContain('a@example.com');
     spy.mockRestore();
+  });
+
+  describe('a throw after the claim', () => {
+    const FAILED_TEXT = 'build failed';
+    const quiet = () => vi.spyOn(console, 'error').mockImplementation(() => {});
+    const failedUpdates = () => mocks.sql.mock.calls.slice(1).filter((c) => text(c).includes('UPDATE summary_email_sends'));
+
+    it('a token that cannot be signed marks both claimed rows failed and sends nothing', async () => {
+      setup();
+      vi.stubEnv('PARTICIPANT_SESSION_SECRET', '');
+      const spy = quiet();
+      expect(await dispatchSummaryEmail({ boardId: 'b1', completedAt: COMPLETED }, env)).toBe('error');
+      expect(mocks.send).not.toHaveBeenCalled();
+      expect(failedUpdates()).toHaveLength(1);
+      expect(values(failedUpdates()[0])).toEqual(expect.arrayContaining(['failed', FAILED_TEXT, 'b1', COMPLETED, ['u1', 'u2'], 'pending']));
+      const line = spy.mock.calls.map((c) => c.join(' ')).join('\n');
+      expect(line).not.toContain('PARTICIPANT_SESSION_SECRET');
+      expect(line).not.toContain('@');
+      spy.mockRestore();
+    });
+
+    it('a render that throws for the second recipient fails both rows; a batch is all or nothing', async () => {
+      setup();
+      mocks.renderThrowOn = 'b@example.com';
+      const spy = quiet();
+      expect(await dispatchSummaryEmail({ boardId: 'b1', completedAt: COMPLETED }, env)).toBe('error');
+      expect(mocks.send).not.toHaveBeenCalled();
+      expect(failedUpdates()).toHaveLength(1);
+      expect(values(failedUpdates()[0])).toEqual(expect.arrayContaining(['failed', FAILED_TEXT, COMPLETED, ['u1', 'u2'], 'pending']));
+      const line = spy.mock.calls.map((c) => c.join(' ')).join('\n');
+      expect(line).not.toContain('RENDER-SECRET');
+      expect(line).not.toContain('@');
+      spy.mockRestore();
+    });
+
+    it('a status update that fails after sendMail was called never marks rows failed', async () => {
+      setup();
+      mocks.sql.mockReset();
+      mocks.sql.mockResolvedValueOnce(claimed).mockRejectedValueOnce({ code: '57014', message: 'a@example.com' });
+      const spy = quiet();
+      expect(await dispatchSummaryEmail({ boardId: 'b1', completedAt: COMPLETED }, env)).toBe('error');
+      expect(mocks.send).toHaveBeenCalledTimes(1);
+      expect(mocks.sql).toHaveBeenCalledTimes(2);
+      expect(mocks.sql.mock.calls.filter((c) => values(c).includes('failed'))).toHaveLength(0);
+      spy.mockRestore();
+    });
+
+    it('the best-effort update itself failing still resolves to error and throws nothing', async () => {
+      setup();
+      vi.stubEnv('PARTICIPANT_SESSION_SECRET', '');
+      mocks.sql.mockReset();
+      mocks.sql.mockResolvedValueOnce(claimed).mockRejectedValueOnce({ code: '08006', message: 'a@example.com' });
+      const spy = quiet();
+      await expect(dispatchSummaryEmail({ boardId: 'b1', completedAt: COMPLETED }, env)).resolves.toBe('error');
+      expect(mocks.send).not.toHaveBeenCalled();
+      const line = spy.mock.calls.map((c) => c.join(' ')).join('\n');
+      expect(line).toContain('08006');
+      expect(line).not.toContain('@');
+      spy.mockRestore();
+    });
+  });
+
+  it('the claim keeps the reopen guard: the board CTE binds this completedAt and excludes trashed boards', async () => {
+    setup({ rows: [] });
+    await dispatchSummaryEmail({ boardId: 'b1', completedAt: COMPLETED }, env);
+    const claim = mocks.sql.mock.calls[0];
+    const t = text(claim);
+    const cte = t.slice(t.indexOf('WITH board AS ('), t.indexOf('), people AS'));
+    expect(cte).toContain('FROM boards');
+    expect(cte).toContain('archived_at = ?::timestamptz');
+    expect(cte).toContain('deleted_at IS NULL');
+    // the two placeholders of the CTE are the board id then the completion string
+    expect(values(claim).slice(0, 2)).toEqual(['b1', COMPLETED]);
+  });
+
+  it('logs once that the recipient cap was reached, with no address or id, and not below the cap', async () => {
+    const full = Array.from({ length: 100 }, (_, i) => ({ user_id: `u${i}`, email: `p${i}@example.com` }));
+    setup({ rows: full });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await dispatchSummaryEmail({ boardId: 'b1', completedAt: COMPLETED }, env);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0].join(' '))).toBe('[summary-email] board b1: recipient cap reached (100)');
+    warn.mockClear();
+    setup({ rows: full.slice(0, 99) });
+    await dispatchSummaryEmail({ boardId: 'b1', completedAt: COMPLETED }, env);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 });

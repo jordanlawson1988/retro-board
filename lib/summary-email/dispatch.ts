@@ -4,6 +4,7 @@ import { SUMMARY_EMAIL_FEATURE } from '@/lib/constants/features';
 import { GUIDED_MODE } from '@/lib/constants/phases';
 import {
   BASE_URL_MISSING_ERROR,
+  SUMMARY_EMAIL_BUILD_FAILED,
   SEND_FAILED,
   SEND_PENDING,
   SEND_RECORDED,
@@ -61,6 +62,8 @@ export async function dispatchSummaryEmail(
   env: Record<string, string | undefined> = process.env
 ): Promise<DispatchOutcome> {
   const { boardId, completedAt } = input;
+  let claimedIds: string[] = [];
+  let sendCalled = false;
   try {
     // 1. The flag. Off: nothing else runs.
     if (!(await canUse(SUMMARY_EMAIL_FEATURE, null))) return 'flag-off';
@@ -126,6 +129,10 @@ export async function dispatchSummaryEmail(
     `) as unknown as ClaimedRow[];
     if (claimed.length === 0) return 'no-recipients';
     const userIds = claimed.map((r) => r.user_id);
+    claimedIds = userIds;
+    if (claimed.length === SUMMARY_EMAIL_MAX_RECIPIENTS) {
+      console.warn('[summary-email] board ' + boardId + ': recipient cap reached (' + SUMMARY_EMAIL_MAX_RECIPIENTS + ')');
+    }
 
     // 5. No base URL: the claimed rows are marked failed and nothing is sent.
     const base = appBaseUrl(env);
@@ -138,6 +145,7 @@ export async function dispatchSummaryEmail(
     const messages: MailMessage[] = claimed.map((row) =>
       renderSummaryEmail(summary, row.email, summaryEmailLinks(base, boardId, signUnsubscribeToken(row.user_id)))
     );
+    sendCalled = true;
     const result = await sendMail({
       kind: SUMMARY_EMAIL_KIND,
       boardId,
@@ -151,6 +159,15 @@ export async function dispatchSummaryEmail(
     return status as DispatchOutcome;
   } catch (e) {
     console.error('[summary-email] board ' + boardId + ' failed: ' + errorLabel(e));
+    // Only before sendMail was called: nothing went out, so say so. After it, mail may have gone
+    // out and `pending` is the honest state.
+    if (claimedIds.length > 0 && !sendCalled) {
+      try {
+        await recordOutcome(input, claimedIds, SEND_FAILED, SUMMARY_EMAIL_BUILD_FAILED);
+      } catch (e2) {
+        console.error('[summary-email] board ' + boardId + ' failed: ' + errorLabel(e2));
+      }
+    }
     return 'error';
   }
 }

@@ -609,6 +609,15 @@ describe('topic actions', () => {
     expect(calls()).toEqual(['PATCH /api/boards/b1/action-items']);
   });
 
+  it('a facilitator who has not joined (no participant id) can still assign: the PATCH is sent and the answer applied', async () => {
+    useBoardStore.setState({ currentParticipantId: null, actionItems: [item()], participants: [person('p2', 'Bo')] });
+    routes({ 'PATCH /api/boards/b1/action-items': () => json(200, { item: item({ assignee: 'Bo', assignee_participant_id: 'p2' }) }) });
+    await useDiscussStore.getState().assignActionItem('i1', 'p2');
+    expect(calls()).toEqual(['PATCH /api/boards/b1/action-items']);
+    expect(sentBody()).toEqual({ itemId: 'i1', updates: { assignee_participant_id: 'p2' } });
+    expect(useBoardStore.getState().actionItems[0]).toMatchObject({ assignee: 'Bo', assignee_participant_id: 'p2' });
+  });
+
   it('clearing the owner sends null and shows no owner', async () => {
     useBoardStore.setState({ actionItems: [item({ assignee: 'Al', assignee_participant_id: 'p3' })] });
     routes({ 'PATCH /api/boards/b1/action-items': () => json(200, { item: item() }) });

@@ -78,6 +78,7 @@ describe('guided create', () => {
     expect(text).toContain('FOR SHARE');
     expect(text).toContain('merged_with IS NULL');
     expect(text).toContain('COALESCE((SELECT display_name FROM owner)');
+    expect(text).toContain('(?::text IS NULL OR phase = ?)');
     expect(callValues(1)).toEqual(expect.arrayContaining(['c1', 'p9', 'discuss']));
     expect(channelPublish).toHaveBeenCalledWith('action-item-created', { item: row });
     const published = channelPublish.mock.calls[0][1].item;
@@ -91,7 +92,20 @@ describe('guided create', () => {
     const res = await post({ description: 'Do it', assignee: 'Bo' });
     expect(res.status).toBe(200);
     expect(callText(1)).toContain('FOR SHARE');
-    expect(callValues(1)).toContain('reflect');
+    expect(callText(1)).toContain('(?::text IS NULL OR phase = ?)');
+    expect(callText(1)).toContain('archived_at IS NULL AND deleted_at IS NULL');
+  });
+
+  it('a guided create without a topic does not depend on the phase value', async () => {
+    mocks.sql
+      .mockResolvedValueOnce([guidedRow({ phase: 'group', settings: phaseSettings('group') })])
+      .mockResolvedValueOnce([{ ...flags, ...row, card_id: null }]);
+    const res = await post({ description: 'Do it' });
+    expect(res.status).toBe(200);
+    // The topic value is null, so the phase test in the statement is short-circuited whatever the phase is.
+    const values = callValues(1);
+    const topicSlot = callText(1).split('?').findIndex((_p, i, parts) => parts[i + 1]?.startsWith('::text IS NULL OR phase ='));
+    expect(values[topicSlot]).toBeNull();
   });
 
   it('a facilitator without a participant row can create: created_by is null', async () => {
@@ -183,7 +197,9 @@ describe('guided patch', () => {
     expect(mocks.sql).toHaveBeenCalledTimes(2);
     expect(callText(1)).toContain('WHEN ?::boolean THEN (SELECT display_name FROM owner)');
     expect(callText(1)).toContain('FOR SHARE');
-    expect(callValues(1)).toEqual(expect.arrayContaining(['p9', 'discuss']));
+    expect(callText(1)).not.toContain('phase =');
+    expect(callValues(1)).toContain('p9');
+    expect(callValues(1)).not.toContain('discuss');
     expect(channelPublish).toHaveBeenCalledWith('action-item-updated', { item: row });
     for (const k of FLAG_KEYS) expect(channelPublish.mock.calls[0][1].item).not.toHaveProperty(k);
   });
@@ -212,6 +228,33 @@ describe('guided patch', () => {
     expect(res.status).toBe(200);
     expect(callText(1)).toContain('FOR SHARE');
     expect(callValues(1)).toContain('Someone');
+  });
+
+  it.each([
+    ['status only', { status: 'done' }],
+    ['description only', { description: 'New words' }],
+    ['owner set', { assignee_participant_id: 'p9' }],
+    ['owner null clears both columns', { assignee_participant_id: null }],
+    ['assignee and owner together: the owner wins', { assignee: 'Free text', assignee_participant_id: 'p9' }],
+  ])('a guided patch (%s) runs the guided statement, with no phase condition, and answers 200', async (_n, updates) => {
+    mocks.sql.mockResolvedValueOnce([guidedRow()]).mockResolvedValueOnce([{ board_ok: true, owner_ok: true, ...row }]);
+    const res = await patch(updates);
+    expect(res.status).toBe(200);
+    const text = callText(1);
+    expect(text).toContain('FOR SHARE');
+    expect(text).toContain('archived_at IS NULL AND deleted_at IS NULL');
+    expect(text).not.toContain('phase =');
+    expect(callValues(1)).not.toContain('discuss');
+    expect(channelPublish).toHaveBeenCalledWith('action-item-updated', { item: row });
+  });
+
+  it('owner null sets both columns from the owner CTE, which is empty; both columns are cleared', async () => {
+    mocks.sql.mockResolvedValueOnce([guidedRow()]).mockResolvedValueOnce([{ board_ok: true, owner_ok: true, ...row }]);
+    await patch({ assignee_participant_id: null });
+    const text = callText(1);
+    expect(text).toContain('assignee = CASE WHEN ?::boolean THEN (SELECT display_name FROM owner)');
+    expect(text).toContain('assignee_participant_id = CASE WHEN ?::boolean THEN (SELECT id FROM owner)');
+    expect(callValues(1)).toContain(null);
   });
 
   it('assignee_participant_id: 7 is 400 Invalid assignee', async () => {

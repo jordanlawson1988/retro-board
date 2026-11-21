@@ -138,7 +138,7 @@ function stripFlags(row: Record<string, unknown>): Record<string, unknown> {
   return item;
 }
 
-/** A guided board's create: optional topic link and owner, conditional on the phase the request was checked against. */
+/** A guided board's create: optional topic link and owner. Only a link to a topic needs the phase the request was checked against (Discuss); every phase allows action items. */
 async function guidedCreate(loaded: Loaded, boardId: string, body: Record<string, unknown>) {
   const { description, assignee, dueDate, cardId, assigneeParticipantId } = body;
   if (cardId !== undefined && cardId !== null && !validateClientId(cardId).ok) {
@@ -166,7 +166,7 @@ async function guidedCreate(loaded: Loaded, boardId: string, body: Record<string
     [row] = await sql`
     WITH ok AS (
       SELECT 1 AS one FROM boards
-      WHERE id = ${boardId} AND phase = ${phase} AND archived_at IS NULL AND deleted_at IS NULL
+      WHERE id = ${boardId} AND (${topicId}::text IS NULL OR phase = ${phase}) AND archived_at IS NULL AND deleted_at IS NULL
       FOR SHARE
     ), topic AS (
       SELECT id FROM cards WHERE id = ${topicId}::text AND board_id = ${boardId} AND merged_with IS NULL
@@ -219,13 +219,12 @@ async function guidedPatch(
   }
   const hasOwner = owner !== undefined;
   const ownerId = typeof owner === 'string' ? owner : null;
-  const phase = loaded.board.phase;
   const has = (k: string) => updates[k] !== undefined;
 
   const [row] = await sql`
     WITH ok AS (
       SELECT 1 AS one FROM boards
-      WHERE id = ${boardId} AND phase = ${phase} AND archived_at IS NULL AND deleted_at IS NULL
+      WHERE id = ${boardId} AND archived_at IS NULL AND deleted_at IS NULL
       FOR SHARE
     ), owner AS (
       SELECT id, display_name FROM participants WHERE id = ${ownerId}::text AND board_id = ${boardId}

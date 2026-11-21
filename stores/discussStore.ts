@@ -201,8 +201,9 @@ export const useDiscussStore = create<DiscussState>((set, get) => ({
   },
 
   assignActionItem: async (itemId, participantId) => {
+    // No participant needed: a signed-in facilitator who has not joined may change an action item.
     const board = guidedBoard();
-    if (!board || !useBoardStore.getState().currentParticipantId) return;
+    if (!board) return;
     const boardId = board.id;
     const { actionItems, participants } = useBoardStore.getState();
     const previous = actionItems.find((a) => a.id === itemId);

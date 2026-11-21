@@ -67,6 +67,11 @@ const txCalls = () => {
   return calls;
 };
 
+const callText = (i: number) => (mocks.sql.mock.calls[i][0] as string[]).join('?');
+const callValues = (i: number) => mocks.sql.mock.calls[i].slice(1);
+const post = (body: unknown) => POST(req(body), ctx);
+const txTexts = txCalls;
+
 const FUTURE = new Date(Date.now() + 2 * 86_400_000).toISOString();
 const PAST = '2020-01-01T00:00:00.000Z';
 
@@ -106,12 +111,12 @@ describe('POST /phase move', () => {
     expect(values).toContain(JSON.stringify(phaseSettings('group')));
     expect(values).toContain('b1');
     expect(values).toContain('reflect');
-    expect(text).toContain(`'{"deadline":null}'::jsonb`);
+    expect(text).toContain(`'deadline', NULL::text`);
     expect(text).toContain("mode = 'guided'");
     expect(text).toContain('archived_at IS NULL AND deleted_at IS NULL');
   });
 
-  it('takes the per-board vote lock first, in the same transaction, and the UPDATE text is unchanged', async () => {
+  it('takes the per-board vote lock first, in the same transaction, then runs the move statement', async () => {
     mocks.sql.mockResolvedValueOnce([guidedIn('vote')]);
     mocks.tx.mockResolvedValueOnce([[], [updateRow('discuss')]]);
     await POST(req({ action: 'move', from: 'vote', to: 'next' }), ctx);
@@ -121,7 +126,18 @@ describe('POST /phase move', () => {
     expect(update.text).toBe(`
       UPDATE boards SET phase = ?,
         settings = settings || ?::jsonb,
-        phase_config = phase_config || '{"deadline":null}'::jsonb
+        phase_config = phase_config || jsonb_build_object(
+          'deadline', NULL::text,
+          'topic', CASE WHEN ?::text = ? THEN (
+            SELECT c.id FROM cards c
+            WHERE c.board_id = ? AND c.merged_with IS NULL
+            ORDER BY (
+              SELECT COALESCE(SUM(v.count), 0) FROM votes v
+              WHERE v.board_id = ?
+                AND v.card_id IN (SELECT g.id FROM cards g WHERE g.board_id = ? AND (g.id = c.id OR g.merged_with = c.id))
+            ) DESC, date_trunc('milliseconds', c.created_at) ASC, c.id COLLATE "C" ASC
+            LIMIT 1
+          ) END)
       WHERE id = ? AND mode = 'guided' AND phase = ?
         AND archived_at IS NULL AND deleted_at IS NULL
       RETURNING phase, settings, phase_config
@@ -341,5 +357,64 @@ describe('POST /phase validation and limits', () => {
     expect(res.status).toBe(429);
     expect(mocks.sql).not.toHaveBeenCalled();
     expect(mocks.rate).toHaveBeenCalledWith(expect.any(Request), 'phase', 60, 60);
+  });
+});
+
+describe('POST /phase topic', () => {
+  it('moving into Discuss stores the first agenda item, computed in the locked move statement', async () => {
+    mocks.sql.mockResolvedValueOnce([ctxRow({ cp_is_admin: true, mode: 'guided', phase: 'vote' })]);
+    mocks.tx.mockResolvedValueOnce([[], [{ phase: 'discuss', settings: {}, phase_config: { deadline: null, topic: 'c9' } }]]);
+    const res = await post({ action: 'move', from: 'vote', to: 'next' });
+    expect((await res.json()).phaseConfig).toEqual({ deadline: null, topic: 'c9' });
+    const [lock, stmt] = txTexts();
+    expect(lock.values).toEqual(['b1:votes']);
+    expect(stmt.text).toContain(`jsonb_build_object(`);
+    expect(stmt.text).toContain(`'topic', CASE WHEN ?::text = ? THEN (`);
+    expect(stmt.text).toContain(`WHERE c.board_id = ? AND c.merged_with IS NULL`);
+    expect(stmt.text).toContain(`) DESC, date_trunc('milliseconds', c.created_at) ASC, c.id COLLATE "C" ASC`);
+    expect(stmt.values).toEqual(expect.arrayContaining(['discuss']));
+  });
+
+  it('set-topic: two round-trips, publishes phase-changed without refetch', async () => {
+    mocks.sql.mockResolvedValueOnce([ctxRow({ cp_is_admin: true, mode: 'guided', phase: 'discuss' })])
+      .mockResolvedValueOnce([{ topic_ok: true, phase: 'discuss', settings: {}, phase_config: { deadline: null, topic: 'c2' } }]);
+    const res = await post({ action: 'set-topic', cardId: 'c2' });
+    expect(res.status).toBe(200);
+    expect(mocks.sql).toHaveBeenCalledTimes(2);
+    expect(callText(1)).toContain('merged_with IS NULL');
+    expect(callText(1)).toContain('AND phase = ?');
+    expect(callValues(1)).toEqual(expect.arrayContaining(['c2', 'b1', 'discuss']));
+    expect(mocks.publish).toHaveBeenCalledWith('phase-changed', expect.not.objectContaining({ refetch: true }));
+    expect(mocks.publish.mock.calls[0][1]).toMatchObject({ phase: 'discuss', phaseConfig: { deadline: null, topic: 'c2' } });
+    expect(mocks.tx).not.toHaveBeenCalled();
+  });
+
+  it('set-topic refusals', async () => {
+    mocks.sql.mockResolvedValueOnce([ctxRow({ cp_is_admin: true, mode: 'guided', phase: 'discuss' })]).mockResolvedValueOnce([{ topic_ok: false, phase: null }]);
+    const missing = await post({ action: 'set-topic', cardId: 'child' });
+    expect(missing.status).toBe(404);
+    expect((await missing.json()).error).toBe('That topic is not on the agenda');
+    mocks.sql.mockResolvedValueOnce([ctxRow({ cp_is_admin: true, mode: 'guided', phase: 'discuss' })]).mockResolvedValueOnce([{ topic_ok: true, phase: null }]);
+    expect((await (await post({ action: 'set-topic', cardId: 'c2' })).json()).error).toBe('The phase already changed');
+    mocks.sql.mockResolvedValueOnce([ctxRow({ mode: 'guided', phase: 'discuss', cp_is_admin: false })]);
+    expect((await post({ action: 'set-topic', cardId: 'c2' })).status).toBe(403);
+    mocks.sql.mockResolvedValueOnce([ctxRow({ cp_is_admin: true, mode: 'guided', phase: 'vote' })]);
+    expect((await (await post({ action: 'set-topic', cardId: 'c2' })).json()).error).toBe('Not available during Vote');
+    mocks.sql.mockResolvedValueOnce([ctxRow({ cp_is_admin: true, mode: 'open', phase: null })]);
+    expect((await (await post({ action: 'set-topic', cardId: 'c2' })).json()).error).toBe('This board is not in guided mode');
+    expect(mocks.publish).not.toHaveBeenCalled();
+  });
+
+  it('409 Board is completed for set-topic on an archived board', async () => {
+    mocks.sql.mockResolvedValueOnce([ctxRow({ cp_is_admin: true, mode: 'guided', phase: 'discuss', archived_at: '2026-01-01' })]);
+    const res = await post({ action: 'set-topic', cardId: 'c2' });
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe('Board is completed');
+  });
+
+  it('400 for a malformed cardId with zero queries', async () => {
+    expect((await post({ action: 'set-topic', cardId: 'bad id!' })).status).toBe(400);
+    expect((await post({ action: 'set-topic' })).status).toBe(400);
+    expect(mocks.sql).not.toHaveBeenCalled();
   });
 });

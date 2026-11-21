@@ -203,8 +203,15 @@ describe('guidedModeEnabled', () => {
 describe('phaseConfigAfterClose', () => {
   const cfg = { deadline: '2026-12-01T00:00:00.000Z' };
   it('clears the deadline when the event carries a phase (guided board)', () => {
-    expect(phaseConfigAfterClose(cfg, { phase: 'done' })).toEqual({ deadline: null });
-    expect(phaseConfigAfterClose(cfg, { phase: 'discuss' })).toEqual({ deadline: null });
+    expect(phaseConfigAfterClose(cfg, { phase: 'done' })).toEqual({ deadline: null, topic: null });
+    expect(phaseConfigAfterClose(cfg, { phase: 'discuss' })).toEqual({ deadline: null, topic: null });
+  });
+  it('clears the topic too', () => {
+    expect(phaseConfigAfterClose({ deadline: 'x', topic: 'c1' }, { phase: 'done' })).toEqual({ deadline: null, topic: null });
+  });
+  it('returns the same object for a payload that only asks for a refetch', () => {
+    const c = { deadline: null };
+    expect(phaseConfigAfterClose(c, { refetch: true })).toBe(c);
   });
   it('leaves the config alone for an open board (phase null or missing) or garbage', () => {
     expect(phaseConfigAfterClose(cfg, { phase: null })).toBe(cfg);

@@ -304,7 +304,7 @@ export function guidedModeEnabled(response: unknown): boolean {
  */
 export function phaseConfigAfterClose(config: PhaseConfig, payload: unknown): PhaseConfig {
   const phase = payload && typeof payload === 'object' ? (payload as { phase?: unknown }).phase : undefined;
-  return isPhaseId(phase) ? { ...config, deadline: null } : config;
+  return isPhaseId(phase) ? { ...config, deadline: null, topic: null } : config;
 }
 
 /**

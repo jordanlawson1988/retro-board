@@ -73,7 +73,7 @@ describe('complete', () => {
     mocks.sql.mockResolvedValueOnce([guided('discuss')]).mockResolvedValueOnce([{ settings: DEFAULT_BOARD_SETTINGS }]);
     await POST(postReq({ action: 'complete' }), ctx);
     expect(mocks.sql).toHaveBeenCalledTimes(2);
-    expect(sqlText(1)).toContain(`phase_config = phase_config || '{"deadline":null}'::jsonb`);
+    expect(sqlText(1)).toContain(`phase_config = phase_config || '{"deadline":null,"topic":null}'::jsonb`);
     mocks.sql.mockClear();
     mocks.sql.mockResolvedValueOnce([ctxRow()]).mockResolvedValueOnce([{ settings: DEFAULT_BOARD_SETTINGS }]);
     await POST(postReq({ action: 'complete' }), ctx);
@@ -89,6 +89,19 @@ describe('complete', () => {
     expect(sqlText(1)).not.toContain('mode');
     expect(sqlText(1)).toContain(`'{"card_visibility":"visible","board_locked":true}'::jsonb`);
     expect(mocks.publish.mock.calls[0][1]).toMatchObject({ phase: null, refetch: true });
+  });
+
+  it('the open complete statement is pinned', async () => {
+    mocks.sql.mockResolvedValueOnce([ctxRow()]).mockResolvedValueOnce([{ settings: DEFAULT_BOARD_SETTINGS }]);
+    await POST(postReq({ action: 'complete' }), ctx);
+    expect((mocks.sql.mock.calls[1][0] as string[]).join('?')).toMatchInlineSnapshot(`
+      "
+            UPDATE boards SET archived_at = ?,
+              settings = settings || '{"card_visibility":"visible","board_locked":true}'::jsonb
+            WHERE id = ?
+            RETURNING settings
+          "
+    `);
   });
 
   it('a row with no mode key (database without migration 015) is open', async () => {
@@ -123,6 +136,18 @@ describe('reopen', () => {
     expect(sqlText(1)).not.toContain('mode');
     expect(sqlText(1)).toContain(`'{"board_locked":false}'::jsonb`);
     expect(mocks.publish).toHaveBeenCalledWith('board-reopened', { settings: DEFAULT_BOARD_SETTINGS, phase: null, refetch: true });
+  });
+
+  it('the open reopen statement is pinned', async () => {
+    mocks.sql.mockResolvedValueOnce([authority()]).mockResolvedValueOnce([{ settings: DEFAULT_BOARD_SETTINGS }]);
+    await POST(postReq({ action: 'reopen' }), ctx);
+    expect((mocks.sql.mock.calls[1][0] as string[]).join('?')).toMatchInlineSnapshot(`
+      "
+            UPDATE boards SET archived_at = NULL, settings = settings || '{"board_locked":false}'::jsonb
+            WHERE id = ?
+            RETURNING settings
+          "
+    `);
   });
 
   it('the guided reopen clears the phase deadline in the same statement; the open one never mentions phase_config', async () => {

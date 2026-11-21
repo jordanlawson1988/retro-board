@@ -357,7 +357,7 @@ export async function POST(
       ? await sql`
       UPDATE boards SET archived_at = ${archivedAt}, phase = ${FINAL_PHASE},
         settings = settings || ${JSON.stringify(phaseSettings(FINAL_PHASE))}::jsonb,
-        phase_config = phase_config || '{"deadline":null}'::jsonb
+        phase_config = phase_config || '{"deadline":null,"topic":null}'::jsonb
       WHERE id = ${boardId}
       RETURNING settings
     `

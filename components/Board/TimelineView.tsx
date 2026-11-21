@@ -5,8 +5,11 @@ import { cn } from '@/utils/cn';
 import { isMine } from '@/utils/isMine';
 import { useCardText } from '@/hooks/useCardText';
 import { VotePill } from './VotePill';
+import { GuidedVoteControl } from './GuidedVoteControl';
+import { useBoardStore } from '@/stores/boardStore';
+import { GUIDED_MODE } from '@/lib/constants/phases';
 import { voteTotalsRevealed } from '@/lib/votePillPolicy';
-import { voteTotalsByCard, votesUsedBy } from '@/lib/votes';
+import { leadCardVotes, voteSurface, voteTotalsByCard, votesUsedBy } from '@/lib/votes';
 import type { Column, Card, Vote, Participant } from '@/types';
 
 interface TimelineViewProps {
@@ -42,6 +45,11 @@ export function TimelineView({
   participants,
 }: TimelineViewProps) {
   const cardText = useCardText();
+  // Two primitives read once for the whole view (not per row): an open board answers false and 'pill'.
+  const guided = useBoardStore((s) => s.board?.mode === GUIDED_MODE);
+  const surface = useBoardStore((s) =>
+    s.board ? voteSurface(s.board.mode, s.board.settings, votingEnabled && !isCompleted, false) : 'pill'
+  );
   const columnMap = useMemo(() => {
     const map = new Map<string, Column>();
     for (const col of columns) {
@@ -107,7 +115,7 @@ export function TimelineView({
               <div className="flex flex-col gap-2">
                 {group.cards.map((card) => {
                   const col = columnMap.get(card.column_id);
-                  const voteCount = voteCountMap.get(card.id) || 0;
+                  const voteCount = leadCardVotes(guided, card.id, cards, voteCountMap);
                   const hasVoted = votes.some(
                     (v) => v.card_id === card.id && v.voter_id === currentParticipantId
                   );
@@ -147,18 +155,22 @@ export function TimelineView({
                       {/* Vote count — also shown as totals once voting is off */}
                       {(votingEnabled || (voteCount > 0 && voteTotalsRevealed(secretVoting, isCompleted))) && (
                         <div className="mt-2 flex items-center">
-                          <VotePill
-                            voteCount={voteCount}
-                            voters={votes.filter((v) => v.card_id === card.id)}
-                            participants={participants}
-                            currentParticipantId={currentParticipantId}
-                            votingEnabled={votingEnabled}
-                            isCompleted={isCompleted}
-                            hasVoted={hasVoted}
-                            voteLimitReached={voteLimitReached}
-                            onToggleVote={() => onToggleVote(card.id)}
-                            secretVoting={secretVoting}
-                          />
+                          {surface === 'stepper' ? (
+                            <GuidedVoteControl cardId={card.id} childCard={false} />
+                          ) : (
+                            <VotePill
+                              voteCount={voteCount}
+                              voters={votes.filter((v) => v.card_id === card.id)}
+                              participants={participants}
+                              currentParticipantId={currentParticipantId}
+                              votingEnabled={votingEnabled}
+                              isCompleted={isCompleted}
+                              hasVoted={hasVoted}
+                              voteLimitReached={voteLimitReached}
+                              onToggleVote={() => onToggleVote(card.id)}
+                              secretVoting={secretVoting}
+                            />
+                          )}
                         </div>
                       )}
                     </div>

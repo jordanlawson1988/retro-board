@@ -28,6 +28,7 @@ import {
   summarySendsDirect,
 } from './helpers';
 import { signUnsubscribeToken } from '../lib/email-unsubscribe';
+import { SUMMARY_EMAIL_FEATURE } from '../lib/constants/features';
 import { COMPLETED_CLOSED_MESSAGE } from '../lib/constants/board-access';
 
 /**
@@ -57,11 +58,11 @@ test.beforeAll(async () => {
     throw new Error('Refusing to run: SUMMARY_EMAIL_TRANSPORT is set');
   }
   await setFlagDirect('guided_mode', true);
-  await setFlagDirect('summary_email', true);
+  await setFlagDirect(SUMMARY_EMAIL_FEATURE, true);
 });
 
 test.afterAll(async () => {
-  await setFlagDirect('summary_email', false);
+  await setFlagDirect(SUMMARY_EMAIL_FEATURE, false);
 });
 
 test.afterEach(async () => {
@@ -297,7 +298,7 @@ test('with the summary_email flag off, completing records and sends nothing', as
   const r = await retro(browser);
   const users = await makeUsers();
   await linkUsers(r, users, true);
-  await setFlagDirect('summary_email', false);
+  await setFlagDirect(SUMMARY_EMAIL_FEATURE, false);
   try {
     await ok(await apiComplete(r.ctxA.request, r.boardId), 'complete');
     // The flag is read after the response, so give the dispatch time to run before looking.
@@ -310,7 +311,7 @@ test('with the summary_email flag off, completing records and sends nothing', as
     const board = await getBoard(r.ctxA.request, r.boardId);
     expect(board.board.archived_at).toBeTruthy();
   } finally {
-    await setFlagDirect('summary_email', true);
+    await setFlagDirect(SUMMARY_EMAIL_FEATURE, true);
   }
 });
 

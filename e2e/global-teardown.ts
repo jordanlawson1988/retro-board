@@ -1,3 +1,4 @@
+import { SUMMARY_EMAIL_FEATURE } from '../lib/constants/features';
 import { devDb, E2E_TITLE_PREFIX, E2E_USER_EMAIL_DOMAIN, E2E_USER_EMAIL_PREFIX, RUN_START_ENV } from './e2e-run';
 
 /**
@@ -26,6 +27,6 @@ export default async function globalTeardown() {
     RETURNING id`;
   console.log(`e2e teardown: removed ${users.length} throwaway account(s) created by this run`);
 
-  const flags = await db`UPDATE feature_flags SET is_enabled = false WHERE key = 'summary_email' RETURNING key`;
+  const flags = await db`UPDATE feature_flags SET is_enabled = false WHERE key = ${SUMMARY_EMAIL_FEATURE} RETURNING key`;
   console.log(`e2e teardown: summary_email flag forced off (${flags.length} row)`);
 }

@@ -55,6 +55,7 @@ export function SummaryView({ summary }: { summary: RetroSummary }) {
   const otherId = useId();
   const peopleId = useId();
   const completed = completedOnLabel(summary.completedAt);
+  // This component is client-only (it mounts after a client fetch), so the empty server snapshot is never what prints.
   // The origin is only known in the browser. The server snapshot is '' (also used while hydrating), so
   // server and client agree on first render and the real origin appears right after mount.
   const origin = useSyncExternalStore(subscribeNever, readOrigin, readNoOrigin);

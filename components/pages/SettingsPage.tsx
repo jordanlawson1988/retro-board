@@ -13,6 +13,7 @@ import type { User } from '@/types';
 import { flagEnabled } from '@/lib/feature-flags';
 import { SUMMARY_EMAIL_FEATURE } from '@/lib/constants/features';
 import {
+  EMAIL_PREFERENCES_PATH,
   EMAIL_SECTION_DESCRIPTION,
   EMAIL_SECTION_TITLE,
   PREFERENCE_SAVED,
@@ -138,8 +139,6 @@ function ProfileSection({ user }: { user: User }) {
     </Section>
   );
 }
-
-const EMAIL_PREFERENCES_PATH = '/api/user/email-preferences';
 
 /**
  * Renders nothing unless the public flags response says summary_email is on. Only then does it

@@ -1,6 +1,7 @@
 import { expect, type APIRequestContext, type BrowserContext, type Page } from '@playwright/test';
 import { neon } from '@neondatabase/serverless';
 import { nanoid } from 'nanoid';
+import { E2E_USER_EMAIL_DOMAIN, E2E_USER_EMAIL_PREFIX } from './e2e-run';
 
 /** Board settings the server stores; mirrors utils/constants DEFAULT_BOARD_SETTINGS. */
 export const BASE_SETTINGS = {
@@ -436,7 +437,6 @@ export async function actionRowsDirect(boardId: string): Promise<
 // count) if any address does not end in @example.com.
 
 const E2E_USER_ID_PREFIX = 'e2e';
-const E2E_ADDRESS_SUFFIX = '@example.com';
 
 /** Create a throwaway account (verified or not) with an `e2e-<random>@example.com` address. */
 export async function createUserDirect(opts: {
@@ -457,7 +457,7 @@ export async function createUserDirect(opts: {
   }
   const id = E2E_USER_ID_PREFIX + nanoid(20);
   const name = `E2E User ${nanoid(6)}`;
-  const email = `e2e-${nanoid(10).toLowerCase()}${E2E_ADDRESS_SUFFIX}`;
+  const email = `${E2E_USER_EMAIL_PREFIX}${nanoid(10).toLowerCase()}${E2E_USER_EMAIL_DOMAIN}`;
   await db`
     INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
     VALUES (${id}, ${name}, ${email}, ${opts.verified}, now(), now())`;
@@ -478,7 +478,7 @@ export async function setBoardOwnerDirect(boardId: string, userId: string): Prom
   const rows = await db`
     UPDATE boards SET owner_id = ${userId}
     WHERE id = ${boardId} AND title = ${`e2e ${boardId}`}
-      AND EXISTS (SELECT 1 FROM "user" WHERE id = ${userId} AND email LIKE ${'e2e-%' + E2E_ADDRESS_SUFFIX})
+      AND EXISTS (SELECT 1 FROM "user" WHERE id = ${userId} AND email LIKE ${E2E_USER_EMAIL_PREFIX + '%' + E2E_USER_EMAIL_DOMAIN})
     RETURNING id`;
   if (rows.length !== 1) throw new Error(`setBoardOwnerDirect touched ${rows.length} rows`);
 }
@@ -494,7 +494,7 @@ export async function linkParticipantUserDirect(boardId: string, participantId: 
     UPDATE participants SET user_id = ${userId}
     WHERE id = ${participantId} AND board_id = ${boardId}
       AND EXISTS (SELECT 1 FROM boards WHERE id = ${boardId} AND title = ${`e2e ${boardId}`})
-      AND EXISTS (SELECT 1 FROM "user" WHERE id = ${userId} AND email LIKE ${'e2e-%' + E2E_ADDRESS_SUFFIX})
+      AND EXISTS (SELECT 1 FROM "user" WHERE id = ${userId} AND email LIKE ${E2E_USER_EMAIL_PREFIX + '%' + E2E_USER_EMAIL_DOMAIN})
     RETURNING id`;
   if (rows.length !== 1) throw new Error(`linkParticipantUserDirect touched ${rows.length} rows`);
 }
@@ -515,7 +515,7 @@ export async function addMemberDirect(
     SELECT b.id, u.id, ${role}
     FROM boards b, "user" u
     WHERE b.id = ${boardId} AND b.title = ${`e2e ${boardId}`}
-      AND u.id = ${userId} AND u.email LIKE ${'e2e-%' + E2E_ADDRESS_SUFFIX}
+      AND u.id = ${userId} AND u.email LIKE ${E2E_USER_EMAIL_PREFIX + '%' + E2E_USER_EMAIL_DOMAIN}
     RETURNING id`;
   if (rows.length !== 1) throw new Error(`addMemberDirect inserted ${rows.length} rows`);
 }
@@ -530,7 +530,7 @@ export async function setSummaryPreferenceDirect(userId: string, enabled: boolea
   const rows = await db`
     INSERT INTO email_preferences (user_id, summary_email, updated_at)
     SELECT ${userId}, ${enabled}::boolean, now()
-    WHERE EXISTS (SELECT 1 FROM "user" WHERE id = ${userId} AND email LIKE ${'e2e-%' + E2E_ADDRESS_SUFFIX})
+    WHERE EXISTS (SELECT 1 FROM "user" WHERE id = ${userId} AND email LIKE ${E2E_USER_EMAIL_PREFIX + '%' + E2E_USER_EMAIL_DOMAIN})
     ON CONFLICT (user_id) DO UPDATE SET summary_email = EXCLUDED.summary_email, updated_at = now()
     RETURNING user_id`;
   if (rows.length !== 1) throw new Error(`setSummaryPreferenceDirect wrote ${rows.length} rows`);
@@ -563,8 +563,8 @@ export async function outboxRowsDirect(boardId: string): Promise<
     FROM email_outbox o JOIN boards b ON b.id = o.board_id
     WHERE o.board_id = ${boardId} AND b.title = ${`e2e ${boardId}`}
     ORDER BY o.to_address`;
-  const offending = rows.filter((r) => !(r.to_address as string).endsWith(E2E_ADDRESS_SUFFIX)).length;
-  if (offending > 0) throw new Error(`${offending} outbox row(s) are addressed outside ${E2E_ADDRESS_SUFFIX}`);
+  const offending = rows.filter((r) => !(r.to_address as string).endsWith(E2E_USER_EMAIL_DOMAIN)).length;
+  if (offending > 0) throw new Error(`${offending} outbox row(s) are addressed outside ${E2E_USER_EMAIL_DOMAIN}`);
   return rows.map((r) => ({
     to_address: r.to_address as string,
     subject: r.subject as string,

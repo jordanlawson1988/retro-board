@@ -57,6 +57,11 @@ async function recordOutcome(
   `;
 }
 
+/** The driver returns Date objects; the summary model is written for the JSON the browser gets. */
+function toWireShape<T>(rows: T): T {
+  return JSON.parse(JSON.stringify(rows)) as T;
+}
+
 export async function dispatchSummaryEmail(
   input: DispatchInput,
   env: Record<string, string | undefined> = process.env
@@ -69,7 +74,7 @@ export async function dispatchSummaryEmail(
     if (!(await canUse(SUMMARY_EMAIL_FEATURE, null))) return 'flag-off';
 
     // 2. One read-only snapshot of the board as this completion left it.
-    const [boardRows, cardRows, voteRows, itemRows, participantRows, commentRows] = await sqlTransaction(
+    const [boardRows, cardRows, voteRows, itemRows, participantRows, commentRows] = toWireShape(await sqlTransaction(
       (txn) => [
         txn`SELECT id, title, archived_at, trust_version, settings FROM boards
           WHERE id = ${boardId} AND archived_at = ${completedAt}::timestamptz AND deleted_at IS NULL AND mode = ${GUIDED_MODE}`,
@@ -80,7 +85,7 @@ export async function dispatchSummaryEmail(
         txn`SELECT * FROM comments WHERE board_id = ${boardId} ORDER BY created_at, id`,
       ],
       { readOnly: true, isolationLevel: 'RepeatableRead' }
-    );
+    ));
     const board = (boardRows as unknown as Record<string, unknown>[])[0] as unknown as { id: string; title: string; trust_version: 1 | 2; settings: Partial<BoardSettings> } | undefined;
     if (!board) return 'stale';
 

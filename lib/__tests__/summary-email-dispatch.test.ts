@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { NO_DUE_DATE } from '@/lib/constants/email';
+import { DUE_PREFIX } from '@/lib/constants/summary';
 import { verifyUnsubscribeToken } from '@/lib/email-unsubscribe';
 
 const mocks = vi.hoisted(() => ({
@@ -37,23 +39,28 @@ const COMPLETED = '2026-11-21T10:00:00.123Z';
 const at = (ms: number) => new Date(Date.UTC(2026, 10, 21, 9, 0, 0, ms)).toISOString();
 const env = { NEXT_PUBLIC_APP_URL: 'https://x.test' };
 
-const card = (id: string, ms: number, over: Record<string, unknown> = {}) => ({
-  id, column_id: 'col', board_id: 'b1', text: `text ${id}`, author_name: 'AUTHOR-SECRET', author_id: 'p1', color: null,
-  position: 0, merged_with: null, group_title: null, reactions: {}, created_at: at(ms), updated_at: at(ms), ...over,
-});
-
-const boardRow = {
-  id: 'b1', title: 'Sprint 12', archived_at: COMPLETED, trust_version: 2, settings: { anonymous_cards: true },
-};
-const snapshot = [
-  [boardRow],
-  [card('L', 1, { group_title: 'Deploys' }), card('k', 3, { merged_with: 'L', text: 'CHILD-SECRET' }), card('S', 2, { text: 'Slow builds' })],
-  [{ id: 'v1', card_id: 'L', board_id: 'b1', voter_id: 'p1', count: 2, created_at: at(0) }],
-  [{ id: 'i1', board_id: 'b1', description: 'Write the runbook', assignee: null, due_date: null, status: 'open', created_at: at(1), card_id: 'L' }],
-  [{ id: 'p1', board_id: 'b1', display_name: 'AUTHOR-SECRET', is_admin: true, user_id: null, joined_at: at(0), last_seen: at(0) }],
-  [{ id: 'c1', board_id: 'b1', card_id: 'L', parent_id: null, author_participant_id: 'p1', author_name: 'AUTHOR-SECRET',
-    is_anonymous: true, body: 'COMMENT-SECRET', created_at: at(1), edited_at: null, deleted_at: null }],
-];
+/** The snapshot as the Neon driver returns it (every date a Date), or the same rows with ISO strings. */
+function buildSnapshot(asDate: boolean) {
+  const d = (ms: number) => (asDate ? new Date(Date.UTC(2026, 10, 21, 9, 0, 0, ms)) : at(ms));
+  const dueDate = asDate ? new Date(Date.UTC(2026, 10, 30)) : new Date(Date.UTC(2026, 10, 30)).toISOString();
+  const card = (id: string, ms: number, over: Record<string, unknown> = {}) => ({
+    id, column_id: 'col', board_id: 'b1', text: `text ${id}`, author_name: 'AUTHOR-SECRET', author_id: 'p1', color: null,
+    position: 0, merged_with: null, group_title: null, reactions: {}, created_at: d(ms), updated_at: d(ms), ...over,
+  });
+  return [
+    [{ id: 'b1', title: 'Sprint 12', archived_at: asDate ? new Date(COMPLETED) : COMPLETED, trust_version: 2, settings: { anonymous_cards: true } }],
+    [card('L', 1, { group_title: 'Deploys' }), card('k', 3, { merged_with: 'L', text: 'CHILD-SECRET' }), card('S', 2, { text: 'Slow builds' })],
+    [{ id: 'v1', card_id: 'L', board_id: 'b1', voter_id: 'p1', count: 2, created_at: d(0) }],
+    [
+      { id: 'i1', board_id: 'b1', description: 'Write the runbook', assignee: null, due_date: null, status: 'open', created_at: d(1), card_id: 'L' },
+      { id: 'i2', board_id: 'b1', description: 'Ship the fix', assignee: 'Bo', due_date: dueDate, status: 'open', created_at: d(2), card_id: 'S' },
+    ],
+    [{ id: 'p1', board_id: 'b1', display_name: 'AUTHOR-SECRET', is_admin: true, user_id: null, joined_at: d(0), last_seen: d(0) }],
+    [{ id: 'c1', board_id: 'b1', card_id: 'L', parent_id: null, author_participant_id: 'p1', author_name: 'AUTHOR-SECRET',
+      is_anonymous: true, body: 'COMMENT-SECRET', created_at: d(1), edited_at: null, deleted_at: null }],
+  ];
+}
+const snapshot = buildSnapshot(true);
 const claimed = [{ user_id: 'u1', email: 'a@example.com' }, { user_id: 'u2', email: 'b@example.com' }];
 
 const text = (call: unknown[]) => (call[0] as string[]).join('?').replace(/\s+/g, ' ');
@@ -304,5 +311,29 @@ describe('dispatchSummaryEmail', () => {
     await dispatchSummaryEmail({ boardId: 'b1', completedAt: COMPLETED }, env);
     expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
+  });
+
+  describe('one row shape for the email and the page', () => {
+    const messagesFor = async (asDate: boolean) => {
+      setup({ snapshotRows: buildSnapshot(asDate) });
+      mocks.send.mockClear();
+      await dispatchSummaryEmail({ boardId: 'b1', completedAt: COMPLETED }, env);
+      return mocks.send.mock.calls[0][0].messages as { text: string }[];
+    };
+
+    it('driver-style Date rows still show an action item due date', async () => {
+      const messages = await messagesFor(true);
+      const line = messages[0].text.split('\n').find((l) => l.includes('Ship the fix')) ?? '';
+      expect(line).toContain(`${DUE_PREFIX}November 30, 2026`);
+      expect(line).not.toContain(NO_DUE_DATE);
+      const other = messages[0].text.split('\n').find((l) => l.includes('Write the runbook')) ?? '';
+      expect(other).toContain(NO_DUE_DATE);
+    });
+
+    it('messages built from Date rows equal those built from the same rows with ISO string dates', async () => {
+      const fromDates = await messagesFor(true);
+      const fromStrings = await messagesFor(false);
+      expect(fromDates).toEqual(fromStrings);
+    });
   });
 });

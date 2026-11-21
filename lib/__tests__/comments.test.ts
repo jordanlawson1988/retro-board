@@ -125,6 +125,20 @@ describe('threadsFor', () => {
   });
 });
 
+describe('threadsFor lone tombstones', () => {
+  it('leaves out a deleted top-level comment with no replies', () => {
+    const list = [comment({ id: 'a' }), comment({ id: 'd', body: '', deleted_at: at(7), author_participant_id: null, author_name: null })];
+    expect(threadsFor(list, ['L']).map((t) => t.top.id)).toEqual(['a']);
+  });
+  it('keeps a deleted top-level comment that still has a reply', () => {
+    const list = [
+      comment({ id: 'd', body: '', deleted_at: at(7), author_participant_id: null, author_name: null }),
+      comment({ id: 'r', parent_id: 'd', created_at: at(8) }),
+    ];
+    expect(threadsFor(list, ['L']).map((t) => t.top.id)).toEqual(['d']);
+  });
+});
+
 describe('author and permissions', () => {
   it('isMyComment accepts is_mine or a matching participant id', () => {
     expect(isMyComment(comment({ author_participant_id: null, is_mine: true }), 'p9')).toBe(true);
@@ -228,6 +242,17 @@ describe('merging and replay', () => {
     const tombstone = comment({ id: 'm1', body: '', deleted_at: at(5), author_participant_id: null, author_name: null });
     const out = removeComments([comment({ id: 'm1' }), comment({ id: 'm2' })], ['m2'], tombstone);
     expect(out).toEqual([{ ...tombstone, is_mine: false }]);
+  });
+  it('removeComments appends a tombstone whose row is not in the list', () => {
+    const tombstone = comment({ id: 'm5', body: '', deleted_at: at(5), author_participant_id: null, author_name: null });
+    const out = removeComments([comment({ id: 'm1' }), comment({ id: 'm2' })], ['m2'], tombstone);
+    expect(out.map((c) => c.id)).toEqual(['m1', 'm5']);
+    expect(out[1].deleted_at).toBe(at(5));
+  });
+  it('removeComments applied twice gives the same list', () => {
+    const tombstone = comment({ id: 'm5', body: '', deleted_at: at(5), author_participant_id: null, author_name: null });
+    const once = removeComments([comment({ id: 'm1' }), comment({ id: 'm2' })], ['m2'], tombstone);
+    expect(removeComments(once, ['m2'], tombstone)).toEqual(once);
   });
   it('removeComments without a tombstone only drops', () => {
     expect(removeComments([comment({ id: 'm1' }), comment({ id: 'm2' })], ['m2'], null).map((c) => c.id)).toEqual(['m1']);
@@ -334,5 +359,35 @@ describe('deleteCommentOutcome', () => {
   });
   it('is ok when permitted', () => {
     expect(deleteCommentOutcome(row)).toBe('ok');
+  });
+});
+
+describe('outcome precedence', () => {
+  const create = { board_ok: true, card_found: 1, card_parent: null, parent_ok: true, comment_count: 3, id: 'm1' };
+  it('createCommentOutcome: a moved board beats a missing card', () => {
+    expect(createCommentOutcome({ ...create, board_ok: false, card_found: 0 }, false, 500)).toBe('phase-changed');
+  });
+  it('createCommentOutcome: a missing card beats the limit', () => {
+    expect(createCommentOutcome({ ...create, card_found: 0, comment_count: 500 }, false, 500)).toBe('card-missing');
+  });
+  it('createCommentOutcome: a child card beats the limit', () => {
+    expect(createCommentOutcome({ ...create, card_parent: 'L', comment_count: 500 }, false, 500)).toBe('not-a-topic');
+  });
+  it('createCommentOutcome: a bad parent beats the limit', () => {
+    expect(createCommentOutcome({ ...create, parent_ok: false, comment_count: 500 }, true, 500)).toBe('bad-parent');
+  });
+  const edit = { board_ok: true, found: 1, is_deleted: false, is_author: true, id: 'm1' };
+  it('editCommentOutcome: a moved board beats a missing comment', () => {
+    expect(editCommentOutcome({ ...edit, board_ok: false, found: 0, is_deleted: null, is_author: null })).toBe('phase-changed');
+  });
+  it('editCommentOutcome: gone beats not-yours', () => {
+    expect(editCommentOutcome({ ...edit, is_deleted: true, is_author: false })).toBe('gone');
+  });
+  const del = { board_ok: true, found: 1, already_deleted: false, permitted: true };
+  it('deleteCommentOutcome: a moved board beats a missing comment', () => {
+    expect(deleteCommentOutcome({ ...del, board_ok: false, found: 0, already_deleted: null })).toBe('phase-changed');
+  });
+  it('deleteCommentOutcome: gone beats denied', () => {
+    expect(deleteCommentOutcome({ ...del, already_deleted: true, permitted: false })).toBe('gone');
   });
 });

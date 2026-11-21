@@ -51,16 +51,18 @@ export interface CommentThread {
 
 /**
  * Top-level comments on the given cards, oldest first, each with its replies oldest first.
- * A reply whose parent is not in the list is left out; a deleted parent with replies stays.
+ * A reply whose parent is not in the list is left out; a deleted parent stays only while it has replies.
  */
 export function threadsFor(comments: readonly Comment[], cardIds: readonly string[]): CommentThread[] {
   const tops = comments
     .filter((c) => c.parent_id === null && cardIds.includes(c.card_id))
     .sort(compareByCreated);
-  return tops.map((top) => ({
-    top,
-    replies: comments.filter((c) => c.parent_id === top.id).sort(compareByCreated),
-  }));
+  return tops
+    .map((top) => ({
+      top,
+      replies: comments.filter((c) => c.parent_id === top.id).sort(compareByCreated),
+    }))
+    .filter((t) => t.top.deleted_at === null || t.replies.length > 0);
 }
 
 export function isMyComment(c: Comment, participantId: string | null): boolean {
@@ -141,15 +143,20 @@ export function upsertComment(list: readonly Comment[], incoming: Comment): Comm
   return list.map((c, i) => (i === at ? mergeIncomingComment(c, incoming) : c));
 }
 
-/** Drops the ids; a tombstone replaces its own row (a deleted comment kept for its replies). */
+/**
+ * Drops the ids; a tombstone (a deleted comment kept for its replies) replaces its own row, or is
+ * appended when the row is not in the list, so its replies stay visible. Applying it twice changes nothing.
+ */
 export function removeComments(
   list: readonly Comment[],
   ids: readonly string[],
   tombstone: Comment | null,
 ): Comment[] {
-  return list
+  const kept = list
     .filter((c) => !ids.includes(c.id) || c.id === tombstone?.id)
     .map((c) => (tombstone && c.id === tombstone.id ? mergeIncomingComment(c, tombstone) : c));
+  if (tombstone && !kept.some((c) => c.id === tombstone.id)) kept.push(mergeIncomingComment(undefined, tombstone));
+  return kept;
 }
 
 export type CommentChange =

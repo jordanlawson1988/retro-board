@@ -112,3 +112,18 @@ describe('labels and gates', () => {
     expect(setTopicOutcome({ topic_ok: true, phase: 'discuss' })).toBe('ok');
   });
 });
+
+describe('outcome precedence and absent rows', () => {
+  it('setTopicOutcome with no row means the phase changed', () => {
+    expect(setTopicOutcome(undefined)).toBe('phase-changed');
+  });
+  it('topicActionOutcome: a moved board beats a missing topic', () => {
+    expect(topicActionOutcome({ board_ok: false, topic_ok: false, owner_ok: true, id: null })).toBe('phase-changed');
+  });
+  it('topicActionOutcome: a missing topic beats a missing owner', () => {
+    expect(topicActionOutcome({ board_ok: true, topic_ok: false, owner_ok: false, id: null })).toBe('topic-missing');
+  });
+  it('assignOutcome: a moved board beats a missing owner', () => {
+    expect(assignOutcome({ board_ok: false, owner_ok: false, id: null })).toBe('phase-changed');
+  });
+});

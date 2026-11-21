@@ -1,4 +1,4 @@
-import { AGENDA_PHASE, GUIDED_MODE, type PhaseConfig, type PhaseId } from '@/lib/constants/phases';
+import { AGENDA_PHASE, FINAL_PHASE, GUIDED_MODE, type PhaseConfig, type PhaseId } from '@/lib/constants/phases';
 import { compareByCreated, isRootCard, visibleGroupTitle } from '@/lib/groups';
 import { groupScore, voteTotalsByCard } from '@/lib/votes';
 import type { ActionItem, Board, Card, Vote } from '@/types';
@@ -113,7 +113,7 @@ export function topicHeading(item: AgendaItem, cards: readonly Pick<Card, 'id' |
 
 /** The Discuss view shows in Discuss and Done of a guided board. */
 export function discussViewShown(board: Pick<Board, 'mode' | 'phase'> | null): boolean {
-  return board?.mode === GUIDED_MODE && (board.phase === AGENDA_PHASE || board.phase === 'done');
+  return board?.mode === GUIDED_MODE && (board.phase === AGENDA_PHASE || board.phase === FINAL_PHASE);
 }
 
 /** A current topic exists only in Discuss, before completion. */
@@ -154,10 +154,11 @@ export function assignOutcome(row: {
   return row.id === null || row.id === undefined ? 'item-missing' : 'ok';
 }
 
-/** Maps the row of the set-topic statement: a missing topic first, then a moved phase. */
+/** Maps the row of the set-topic statement: no row or a null phase means the phase moved; a missing topic is checked first. */
 export function setTopicOutcome(
   row: { topic_ok: boolean; phase: unknown } | undefined,
 ): 'ok' | 'topic-missing' | 'phase-changed' {
-  if (!row || !row.topic_ok) return 'topic-missing';
+  if (!row) return 'phase-changed';
+  if (!row.topic_ok) return 'topic-missing';
   return row.phase === null || row.phase === undefined ? 'phase-changed' : 'ok';
 }

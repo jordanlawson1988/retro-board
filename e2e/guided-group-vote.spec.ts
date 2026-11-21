@@ -74,6 +74,11 @@ const countOf = (stepper: Locator) => stepper.locator('span[aria-live]');
 const teamVotes = (page: Page) => page.getByTestId('team-votes-left').filter({ visible: true }).first();
 const groupTitles = (page: Page) => page.getByTestId('group-title').filter({ visible: true });
 
+/** Any card-ish content of the board: used only to be sure the cards reached the page before the walk. */
+function hiddenOrShown(page: Page) {
+  return page.getByTestId('card-text-hidden').or(page.getByText(/^(lead|child)-/)).filter({ visible: true }).first();
+}
+
 interface Pair {
   ctxA: BrowserContext;
   ctxB: BrowserContext;
@@ -175,6 +180,63 @@ test('concurrent adds from one person never pass either limit', async ({ browser
   await p.ctxB.close();
 });
 
+test('removing votes one at a time ends with no row', async ({ browser }) => {
+  const p = await pagePair(browser);
+  const { pageA, pageB, capA } = p;
+  const c1 = await addCard(p.ctxA.request, p.boardId, p.columnId, 'one');
+  await move(p.ctxA.request, p.boardId, 'reflect', 'next');
+  await move(p.ctxA.request, p.boardId, 'group', 'next');
+  await expectPhase(pageA, 'vote');
+  await expectPhase(pageB, 'vote');
+  const settings = (await getBoard(p.ctxA.request, p.boardId)).board.settings;
+  expect(settings.max_votes_per_card).toBe(3);
+  const mine = async () => (await voteRowsDirect(p.boardId)).filter((r) => r.voter_id === p.bobId && r.card_id === c1.id);
+
+  for (let i = 0; i < 2; i++) {
+    const res = await apiVote(p.ctxB.request, p.boardId, c1.id, 'add');
+    expect(res.status(), await res.text()).toBe(200);
+  }
+  expect(await mine()).toEqual([{ voter_id: p.bobId, card_id: c1.id, count: 2 }]);
+
+  // First remove: 2 -> 1, the row stays.
+  const first = await apiVote(p.ctxB.request, p.boardId, c1.id, 'remove');
+  expect(first.status(), await first.text()).toBe(200);
+  const firstBody = await first.json();
+  expect(firstBody).toEqual({ action: 'removed', voteId: expect.any(String), count: 1, tally: { used: 1, at: expect.any(Number) } });
+  expect(await mine()).toEqual([{ voter_id: p.bobId, card_id: c1.id, count: 1 }]);
+
+  // Second remove: 1 -> 0, the row is deleted. The answer keeps the same shape, with count 0.
+  const second = await apiVote(p.ctxB.request, p.boardId, c1.id, 'remove');
+  expect(second.status(), await second.text()).toBe(200);
+  const secondBody = await second.json();
+  expect(secondBody).toEqual({ action: 'removed', voteId: firstBody.voteId, count: 0, tally: { used: 0, at: expect.any(Number) } });
+  expect(await mine()).toEqual([]);
+
+  // Third remove: nothing left.
+  const third = await apiVote(p.ctxB.request, p.boardId, c1.id, 'remove');
+  expect(third.status()).toBe(409);
+  expect(await third.json()).toEqual({ error: 'You have no vote on this card' });
+
+  // Alice's page got the aggregate for the last remove (used 0 only ever comes from a remove).
+  await expect
+    .poll(async () => {
+      await capA.settle();
+      return capA.frames.some((f) => f.includes('vote-tally') && hasJsonNumber(f, 'used', 0));
+    }, { timeout: 15_000 })
+    .toBe(true);
+
+  // After Discuss starts, an add is refused.
+  await move(p.ctxA.request, p.boardId, 'vote', 'next');
+  await expectPhase(pageB, 'discuss');
+  const late = await apiVote(p.ctxB.request, p.boardId, c1.id, 'add');
+  expect(late.status()).toBe(409);
+  expect(await late.json()).toEqual({ error: 'Not available during Discuss' });
+  expect(await mine()).toEqual([]);
+
+  await p.ctxA.close();
+  await p.ctxB.close();
+});
+
 test("a participant never learns another person's count during Vote", async ({ browser }) => {
   const p = await pagePair(browser);
   const { pageA, pageB, capB } = p;
@@ -193,7 +255,7 @@ test("a participant never learns another person's count during Vote", async ({ b
   for (let i = 0; i < 3; i++) await aStepper.getByRole('button', { name: 'Add a vote' }).click();
   await expect(countOf(aStepper)).toHaveText('3');
   await expect(aStepper.getByRole('button', { name: 'Add a vote' })).toBeDisabled(); // per-card limit reached
-  await expect.poll(async () => (await voteRowsDirect(p.boardId)).find((r) => r.voter_id === p.aliceId)?.count).toBe(3);
+  await expect.poll(async () => (await voteRowsDirect(p.boardId)).find((r) => r.voter_id === p.aliceId && r.card_id === c1.id)?.count).toBe(3);
 
   // B puts two votes on c2.
   const bStepper = stepperOf(pageB, c2.text);
@@ -201,7 +263,7 @@ test("a participant never learns another person's count during Vote", async ({ b
   await bStepper.getByRole('button', { name: 'Add a vote' }).click();
   await bStepper.getByRole('button', { name: 'Add a vote' }).click();
   await expect(countOf(bStepper)).toHaveText('2');
-  await expect.poll(async () => (await voteRowsDirect(p.boardId)).find((r) => r.voter_id === p.bobId)?.count).toBe(2);
+  await expect.poll(async () => (await voteRowsDirect(p.boardId)).find((r) => r.voter_id === p.bobId && r.card_id === c2.id)?.count).toBe(2);
 
   // The team number reaches B without a reload: 2 people x 5 votes - 5 spent.
   await expect(teamVotes(pageB)).toHaveText('Team: 5 votes left', { timeout: 10_000 });
@@ -214,6 +276,7 @@ test("a participant never learns another person's count during Vote", async ({ b
       return capB.frames.some((f) => f.includes('vote-tally') && hasJsonNumber(f, 'used', 5));
     }, { timeout: 15_000 })
     .toBe(true);
+  await new Promise((r) => setTimeout(r, 1500)); // a late frame from the other person's earlier votes must have time to arrive
   await capB.settle();
   const duringVote = capB.all();
   expect(duringVote).toContain(p.boardId); // the capture holds real app traffic for this board
@@ -225,6 +288,8 @@ test("a participant never learns another person's count during Vote", async ({ b
   expect(hasJsonNumber('{"count":20}', 'count', 2)).toBe(false);
   expect(hasJsonNumber('{\\"count\\":12,', 'count', 2)).toBe(false);
   expect(hasJsonNumber('{\\"count\\":2,', 'count', 2)).toBe(true);
+  expect(hasJsonNumber('{"count":2.5}', 'count', 2)).toBe(false);
+  expect(hasJsonNumber('{"vote_count":2,', 'count', 2)).toBe(false);
 
   // Absence: nothing says what A voted or how many.
   expect(hasJsonField(duringVote, 'voter_id', p.aliceId), "A's voter_id in B's traffic").toBe(false);
@@ -466,8 +531,6 @@ test('a drop that lands after a reset groups only the cards in that drop', async
   expect(merged.map((c) => [c.id, c.merged_with])).toEqual([[c3.id, c2.id]]);
   expect(await voteRowsDirect(p.boardId)).toEqual(before);
   await expect(nameIt).toHaveCount(1, { timeout: 10_000 }); // exactly one group, no reload
-  // The one group is c2's: the old c1 group is gone.
-  expect(merged.some((c) => c.merged_with === c1.id)).toBe(false);
 
   await p.ctxA.close();
   await p.ctxB.close();
@@ -603,8 +666,3 @@ test('dialogs opened from the board header are fully on screen', async ({ browse
   await p.ctxA.close();
   await p.ctxB.close();
 });
-
-/** Any card-ish content of the board: used only to be sure the cards reached the page before the walk. */
-function hiddenOrShown(page: Page) {
-  return page.getByTestId('card-text-hidden').or(page.getByText(/^(lead|child)-/)).filter({ visible: true }).first();
-}

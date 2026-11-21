@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   fresh: vi.fn(),
   pid: vi.fn(),
   publish: vi.fn(),
+  schedule: vi.fn(),
 }));
 
 vi.mock('@/lib/db', () => ({
@@ -23,6 +24,7 @@ vi.mock('@/lib/auth-helpers', async () => {
   const actual = await vi.importActual<typeof import('@/lib/auth-helpers')>('@/lib/auth-helpers');
   return { ...actual, getSessionOrNull: () => mocks.session() };
 });
+vi.mock('@/lib/summary-email/schedule', () => ({ scheduleSummaryEmail: (...a: unknown[]) => mocks.schedule(...a) }));
 vi.mock('@/lib/participant-session', () => ({ readParticipantId: () => mocks.pid() }));
 
 import { PATCH, POST } from '@/app/api/boards/[boardId]/route';
@@ -102,6 +104,41 @@ describe('complete', () => {
             RETURNING settings
           "
     `);
+  });
+
+  it('an open complete schedules no email', async () => {
+    mocks.sql.mockResolvedValueOnce([ctxRow()]).mockResolvedValueOnce([{ settings: DEFAULT_BOARD_SETTINGS }]);
+    const res = await POST(postReq({ action: 'complete' }), ctx);
+    expect(res.status).toBe(200);
+    expect(mocks.schedule).not.toHaveBeenCalled();
+  });
+
+  it('the guided complete statement only completes a board that is not completed', async () => {
+    mocks.sql.mockResolvedValueOnce([guided('discuss')]).mockResolvedValueOnce([{ settings: DEFAULT_BOARD_SETTINGS }]);
+    await POST(postReq({ action: 'complete' }), ctx);
+    expect(sqlText(1)).toContain('WHERE id = ? AND archived_at IS NULL');
+  });
+
+  it('a guided completion schedules the summary email with the archived_at it wrote, before publishing', async () => {
+    mocks.sql.mockResolvedValueOnce([guided('discuss')]).mockResolvedValueOnce([{ settings: DEFAULT_BOARD_SETTINGS }]);
+    await POST(postReq({ action: 'complete' }), ctx);
+    expect(mocks.schedule).toHaveBeenCalledTimes(1);
+    expect(mocks.schedule).toHaveBeenCalledWith({ boardId: 'b1', completedAt: sqlValues(1)[0] });
+    expect(mocks.schedule.mock.invocationCallOrder[0]).toBeLessThan(mocks.publish.mock.invocationCallOrder[0]);
+  });
+
+  it('a guided completion that lost a race answers 409 and schedules nothing', async () => {
+    mocks.sql.mockResolvedValueOnce([guided('discuss')]).mockResolvedValueOnce([]);
+    const res = await POST(postReq({ action: 'complete' }), ctx);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: 'Board is completed' });
+    expect(mocks.schedule).not.toHaveBeenCalled();
+    expect(mocks.publish).not.toHaveBeenCalled();
+  });
+
+  it('an open completion that finds no row still answers 404, as today', async () => {
+    mocks.sql.mockResolvedValueOnce([ctxRow()]).mockResolvedValueOnce([]);
+    expect((await POST(postReq({ action: 'complete' }), ctx)).status).toBe(404);
   });
 
   it('a row with no mode key (database without migration 015) is open', async () => {

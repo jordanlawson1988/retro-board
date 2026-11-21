@@ -11,7 +11,8 @@ import { readJsonObject, isPlainObject } from '@/lib/request-body';
 import { INVALID_BODY, validateSettingsPatch } from '@/lib/board-validation';
 import { patchNeedsSettingsGuard, resolveYouAre } from '@/lib/board-write-rules';
 import { boardAccessFrom } from '@/lib/board-access-loader';
-import { BOARD_ACCESS } from '@/lib/constants/board-access';
+import { BOARD_ACCESS, BOARD_COMPLETED_ERROR } from '@/lib/constants/board-access';
+import { scheduleSummaryEmail } from '@/lib/summary-email/schedule';
 import { REOPEN_PHASE, FINAL_PHASE, GUIDED_MODE, type PhaseId } from '@/lib/constants/phases';
 import { phaseSettings, phaseOwnedKeysIn } from '@/lib/phases';
 import { OPEN_MAX_VOTES_PER_CARD } from '@/lib/constants/board-settings';
@@ -368,7 +369,7 @@ export async function POST(
       UPDATE boards SET archived_at = ${archivedAt}, phase = ${FINAL_PHASE},
         settings = settings || ${JSON.stringify(phaseSettings(FINAL_PHASE))}::jsonb,
         phase_config = phase_config || '{"deadline":null,"topic":null}'::jsonb
-      WHERE id = ${boardId}
+      WHERE id = ${boardId} AND archived_at IS NULL
       RETURNING settings
     `
       : await sql`
@@ -377,8 +378,12 @@ export async function POST(
       WHERE id = ${boardId}
       RETURNING settings
     `;
+    // A guided board that finds no row lost a race with another completion.
+    if (!done && guidedBoard) return NextResponse.json({ error: BOARD_COMPLETED_ERROR }, { status: 409 });
     if (!done) return BOARD_NOT_FOUND();
     const settings = { ...DEFAULT_BOARD_SETTINGS, ...(done.settings as Partial<BoardSettings>) };
+    // Guided boards only. completedAt is the exact archivedAt string written above, never read back.
+    if (guidedBoard) scheduleSummaryEmail({ boardId, completedAt: archivedAt });
     await channel.publish('board-completed', { archivedAt, settings, phase, refetch: true });
     return NextResponse.json({ ok: true });
   }

@@ -10,7 +10,7 @@ export function DiscussView({ isFacilitator }: { isFacilitator: boolean }) {
   const { agenda, headings, followable, current, shown, controls, select } = useDiscussTopics(isFacilitator);
   const item = agenda.find((i) => i.cardId === shown) ?? null;
   return (
-    <div className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6">
+    <div className="mx-auto max-w-[1400px] px-4 pt-6 pb-6 sm:px-6 md:pb-20">
       <div className="md:grid md:grid-cols-[minmax(240px,320px)_1fr] md:items-start md:gap-6">
         <AgendaList
           agenda={agenda}

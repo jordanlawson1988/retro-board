@@ -10,6 +10,9 @@ export const GUIDED_ACTION_REQUIRED_ERROR = 'Guided boards take add or remove';
 export const NO_VOTE_TO_REMOVE_ERROR = 'You have no vote on this card';
 export const NO_VOTES_LEFT = 'No votes left';
 export const VOTE_LIMIT_RELATION_ERROR = 'Votes per card cannot be more than votes per person';
+export const PER_PERSON_LIMIT_SPENT_ERROR = 'Votes per person cannot go below what someone has already used.';
+export const PER_CARD_LIMIT_SPENT_ERROR = 'Votes per card cannot go below what someone already has on one card.';
+export const LIMIT_CHANGE_RACE_ERROR = 'The board changed. Try again.';
 export const CARD_LIMIT_OPEN_ERROR = 'Votes per card is only available on guided boards';
 
 /** A vote row without `count` (open boards, databases without migration 016) weighs 1. */
@@ -209,7 +212,7 @@ export function voteLimitProblem(current: BoardSettings, patch: Partial<BoardSet
   return maxVotesPerCard(merged) > merged.max_votes_per_participant ? VOTE_LIMIT_RELATION_ERROR : null;
 }
 
-/** Why a lowering was refused: which limit it hit and how far it may go. */
+/** Why a lowering was refused: which limit it hit. No numbers: votes are secret while limits are editable. */
 export function limitRefusal(i: {
   perPerson: number | null;
   perCard: number | null;
@@ -217,12 +220,12 @@ export function limitRefusal(i: {
   maxOnCard: number;
 }): string {
   if (i.perPerson !== null && i.perPerson < i.maxSpent) {
-    return `Votes per person cannot go below ${i.maxSpent}. Someone has already used ${i.maxSpent}.`;
+    return PER_PERSON_LIMIT_SPENT_ERROR;
   }
   if (i.perCard !== null && i.perCard < i.maxOnCard) {
-    return `Votes per card cannot go below ${i.maxOnCard}. Someone already has ${i.maxOnCard} on one card.`;
+    return PER_CARD_LIMIT_SPENT_ERROR;
   }
-  return 'The board changed. Try again.';
+  return LIMIT_CHANGE_RACE_ERROR;
 }
 
 /** Limits are editable on a guided board until totals show; after that a change has no effect. */

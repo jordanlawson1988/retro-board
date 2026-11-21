@@ -73,7 +73,7 @@ describe('guided limit PATCH', () => {
     mocks.tx.mockResolvedValueOnce(guardedResult({ title: null, description: null, settings: null, max_spent: 4, max_on_card: 2 }));
     const res = await patch({ max_votes_per_participant: 3 });
     expect(res.status).toBe(409);
-    expect(await res.json()).toEqual({ error: 'Votes per person cannot go below 4. Someone has already used 4.' });
+    expect(await res.json()).toEqual({ error: 'Votes per person cannot go below what someone has already used.' });
     expect(mocks.sql).toHaveBeenCalledTimes(1);
     expect(mocks.tx).toHaveBeenCalledTimes(1);
     expect(mocks.publish).not.toHaveBeenCalled();
@@ -90,7 +90,7 @@ describe('guided limit PATCH', () => {
     mocks.tx.mockResolvedValueOnce(guardedResult({ title: null, description: null, settings: null, max_spent: 2, max_on_card: 2 }));
     const res = await patch({ max_votes_per_card: 1 });
     expect(res.status).toBe(409);
-    expect(await res.json()).toEqual({ error: 'Votes per card cannot go below 2. Someone already has 2 on one card.' });
+    expect(await res.json()).toEqual({ error: 'Votes per card cannot go below what someone already has on one card.' });
     expect(mocks.publish).not.toHaveBeenCalled();
   });
 

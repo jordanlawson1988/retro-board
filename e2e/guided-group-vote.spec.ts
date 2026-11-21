@@ -274,11 +274,15 @@ test('lowering a limit below what is spent is refused and changes nothing', asyn
 
   const lowerPerson = await patchSettings(p.ctxA.request, p.boardId, { max_votes_per_participant: 3 });
   expect(lowerPerson.status()).toBe(409);
-  expect((await lowerPerson.json()).error).toBe('Votes per person cannot go below 4. Someone has already used 4.');
+  const lowerPersonBody = await lowerPerson.json();
+  expect(lowerPersonBody).toEqual({ error: 'Votes per person cannot go below what someone has already used.' });
+  expect(JSON.stringify(lowerPersonBody)).not.toMatch(/\d/);
 
   const lowerCard = await patchSettings(p.ctxA.request, p.boardId, { max_votes_per_card: 1 });
   expect(lowerCard.status()).toBe(409);
-  expect((await lowerCard.json()).error).toBe('Votes per card cannot go below 2. Someone already has 2 on one card.');
+  const lowerCardBody = await lowerCard.json();
+  expect(lowerCardBody).toEqual({ error: 'Votes per card cannot go below what someone already has on one card.' });
+  expect(JSON.stringify(lowerCardBody)).not.toMatch(/\d/);
 
   const unchanged = (await getBoard(p.ctxA.request, p.boardId)).board.settings;
   expect(unchanged.max_votes_per_participant).toBe(5);

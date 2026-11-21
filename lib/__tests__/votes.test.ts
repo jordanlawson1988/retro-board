@@ -107,11 +107,11 @@ describe('limits and control state', () => {
     expect(hasLimitKey({ anonymous_cards: true })).toBe(false);
     expect(hasLimitKey({ max_votes_per_card: 2 })).toBe(true);
   });
-  it('a refused lowering says which limit and how far it may go', () => {
+  it('a refused lowering says which limit it hit, with no numbers', () => {
     expect(limitRefusal({ perPerson: 3, perCard: null, maxSpent: 4, maxOnCard: 1 }))
-      .toBe('Votes per person cannot go below 4. Someone has already used 4.');
+      .toBe('Votes per person cannot go below what someone has already used.');
     expect(limitRefusal({ perPerson: null, perCard: 1, maxSpent: 4, maxOnCard: 2 }))
-      .toBe('Votes per card cannot go below 2. Someone already has 2 on one card.');
+      .toBe('Votes per card cannot go below what someone already has on one card.');
     expect(limitRefusal({ perPerson: 9, perCard: 9, maxSpent: 0, maxOnCard: 0 })).toBe('The board changed. Try again.');
   });
   it('limits are editable on a guided board until totals show', () => {

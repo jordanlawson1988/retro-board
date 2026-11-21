@@ -7,10 +7,7 @@ import { AppShell } from '@/components/Layout';
 import { Input, Button, Turnstile, type TurnstileHandle } from '@/components/common';
 import { useAuthStore } from '@/stores/authStore';
 import { HONEYPOT_FIELD_NAME } from '@/lib/anti-bot/constants';
-
-function isSafeRedirect(url: string | null | undefined): url is string {
-  return !!url && url.startsWith('/') && !url.startsWith('//');
-}
+import { safeRedirectPath } from '@/lib/safe-redirect';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -39,7 +36,7 @@ export default function LoginPage() {
     try {
       const urlParams = new URLSearchParams(window.location.search);
       const rawRedirect = urlParams.get('redirect') || urlParams.get('from');
-      const redirectParam = isSafeRedirect(rawRedirect) ? rawRedirect : undefined;
+      const redirectParam = safeRedirectPath(rawRedirect, window.location.origin) ?? undefined;
       const destination = await signIn(
         email,
         password,
@@ -51,8 +48,11 @@ export default function LoginPage() {
       );
       setLoading(false);
       setSuccess(true);
+      // Validate again: the store hands back whatever it was given.
+      const safeDestination =
+        safeRedirectPath(destination, window.location.origin) ?? '/dashboard';
       setTimeout(() => {
-        window.location.href = destination;
+        window.location.href = safeDestination;
       }, 900);
     } catch (err) {
       const raw = err instanceof Error ? err.message : 'Sign in failed';

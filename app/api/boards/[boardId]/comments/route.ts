@@ -22,6 +22,7 @@ import {
   COMMENT_LIMIT_ERROR,
   COMMENT_NOT_FOUND_ERROR,
   COMMENT_NOT_YOURS_ERROR,
+  COMMENT_RATE_LIMIT,
   COMMENT_TARGET_ERROR,
   COMMENT_UPDATED,
   REPLY_PARENT_ERROR,
@@ -63,7 +64,7 @@ type RouteContext = { params: Promise<{ boardId: string }> };
 // the channel gets the publish helpers, which shape for the public.
 
 export async function POST(request: Request, { params }: RouteContext) {
-  const limited = await rateLimitOr429(request, 'comment', 300, 60);
+  const limited = await rateLimitOr429(request, COMMENT_RATE_LIMIT.key, COMMENT_RATE_LIMIT.limit, COMMENT_RATE_LIMIT.window);
   if (limited) return limited;
 
   const { boardId } = await params;
@@ -143,7 +144,7 @@ export async function POST(request: Request, { params }: RouteContext) {
 }
 
 export async function PATCH(request: Request, { params }: RouteContext) {
-  const limited = await rateLimitOr429(request, 'comment', 300, 60);
+  const limited = await rateLimitOr429(request, COMMENT_RATE_LIMIT.key, COMMENT_RATE_LIMIT.limit, COMMENT_RATE_LIMIT.window);
   if (limited) return limited;
 
   const { boardId } = await params;
@@ -198,7 +199,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 }
 
 export async function DELETE(request: Request, { params }: RouteContext) {
-  const limited = await rateLimitOr429(request, 'comment', 300, 60);
+  const limited = await rateLimitOr429(request, COMMENT_RATE_LIMIT.key, COMMENT_RATE_LIMIT.limit, COMMENT_RATE_LIMIT.window);
   if (limited) return limited;
 
   const { boardId } = await params;

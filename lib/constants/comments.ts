@@ -34,3 +34,12 @@ export const COMMENT_ANONYMOUS_LABEL = 'Post anonymously';
 export const COMMENT_EDITED_MARK = '(edited)';
 export const COMMENT_DELETE_PROMPT = 'Delete this comment?';
 export const COMMENT_DELETE_PROMPT_WITH_REPLIES = 'Delete this comment? Its replies stay.';
+
+export const COMMENT_REPLY_LABEL = 'Reply';
+export const COMMENT_EDIT_LABEL = 'Edit';
+export const COMMENT_DELETE_LABEL = 'Delete';
+export const COMMENT_CANCEL_LABEL = 'Cancel';
+export const COMMENT_SAVE_LABEL = 'Save';
+
+/** The comments route's limiter bucket, limit and window (seconds): POST, PATCH and DELETE share it. */
+export const COMMENT_RATE_LIMIT = { key: 'comment', limit: 300, window: 60 } as const;

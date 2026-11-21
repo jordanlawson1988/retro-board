@@ -1,3 +1,4 @@
+import { JOIN_FIRST_ERROR } from '@/lib/constants/board-access';
 import type { BoardSettings, CardReactions } from '@/types';
 import type { BoardAction } from '@/lib/constants/board-actions';
 import { NOT_GUIDED_ERROR, type PhaseId } from '@/lib/constants/phases';
@@ -36,7 +37,6 @@ function deny(status: 401 | 403 | 409, error: string): GuardResult {
 }
 
 const FACILITATOR_REQUIRED = 'Facilitator access required';
-const JOIN_FIRST = 'Join the board first';
 
 /** Actions that exist only on a guided board: the guard refuses them on an open board. */
 const GUIDED_ONLY_ACTIONS: ReadonlySet<BoardAction> = new Set<BoardAction>([
@@ -97,7 +97,7 @@ function checkIdentity(
   target: ActionTarget
 ): GuardResult {
   if (actor.participantId === null && !actor.isFacilitator) {
-    return deny(401, JOIN_FIRST);
+    return deny(401, JOIN_FIRST_ERROR);
   }
 
   switch (action) {
@@ -119,7 +119,7 @@ function checkIdentity(
     case 'comment.create':
     case 'comment.edit':
       // A comment needs an author, so a facilitator without a participant row cannot write one.
-      return actor.participantId === null ? deny(401, JOIN_FIRST) : OK;
+      return actor.participantId === null ? deny(401, JOIN_FIRST_ERROR) : OK;
     case 'participant.leave': {
       const isSelf =
         actor.participantId !== null &&

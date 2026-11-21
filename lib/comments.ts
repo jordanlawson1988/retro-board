@@ -340,6 +340,25 @@ export function textAfterSend(sent: string, current: string): string {
   return current.startsWith(sent) ? current.slice(sent.length) : current;
 }
 
+/**
+ * What a comment or reply box holds after its write answered. `currentAnonymous` is the checkbox as it
+ * is NOW (it may have been changed while the post was in flight), `sentAnonymous` the value that was sent.
+ * Leftover text keeps the current value. With nothing left the box returns to the board's default, unless
+ * the person changed it meanwhile: that choice stands, so the next comment is never posted the other way.
+ */
+export function draftAfterSend(input: {
+  sent: string;
+  current: string;
+  sentAnonymous: boolean;
+  currentAnonymous: boolean;
+  defaultAnonymous: boolean;
+}): CommentDraft {
+  const text = textAfterSend(input.sent, input.current);
+  if (text !== '') return { text, anonymous: input.currentAnonymous };
+  const changed = input.currentAnonymous !== input.sentAnonymous;
+  return { text: '', anonymous: changed ? input.currentAnonymous : input.defaultAnonymous };
+}
+
 export interface CommentDraft {
   text: string;
   anonymous: boolean;

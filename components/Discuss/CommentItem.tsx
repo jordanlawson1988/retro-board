@@ -9,7 +9,8 @@ import {
   canDeleteComment, canEditComment, canReplyTo, commentAuthorLabel, commentEditDecision, commentFormOpen,
 } from '@/lib/comments';
 import {
-  COMMENT_DELETE_PROMPT, COMMENT_DELETE_PROMPT_WITH_REPLIES, COMMENT_EDITED_MARK, DELETED_COMMENT_TEXT,
+  COMMENT_CANCEL_LABEL, COMMENT_DELETE_LABEL, COMMENT_DELETE_PROMPT, COMMENT_DELETE_PROMPT_WITH_REPLIES, COMMENT_EDIT_LABEL,
+  COMMENT_EDITED_MARK, COMMENT_REPLY_LABEL, DELETED_COMMENT_TEXT,
 } from '@/lib/constants/comments';
 import { formatDeadlineTime } from '@/lib/phases';
 import type { Board, Comment } from '@/types';
@@ -144,17 +145,17 @@ function CommentItemView({ comment, replies, participantId, isFacilitator, gate,
         <div className="mt-1 flex flex-wrap items-center gap-2">
           {canReply && (
             <button ref={replyRef} type="button" aria-expanded={kind === 'reply'} onClick={() => (kind === 'reply' ? close('reply') : begin('reply'))} className={COMMENT_TEXT_BUTTON}>
-              Reply
+              {COMMENT_REPLY_LABEL}
             </button>
           )}
           {canEdit && (
             <button ref={editRef} type="button" onClick={() => begin('edit')} className={COMMENT_TEXT_BUTTON}>
-              Edit
+              {COMMENT_EDIT_LABEL}
             </button>
           )}
           {canDelete && (
             <button ref={deleteRef} type="button" onClick={() => begin('delete')} className={COMMENT_TEXT_BUTTON}>
-              Delete
+              {COMMENT_DELETE_LABEL}
             </button>
           )}
         </div>
@@ -170,10 +171,10 @@ function CommentItemView({ comment, replies, participantId, isFacilitator, gate,
           )}
           <div className="flex items-center gap-2">
             <button type="button" onClick={confirmDelete} disabled={deleting} aria-busy={deleting || undefined} className={cn(COMMENT_TEXT_BUTTON, 'text-[var(--danger)] hover:text-[var(--danger)]')}>
-              Delete
+              {COMMENT_DELETE_LABEL}
             </button>
             <button ref={cancelDeleteRef} type="button" onClick={() => close('delete')} disabled={deleting} className={COMMENT_TEXT_BUTTON}>
-              Cancel
+              {COMMENT_CANCEL_LABEL}
             </button>
           </div>
         </div>

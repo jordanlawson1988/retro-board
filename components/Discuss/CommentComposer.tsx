@@ -4,16 +4,16 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Textarea } from '@/components/common';
 import { cn } from '@/utils/cn';
 import { useBoardStore } from '@/stores/boardStore';
-import { clampComment, commentCounterText, commentEnterPosts, commentsWritable, sentTextUnchanged, showCommentCounter, textAfterSend } from '@/lib/comments';
-import { COMMENT_ANONYMOUS_LABEL } from '@/lib/constants/comments';
+import { clampComment, commentCounterText, commentEnterPosts, commentsWritable, draftAfterSend, sentTextUnchanged, showCommentCounter } from '@/lib/comments';
+import { COMMENT_ANONYMOUS_LABEL, COMMENT_CANCEL_LABEL, COMMENT_REPLY_LABEL, COMMENT_SAVE_LABEL } from '@/lib/constants/comments';
 import { editorStillOpen } from '@/lib/groups';
 
 export type ComposerMode = 'comment' | 'reply' | 'edit';
 
 const COPY: Record<ComposerMode, { label: string; placeholder: string; submit: string }> = {
   comment: { label: 'Comment', placeholder: 'Add a comment', submit: 'Comment' },
-  reply: { label: 'Reply', placeholder: 'Write a reply', submit: 'Reply' },
-  edit: { label: 'Edit comment', placeholder: '', submit: 'Save' },
+  reply: { label: COMMENT_REPLY_LABEL, placeholder: 'Write a reply', submit: COMMENT_REPLY_LABEL },
+  edit: { label: 'Edit comment', placeholder: '', submit: COMMENT_SAVE_LABEL },
 };
 
 /** Plain text buttons for Reply, Edit, Delete and Cancel: no border or fill at rest, 44px tall on phones. */
@@ -58,6 +58,8 @@ export function CommentComposer({ mode, initialText = '', initialAnonymous, defa
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const textRef = useRef(initialText);
+  // The checkbox as it is now: the post is async and the person may tick it while it is in flight.
+  const anonymousRef = useRef(initialAnonymous);
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const uid = useId();
   const counterId = `${uid}-count`;
@@ -80,22 +82,25 @@ export function CommentComposer({ mode, initialText = '', initialAnonymous, defa
     setBusy(true);
     setProblem(null);
     const sent = text;
+    const sentAnonymous = anonymous;
     onSubmit(text, anonymous)
       .then(() => {
         // Text typed while the write was in flight is the person's: never erased, never sent twice.
         if (mode === 'edit') return sentTextUnchanged(sent, textRef.current) ? onDone?.() : undefined;
-        const rest = textAfterSend(sent, textRef.current);
-        if (rest === '') {
+        const next = draftAfterSend({
+          sent, current: textRef.current, sentAnonymous, currentAnonymous: anonymousRef.current, defaultAnonymous,
+        });
+        if (next.text === '') {
           if (mode === 'reply') return onDone?.();
           textRef.current = '';
           setText('');
-          setAnonymous(defaultAnonymous);
-          onDraftChange?.('', defaultAnonymous);
         } else {
-          textRef.current = rest;
-          setText(rest);
-          onDraftChange?.(rest, anonymous);
+          textRef.current = next.text;
+          setText(next.text);
         }
+        anonymousRef.current = next.anonymous;
+        setAnonymous(next.anonymous);
+        onDraftChange?.(next.text, next.anonymous);
         areaRef.current?.focus();
       })
       .catch((e: unknown) => {
@@ -128,7 +133,7 @@ export function CommentComposer({ mode, initialText = '', initialAnonymous, defa
           const next = clampComment(e.target.value);
           textRef.current = next;
           setText(next);
-          onDraftChange?.(next, anonymous);
+          onDraftChange?.(next, anonymousRef.current);
         }}
         onKeyDown={(e) => {
           if (commentEnterPosts(e.key, e.shiftKey, e.nativeEvent.isComposing || e.keyCode === 229)) {
@@ -156,6 +161,7 @@ export function CommentComposer({ mode, initialText = '', initialAnonymous, defa
         {mode !== 'edit' && (
           <label htmlFor={checkId} className="flex min-h-11 items-center gap-2 text-sm text-[var(--ink-2)] md:min-h-9">
             <input id={checkId} type="checkbox" checked={anonymous} onChange={(e) => {
+                anonymousRef.current = e.target.checked;
                 setAnonymous(e.target.checked);
                 onDraftChange?.(text, e.target.checked);
               }} className="h-4 w-4" />
@@ -165,7 +171,7 @@ export function CommentComposer({ mode, initialText = '', initialAnonymous, defa
         <div className="ml-auto flex items-center gap-2">
           {onCancel && (
             <button type="button" onClick={onCancel} className={COMMENT_TEXT_BUTTON}>
-              Cancel
+              {COMMENT_CANCEL_LABEL}
             </button>
           )}
           <button type="button" onClick={submit} disabled={empty || busy} aria-busy={busy || undefined} className={PRIMARY}>

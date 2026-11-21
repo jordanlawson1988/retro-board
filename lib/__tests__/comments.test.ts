@@ -4,7 +4,7 @@ import {
   threadsFor, isMyComment, canEditComment, canDeleteComment, canReplyTo, commentAuthorLabel, parseComment,
   mergeIncomingComment, upsertComment, removeComments, replayComments, createCommentOutcome,
   editCommentOutcome, deleteCommentOutcome, type CommentChange, commentEnterPosts, commentsHeading,
-  commentsEmptyText, initialAnonymous, sentTextUnchanged, textAfterSend, createDraftKeeper, draftFor, withDraft, withoutDraft, scopedDrafts, draftsScope, commentCounterText, commentFormOpen, commentEditDecision,
+  commentsEmptyText, initialAnonymous, sentTextUnchanged, textAfterSend, draftAfterSend, createDraftKeeper, draftFor, withDraft, withoutDraft, scopedDrafts, draftsScope, commentCounterText, commentFormOpen, commentEditDecision,
 } from '@/lib/comments';
 import type { Comment } from '@/types';
 
@@ -573,6 +573,27 @@ describe('createDraftKeeper', () => {
     expect(draftFor(k.drafts(s1), 't1', false).text).toBe('half a thought');
     expect(k.drafts(draftsScope('b1', 'vote')).size).toBe(0);
     expect(k.drafts(s1).size).toBe(0);
+  });
+});
+
+describe('draftAfterSend', () => {
+  it('leftover text keeps the CURRENT checkbox value, not the one captured at submit', () => {
+    expect(draftAfterSend({ sent: 'first', current: 'first more', sentAnonymous: false, currentAnonymous: true, defaultAnonymous: false }))
+      .toEqual({ text: ' more', anonymous: true });
+    expect(draftAfterSend({ sent: 'first', current: 'first more', sentAnonymous: true, currentAnonymous: false, defaultAnonymous: true }))
+      .toEqual({ text: ' more', anonymous: false });
+  });
+  it('nothing typed since and the box untouched returns to the board default', () => {
+    expect(draftAfterSend({ sent: 'first', current: 'first', sentAnonymous: true, currentAnonymous: true, defaultAnonymous: false }))
+      .toEqual({ text: '', anonymous: false });
+  });
+  it('nothing typed since but the box changed while the post was in flight keeps the person\'s choice', () => {
+    expect(draftAfterSend({ sent: 'first', current: 'first', sentAnonymous: false, currentAnonymous: true, defaultAnonymous: false }))
+      .toEqual({ text: '', anonymous: true });
+  });
+  it('text edited so it no longer starts with what was sent is kept whole with the current value', () => {
+    expect(draftAfterSend({ sent: 'first', current: 'other', sentAnonymous: false, currentAnonymous: true, defaultAnonymous: false }))
+      .toEqual({ text: 'other', anonymous: true });
   });
 });
 

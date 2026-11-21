@@ -496,9 +496,6 @@ describe('commentEditDecision', () => {
   it('sends the trimmed new text', () => {
     expect(commentEditDecision('First thought', ' First thought, edited ')).toEqual({ kind: 'send', value: 'First thought, edited' });
   });
-  it('refuses a blank edit without sending', () => {
-    expect(commentEditDecision('First thought', '   ')).toEqual({ kind: 'invalid', error: 'Write a comment first' });
-  });
 });
 
 describe('sentTextUnchanged', () => {

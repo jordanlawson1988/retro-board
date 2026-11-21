@@ -16,8 +16,11 @@ const COPY: Record<ComposerMode, { label: string; placeholder: string; submit: s
   edit: { label: 'Edit comment', placeholder: '', submit: 'Save' },
 };
 
-/** Shared by the thread's action buttons: text buttons, 44px tall on phones. */
-export const COMMENT_BUTTON =
+/** Plain text buttons for Reply, Edit, Delete and Cancel: no border or fill at rest, 44px tall on phones. */
+export const COMMENT_TEXT_BUTTON =
+  'inline-flex min-h-11 items-center justify-center rounded-[var(--r-md)] px-4 text-sm font-medium text-[var(--ink-2)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--ink)] disabled:cursor-not-allowed disabled:opacity-50 md:min-h-8 md:px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]';
+/** The filled base of the submit buttons. */
+const COMMENT_BUTTON =
   'inline-flex min-h-11 items-center justify-center rounded-[var(--r-md)] border border-[var(--line)] bg-[var(--surface)] px-3 text-sm font-medium text-[var(--ink)] transition-colors hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-50 md:min-h-9 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]';
 const PRIMARY = cn(COMMENT_BUTTON, 'border-transparent bg-[var(--accent)] text-[var(--on-accent)] hover:bg-[var(--accent-hover)]');
 
@@ -161,7 +164,7 @@ export function CommentComposer({ mode, initialText = '', initialAnonymous, defa
         )}
         <div className="ml-auto flex items-center gap-2">
           {onCancel && (
-            <button type="button" onClick={onCancel} className={COMMENT_BUTTON}>
+            <button type="button" onClick={onCancel} className={COMMENT_TEXT_BUTTON}>
               Cancel
             </button>
           )}

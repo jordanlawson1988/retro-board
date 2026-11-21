@@ -300,14 +300,16 @@ export function commentFormOpen(
   return editorStillOpen(openedIn, currentPhase, allowed);
 }
 
-/** What saving an edit does: nothing for unchanged text, a local refusal for a blank one, else the trimmed text. */
+/**
+ * What saving an edit does: nothing for text equal to what the editor opened with, else the trimmed
+ * text. The editor never calls it with blank text (it returns early and `Save` is disabled).
+ */
 export function commentEditDecision(
   openedWith: string,
   typed: string,
-): { kind: 'unchanged' } | { kind: 'invalid'; error: string } | { kind: 'send'; value: string } {
-  const checked = validateCommentBody(typed);
-  if (!checked.ok) return { kind: 'invalid', error: checked.error };
-  return checked.value === openedWith.trim() ? { kind: 'unchanged' } : { kind: 'send', value: checked.value };
+): { kind: 'unchanged' } | { kind: 'send'; value: string } {
+  const value = typed.trim();
+  return value === openedWith.trim() ? { kind: 'unchanged' } : { kind: 'send', value };
 }
 
 /** After a write answered: the box may clear or close only if nothing was typed since the send. */

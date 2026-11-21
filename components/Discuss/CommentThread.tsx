@@ -65,7 +65,7 @@ export function CommentThread({ rootId, cardIds, isFacilitator }: CommentThreadP
         </div>
       )}
       {threads.length === 0 ? (
-        <p className="text-sm text-[var(--ink-3)]">{commentsEmptyText(writable)}</p>
+        <p className="text-sm text-[var(--ink-3)]">{commentsEmptyText(canPost)}</p>
       ) : (
         <div className="flex flex-col divide-y divide-[var(--line)]">
           {threads.map((t) => (

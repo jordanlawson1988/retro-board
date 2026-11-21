@@ -1,6 +1,7 @@
 'use client';
 
 import { memo, useEffect, useRef, useState } from 'react';
+import { cn } from '@/utils/cn';
 import { useBoardStore } from '@/stores/boardStore';
 import { useDiscussStore } from '@/stores/discussStore';
 import type { PhaseId } from '@/lib/constants/phases';
@@ -12,7 +13,7 @@ import {
 } from '@/lib/constants/comments';
 import { formatDeadlineTime } from '@/lib/phases';
 import type { Board, Comment } from '@/types';
-import { COMMENT_BUTTON, CommentComposer } from './CommentComposer';
+import { COMMENT_TEXT_BUTTON, CommentComposer } from './CommentComposer';
 
 export type CommentGate = Pick<Board, 'mode' | 'phase' | 'archived_at'>;
 
@@ -43,6 +44,7 @@ function CommentItemView({ comment, replies, participantId, isFacilitator, gate,
   const cancelDeleteRef = useRef<HTMLButtonElement>(null);
   const refocus = useRef<PanelKind | null>(null);
   const deletingRef = useRef(false);
+  const [deleting, setDeleting] = useState(false);
 
   const open = panel !== null && commentFormOpen(panel.kind, panel.phase, gate.phase, comment, gate, participantId, isFacilitator);
   // A form left behind by a phase change, a deletion or a lost right must not come back.
@@ -61,9 +63,15 @@ function CommentItemView({ comment, replies, participantId, isFacilitator, gate,
     }
   }, [kind]);
 
+  // After a failed delete the buttons come back; keep keyboard focus inside the confirmation.
+  useEffect(() => {
+    if (kind === 'delete' && !deleting && problem) cancelDeleteRef.current?.focus();
+  }, [kind, deleting, problem]);
+
   const begin = (next: PanelKind) => {
     if (!gate.phase) return;
     deletingRef.current = false;
+    setDeleting(false);
     setProblem(null);
     // One form at a time on a comment: opening one replaces another.
     setPanel({ kind: next, phase: gate.phase });
@@ -83,6 +91,7 @@ function CommentItemView({ comment, replies, participantId, isFacilitator, gate,
   const confirmDelete = () => {
     if (deletingRef.current) return;
     deletingRef.current = true;
+    setDeleting(true);
     setProblem(null);
     useDiscussStore
       .getState()
@@ -90,6 +99,7 @@ function CommentItemView({ comment, replies, participantId, isFacilitator, gate,
       .then(() => close(null))
       .catch((e: unknown) => {
         deletingRef.current = false;
+        setDeleting(false);
         const message = e instanceof Error ? e.message : String(e);
         if (useBoardStore.getState().lastWriteError === message) useBoardStore.getState().clearWriteError();
         setProblem(message);
@@ -133,17 +143,17 @@ function CommentItemView({ comment, replies, participantId, isFacilitator, gate,
       {!deleted && kind !== 'edit' && kind !== 'delete' && (canReply || canEdit || canDelete) && (
         <div className="mt-1 flex flex-wrap items-center gap-2">
           {canReply && (
-            <button ref={replyRef} type="button" aria-expanded={kind === 'reply'} onClick={() => (kind === 'reply' ? close('reply') : begin('reply'))} className={COMMENT_BUTTON}>
+            <button ref={replyRef} type="button" aria-expanded={kind === 'reply'} onClick={() => (kind === 'reply' ? close('reply') : begin('reply'))} className={COMMENT_TEXT_BUTTON}>
               Reply
             </button>
           )}
           {canEdit && (
-            <button ref={editRef} type="button" onClick={() => begin('edit')} className={COMMENT_BUTTON}>
+            <button ref={editRef} type="button" onClick={() => begin('edit')} className={COMMENT_TEXT_BUTTON}>
               Edit
             </button>
           )}
           {canDelete && (
-            <button ref={deleteRef} type="button" onClick={() => begin('delete')} className={COMMENT_BUTTON}>
+            <button ref={deleteRef} type="button" onClick={() => begin('delete')} className={COMMENT_TEXT_BUTTON}>
               Delete
             </button>
           )}
@@ -159,10 +169,10 @@ function CommentItemView({ comment, replies, participantId, isFacilitator, gate,
             </p>
           )}
           <div className="flex items-center gap-2">
-            <button type="button" onClick={confirmDelete} className={COMMENT_BUTTON}>
+            <button type="button" onClick={confirmDelete} disabled={deleting} aria-busy={deleting || undefined} className={cn(COMMENT_TEXT_BUTTON, 'text-[var(--danger)] hover:text-[var(--danger)]')}>
               Delete
             </button>
-            <button ref={cancelDeleteRef} type="button" onClick={() => close('delete')} className={COMMENT_BUTTON}>
+            <button ref={cancelDeleteRef} type="button" onClick={() => close('delete')} disabled={deleting} className={COMMENT_TEXT_BUTTON}>
               Cancel
             </button>
           </div>

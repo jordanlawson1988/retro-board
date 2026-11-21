@@ -3,6 +3,7 @@ import {
   buildAgenda, currentTopicId, shownTopicId, neighbourTopicId, topicPositionLabel, agendaCountLabel,
   agendaVotesLabel, agendaCardsLabel, topicHeading, discussViewShown, topicFollowable, actionItemsForTopic,
   phaseTopic, topicActionOutcome, assignOutcome, setTopicOutcome,
+  discussTopics, selectTopicAction, topicControls,
 } from '@/lib/agenda';
 
 const at = (ms: number) => new Date(Date.UTC(2026, 10, 20, 10, 0, 0, ms)).toISOString();
@@ -125,5 +126,65 @@ describe('outcome precedence and absent rows', () => {
   });
   it('assignOutcome: a moved board beats a missing owner', () => {
     expect(assignOutcome({ board_ok: false, owner_ok: false, id: null })).toBe('phase-changed');
+  });
+});
+
+describe('discussTopics', () => {
+  const agenda = buildAgenda([card('a', 1), card('b', 2), card('c', 3)], [vote('c', 'p1')]);
+  const board = (over: Record<string, unknown> = {}) =>
+    ({ id: 'b1', mode: 'guided', phase: 'discuss', archived_at: null, phase_config: {}, ...over }) as never;
+  it('follows the stored topic, falling back to the first item', () => {
+    expect(discussTopics(board({ phase_config: { topic: 'b' } }), agenda, null)).toEqual({ current: 'b', shown: 'b' });
+    expect(discussTopics(board({ phase_config: { topic: 'gone' } }), agenda, null)).toEqual({ current: 'c', shown: 'c' });
+  });
+  it('shows a viewed topic while it applies to this board and phase', () => {
+    expect(discussTopics(board(), agenda, { boardId: 'b1', phase: 'discuss', cardId: 'a' })).toEqual({ current: 'c', shown: 'a' });
+    expect(discussTopics(board(), agenda, { boardId: 'other', phase: 'discuss', cardId: 'a' }).shown).toBe('c');
+  });
+  it('has no current topic in Done but still shows the first or the viewed one', () => {
+    const done = board({ phase: 'done', archived_at: 'x', phase_config: { topic: 'b' } });
+    expect(discussTopics(done, agenda, null)).toEqual({ current: null, shown: 'c' });
+    expect(discussTopics(done, agenda, { boardId: 'b1', phase: 'done', cardId: 'a' }).shown).toBe('a');
+  });
+  it('handles an empty agenda and no board', () => {
+    expect(discussTopics(board(), [], null)).toEqual({ current: null, shown: null });
+    expect(discussTopics(null, agenda, null)).toEqual({ current: null, shown: 'c' });
+  });
+});
+
+describe('selectTopicAction', () => {
+  it('a facilitator in Discuss sets the topic for everyone, even the current one', () => {
+    expect(selectTopicAction(true, true, 'a', 'b')).toEqual({ kind: 'set', cardId: 'a' });
+    expect(selectTopicAction(true, true, 'b', 'b')).toEqual({ kind: 'set', cardId: 'b' });
+  });
+  it('a participant views; the current topic returns to following', () => {
+    expect(selectTopicAction(true, false, 'a', 'b')).toEqual({ kind: 'view', cardId: 'a' });
+    expect(selectTopicAction(true, false, 'b', 'b')).toEqual({ kind: 'view', cardId: null });
+  });
+  it('in Done everyone only views, facilitator included', () => {
+    expect(selectTopicAction(false, true, 'a', null)).toEqual({ kind: 'view', cardId: 'a' });
+  });
+});
+
+describe('topicControls', () => {
+  const agenda = buildAgenda([card('a', 1), card('b', 2), card('c', 3)], []);
+  const base = { followable: true, isFacilitator: true, agenda, current: 'b', shown: 'b' };
+  it('a facilitator gets neighbours of the current topic and nothing to discuss when looking at it', () => {
+    expect(topicControls(base)).toEqual({ canMove: true, previousId: 'a', nextId: 'c', canDiscussShown: false, viewingAnother: false });
+  });
+  it('has no neighbour past either end', () => {
+    expect(topicControls({ ...base, current: 'a', shown: 'a' }).previousId).toBeNull();
+    expect(topicControls({ ...base, current: 'c', shown: 'c' }).nextId).toBeNull();
+  });
+  it('a facilitator looking at another topic can discuss it; a participant sees the back bar', () => {
+    expect(topicControls({ ...base, shown: 'a' }).canDiscussShown).toBe(true);
+    expect(topicControls({ ...base, shown: 'a' }).viewingAnother).toBe(false);
+    const p = topicControls({ ...base, isFacilitator: false, shown: 'a' });
+    expect(p).toEqual({ canMove: false, previousId: null, nextId: null, canDiscussShown: false, viewingAnother: true });
+  });
+  it('offers nothing in Done', () => {
+    expect(topicControls({ ...base, followable: false, current: null, shown: 'a' })).toEqual({
+      canMove: false, previousId: null, nextId: null, canDiscussShown: false, viewingAnother: false,
+    });
   });
 });

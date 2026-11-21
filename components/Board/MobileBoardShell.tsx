@@ -30,6 +30,9 @@ import { sortCards, effectiveCardSort } from '@/utils/sortCards';
 import { isMine } from '@/utils/isMine';
 import { hasVotedOn, leadCardVotes, voteSortKey, voteTotalsByCard, votesUsedBy } from '@/lib/votes';
 import { useCardText } from '@/hooks/useCardText';
+import { discussViewShown } from '@/lib/agenda';
+import { GUIDED_MODE, OPEN_MODE } from '@/lib/constants/phases';
+import { MobileDiscuss } from '@/components/Discuss';
 import { useTeamVotesLeft } from '@/hooks/useTeamVotesLeft';
 import type { Column, Card, Vote, ActionItem, CardReactions, Participant, CardSort, BoardSettings } from '@/types';
 
@@ -123,6 +126,7 @@ export function MobileBoardShell({
   const { guided, phase } = usePhaseGates();
   const teamLeft = useTeamVotesLeft();
   const stepperShown = guided && !!phase;
+  const discussShown = discussViewShown({ mode: guided ? GUIDED_MODE : OPEN_MODE, phase });
   const [moreOpen, setMoreOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
   // A stable function: the sheet re-registers its Escape and Back handling whenever this changes,
@@ -193,6 +197,7 @@ export function MobileBoardShell({
         <MobileVoteTracker used={votesUsed} total={maxVotesPerParticipant} teamLeft={teamLeft} />
       )}
 
+      {discussShown ? <MobileDiscuss isFacilitator={isAdmin} /> : (<>
       {/* Column tab strip */}
       {sortedColumns.length > 0 && (
         <MobileColumnTabs
@@ -290,6 +295,8 @@ export function MobileBoardShell({
           </div>
         )}
       </div>
+
+      </>)}
 
       {/* FAB — only when card creation is allowed */}
       {fabVisible && (

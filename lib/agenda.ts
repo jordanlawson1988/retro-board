@@ -162,3 +162,61 @@ export function setTopicOutcome(
   if (!row.topic_ok) return 'topic-missing';
   return row.phase === null || row.phase === undefined ? 'phase-changed' : 'ok';
 }
+
+/** The topic everyone follows and the one this person is looking at, for a board and a viewer's own choice. */
+export function discussTopics(
+  board: Pick<Board, 'id' | 'mode' | 'phase' | 'archived_at' | 'phase_config'> | null,
+  agenda: readonly AgendaItem[],
+  viewed: ViewedTopic | null,
+): { current: string | null; shown: string | null } {
+  const current = board && topicFollowable(board) ? currentTopicId(agenda, phaseTopic(board.phase_config)) : null;
+  const shown = shownTopicId(agenda, current ?? agenda[0]?.cardId ?? null, viewed, {
+    boardId: board?.id ?? null,
+    phase: board?.phase ?? null,
+  });
+  return { current, shown };
+}
+
+/**
+ * What a click on an agenda item does. A facilitator in Discuss moves everyone; anyone else (and
+ * everyone in Done) moves only their own view, and clicking the current topic returns to following.
+ */
+export function selectTopicAction(
+  followable: boolean,
+  isFacilitator: boolean,
+  cardId: string,
+  current: string | null,
+): { kind: 'set'; cardId: string } | { kind: 'view'; cardId: string | null } {
+  if (followable && isFacilitator) return { kind: 'set', cardId };
+  return { kind: 'view', cardId: cardId === current ? null : cardId };
+}
+
+export interface TopicControls {
+  /** Facilitator in Discuss: Previous, Next and Discuss this topic exist. */
+  canMove: boolean;
+  previousId: string | null;
+  nextId: string | null;
+  /** The facilitator is looking at a topic that is not the current one. */
+  canDiscussShown: boolean;
+  /** A participant is looking at a topic that is not the current one. */
+  viewingAnother: boolean;
+}
+
+export function topicControls(input: {
+  followable: boolean;
+  isFacilitator: boolean;
+  agenda: readonly AgendaItem[];
+  current: string | null;
+  shown: string | null;
+}): TopicControls {
+  const { followable, isFacilitator, agenda, current, shown } = input;
+  const canMove = followable && isFacilitator;
+  const elsewhere = followable && shown !== null && shown !== current;
+  return {
+    canMove,
+    previousId: canMove ? neighbourTopicId(agenda, current, -1) : null,
+    nextId: canMove ? neighbourTopicId(agenda, current, 1) : null,
+    canDiscussShown: canMove && elsewhere,
+    viewingAnother: !isFacilitator && elsewhere,
+  };
+}

@@ -36,6 +36,8 @@ import { exportMarkdown, exportCsv } from '@/utils/export';
 import { useCardText } from '@/hooks/useCardText';
 import { GUIDED_MODE } from '@/lib/constants/phases';
 import { votesUsedBy } from '@/lib/votes';
+import { discussViewShown } from '@/lib/agenda';
+import { DiscussView } from '@/components/Discuss';
 
 /** A drag distance no pointer reaches: used to switch dragging off. */
 const DRAG_NEVER_PX = 100_000;
@@ -312,6 +314,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
   const isJoined = !!currentParticipantId;
   const isObscured = board.settings.card_visibility === 'hidden';
   const isCompleted = !!board.archived_at;
+  const discussShown = discussViewShown(board);
   const currentParticipant = participants.find((p) => p.id === currentParticipantId);
   // Authenticated board owners (and system admins) always get facilitator
   // controls, even if their participant record isn't flagged as admin —
@@ -462,7 +465,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
       <ConnectionStatusBanner />
 
       {/* View toggle + column filter */}
-      {isJoined && columns.length > 0 && (
+      {!discussShown && isJoined && columns.length > 0 && (
         <div className="mx-auto max-w-[1400px] px-4 pt-4 sm:px-6">
           <div className="flex flex-wrap items-center gap-3">
             <ViewToggle currentView={currentView} onChangeView={handleChangeView} />
@@ -504,7 +507,9 @@ export function BoardPage({ boardId }: { boardId: string }) {
       )}
 
       {/* Board content */}
-      {isJoined ? (
+      {discussShown && isJoined ? (
+        <DiscussView isFacilitator={isAdmin} />
+      ) : isJoined ? (
         columns.length > 0 ? (
           <>
             {currentView === 'grid' && (

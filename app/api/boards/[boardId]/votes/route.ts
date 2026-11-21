@@ -1,3 +1,4 @@
+import { dbErrorCode } from '@/lib/db-error';
 import { sqlTransaction } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { rateLimitOr429 } from '@/lib/rate-limit';
@@ -118,10 +119,6 @@ export async function POST(
 
   await publishVote(boardId, 'vote-cast', { vote }, loaded.board);
   return NextResponse.json({ action: 'added', vote });
-}
-
-function dbErrorCode(err: unknown): string | undefined {
-  return typeof err === 'object' && err !== null ? (err as { code?: string }).code : undefined;
 }
 
 type Loaded = NonNullable<Awaited<ReturnType<typeof loadBoardActor>>>;

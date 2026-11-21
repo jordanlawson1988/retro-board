@@ -235,17 +235,31 @@ export function editCommentOutcome(
   if (row.found === 0) return 'missing';
   if (row.is_deleted) return 'gone';
   if (!row.is_author) return 'not-yours';
-  return row.id === null || row.id === undefined ? 'phase-changed' : 'ok';
+  // The board check passed and the snapshot showed a live comment of the actor's, yet nothing was
+  // updated: the statement's live-row check failed, so the comment was deleted in between.
+  return row.id === null || row.id === undefined ? 'gone' : 'ok';
 }
 
 export function deleteCommentOutcome(
-  row: { board_ok: boolean; found: number; already_deleted: boolean | null; permitted: boolean } | undefined,
+  row:
+    | {
+        board_ok: boolean;
+        found: number;
+        already_deleted: boolean | null;
+        permitted: boolean;
+        removed_ids: readonly string[] | null;
+        id: unknown;
+      }
+    | undefined,
 ): 'ok' | 'phase-changed' | 'missing' | 'gone' | 'denied' {
   if (!row) return 'missing';
   if (!row.board_ok) return 'phase-changed';
   if (row.found === 0) return 'missing';
   if (row.already_deleted) return 'gone';
-  return row.permitted ? 'ok' : 'denied';
+  if (!row.permitted) return 'denied';
+  // Permitted by the snapshot but neither a tombstone nor a removal happened: the row changed underneath.
+  const changed = (row.id !== null && row.id !== undefined) || (row.removed_ids ?? []).length > 0;
+  return changed ? 'ok' : 'gone';
 }
 
 /** Whether a key press in a comment textarea posts. Shift+Enter is a line break; a composition (IME) is never cut short. */

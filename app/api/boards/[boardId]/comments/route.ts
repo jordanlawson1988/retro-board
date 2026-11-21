@@ -1,4 +1,5 @@
 import { sql } from '@/lib/db';
+import { dbErrorCode, FOREIGN_KEY_VIOLATION } from '@/lib/db-error';
 import { NextResponse } from 'next/server';
 import { rateLimitOr429 } from '@/lib/rate-limit';
 import { loadBoardActor, guardResponse, requireParticipantOn, BOARD_NOT_FOUND } from '@/lib/board-actor';
@@ -89,7 +90,9 @@ export async function POST(request: Request, { params }: RouteContext) {
   const phase = loaded.board.phase;
   const actorId = loaded.actor.participantId;
 
-  const [row] = await sql`
+  let row: Record<string, unknown>;
+  try {
+    [row] = await sql`
     WITH ok AS (
       SELECT 1 AS one FROM boards
       WHERE id = ${boardId} AND phase = ${phase} AND archived_at IS NULL AND deleted_at IS NULL
@@ -121,6 +124,12 @@ export async function POST(request: Request, { params }: RouteContext) {
            i.*
     FROM (SELECT 1) one LEFT JOIN inserted i ON true
   `;
+  } catch (err) {
+    // The parent was hard-deleted or the author left the board between the reads and the insert.
+    // Only the code is read: the error's message and detail carry the row, which names an anonymous author.
+    if (dbErrorCode(err) === FOREIGN_KEY_VIOLATION) return fail(parentId !== null ? REPLY_PARENT_ERROR : PHASE_CHANGED_ERROR, 409);
+    throw err;
+  }
   const outcome = createCommentOutcome(row as Parameters<typeof createCommentOutcome>[0], parentId !== null, COMMENTS_PER_BOARD_MAX);
   if (outcome === 'phase-changed') return fail(PHASE_CHANGED_ERROR, 409);
   if (outcome === 'card-missing') return fail(CARD_NOT_FOUND_ERROR, 404);
@@ -167,6 +176,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       UPDATE comments SET body = ${text.value}, edited_at = now()
       FROM cur, ok
       WHERE comments.id = cur.id AND cur.deleted_at IS NULL AND cur.author_participant_id = ${actorId}
+        AND comments.deleted_at IS NULL AND comments.author_participant_id = ${actorId}
       RETURNING comments.*
     )
     SELECT EXISTS (SELECT 1 FROM ok) AS board_ok,
@@ -225,7 +235,7 @@ export async function DELETE(request: Request, { params }: RouteContext) {
     ), tombstoned AS (
       UPDATE comments SET body = '', deleted_at = now()
       FROM allowed, has_replies
-      WHERE comments.id = allowed.id AND has_replies.yes
+      WHERE comments.id = allowed.id AND has_replies.yes AND comments.deleted_at IS NULL
       RETURNING comments.*
     ), removed AS (
       DELETE FROM comments USING allowed, has_replies

@@ -131,6 +131,29 @@ describe('guided create', () => {
     expect(channelPublish).not.toHaveBeenCalled();
   });
 
+  const fkError = () => Object.assign(new Error('Failing row contains (secret)'), { code: '23503', detail: 'Key (x)=(secret)' });
+
+  it.each([
+    ['an owner', { description: 'Do it', cardId: 'c1', assigneeParticipantId: 'p9' }, 'That person is not on this board'],
+    ['a topic only', { description: 'Do it', cardId: 'c1' }, 'That topic is not on the agenda'],
+  ])('a foreign-key violation (23503) with %s answers 404 and publishes nothing', async (_n, body, message) => {
+    mocks.sql.mockResolvedValueOnce([guidedRow()]).mockRejectedValueOnce(fkError());
+    const res = await post(body);
+    expect(res.status).toBe(404);
+    const text = JSON.stringify(await res.json());
+    expect(text).toBe(JSON.stringify({ error: message }));
+    expect(text).not.toContain('secret');
+    expect(channelPublish).not.toHaveBeenCalled();
+  });
+
+  it('a 23503 with neither owner nor topic, and any other database error, propagate', async () => {
+    mocks.sql.mockResolvedValueOnce([guidedRow()]).mockRejectedValueOnce(fkError());
+    await expect(post({ description: 'Do it' })).rejects.toThrow('Failing row');
+    mocks.sql.mockResolvedValueOnce([guidedRow()]).mockRejectedValueOnce(Object.assign(new Error('boom'), { code: '40001' }));
+    await expect(post({ description: 'Do it', cardId: 'c1', assigneeParticipantId: 'p9' })).rejects.toThrow('boom');
+    expect(channelPublish).not.toHaveBeenCalled();
+  });
+
   it('a bad owner is 400 Invalid assignee and a bad cardId is 400 Invalid request body, after one round-trip', async () => {
     mocks.sql.mockResolvedValueOnce([guidedRow()]);
     const a = await post({ description: 'Do it', assigneeParticipantId: 5 });

@@ -336,13 +336,18 @@ describe('editCommentOutcome', () => {
   it('is ok with an id', () => {
     expect(editCommentOutcome(row)).toBe('ok');
   });
-  it('is phase-changed when everything passes but the id is null', () => {
-    expect(editCommentOutcome({ ...row, id: null })).toBe('phase-changed');
+  // Changed on purpose (was 'phase-changed'): the board check passed, so a row that was not updated
+  // although the snapshot showed a live comment of the actor's means it changed underneath: it was deleted.
+  it('is gone when everything passes but no row was updated', () => {
+    expect(editCommentOutcome({ ...row, id: null })).toBe('gone');
+  });
+  it('a moved board is still decided first when no row was updated', () => {
+    expect(editCommentOutcome({ ...row, board_ok: false, id: null })).toBe('phase-changed');
   });
 });
 
 describe('deleteCommentOutcome', () => {
-  const row = { board_ok: true, found: 1, already_deleted: false, permitted: true };
+  const row = { board_ok: true, found: 1, already_deleted: false, permitted: true, removed_ids: ['m1'] as string[] | null, id: null as unknown };
   it('is missing with no row', () => {
     expect(deleteCommentOutcome(undefined)).toBe('missing');
   });
@@ -358,8 +363,15 @@ describe('deleteCommentOutcome', () => {
   it('is denied when not permitted', () => {
     expect(deleteCommentOutcome({ ...row, permitted: false })).toBe('denied');
   });
-  it('is ok when permitted', () => {
+  it('is ok when permitted and a row was removed', () => {
     expect(deleteCommentOutcome(row)).toBe('ok');
+  });
+  it('is ok when permitted and a tombstone was written', () => {
+    expect(deleteCommentOutcome({ ...row, removed_ids: [], id: 'm1' })).toBe('ok');
+  });
+  it('is gone when permitted but nothing was changed (the row changed underneath)', () => {
+    expect(deleteCommentOutcome({ ...row, removed_ids: [] })).toBe('gone');
+    expect(deleteCommentOutcome({ ...row, removed_ids: null })).toBe('gone');
   });
 });
 
@@ -384,7 +396,7 @@ describe('outcome precedence', () => {
   it('editCommentOutcome: gone beats not-yours', () => {
     expect(editCommentOutcome({ ...edit, is_deleted: true, is_author: false })).toBe('gone');
   });
-  const del = { board_ok: true, found: 1, already_deleted: false, permitted: true };
+  const del = { board_ok: true, found: 1, already_deleted: false, permitted: true, removed_ids: [] as string[], id: null as unknown };
   it('deleteCommentOutcome: a moved board beats a missing comment', () => {
     expect(deleteCommentOutcome({ ...del, board_ok: false, found: 0, already_deleted: null })).toBe('phase-changed');
   });

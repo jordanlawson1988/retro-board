@@ -139,6 +139,26 @@ describe('create', () => {
     expect(mocks.publish).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['a reply', { cardId: 'L', body: 'hi', parentId: ID }, 'You can only reply to a comment that starts a thread'],
+    ['a top-level comment', { cardId: 'L', body: 'hi' }, 'The phase already changed'],
+  ])('a foreign-key violation (23503) on %s answers 409 and publishes nothing', async (_n, body, message) => {
+    const err = Object.assign(new Error('Failing row contains (p1, Ann, secret)'), { code: '23503', detail: 'Failing row contains (p1, Ann)' });
+    mocks.sql.mockResolvedValueOnce([guidedRow()]).mockRejectedValueOnce(err);
+    const res = await post(body);
+    expect(res.status).toBe(409);
+    const text = JSON.stringify(await res.json());
+    expect(text).toBe(JSON.stringify({ error: message }));
+    expect(text).not.toContain('Ann');
+    expect(mocks.publish).not.toHaveBeenCalled();
+  });
+
+  it('any other database error on create still propagates', async () => {
+    mocks.sql.mockResolvedValueOnce([guidedRow()]).mockRejectedValueOnce(Object.assign(new Error('boom'), { code: '40001' }));
+    await expect(post({ cardId: 'L', body: 'hi' })).rejects.toThrow('boom');
+    expect(mocks.publish).not.toHaveBeenCalled();
+  });
+
   it('refuses a reply to something that is not a thread starter', async () => {
     mocks.sql.mockResolvedValueOnce([guidedRow()]).mockResolvedValueOnce([{ ...createFlags, ...row(), parent_ok: false }]);
     const res = await post({ cardId: 'L', body: 'hi', parentId: ID });
@@ -204,6 +224,7 @@ describe('edit', () => {
     expect(callText(1)).toContain('edited_at = now()');
     expect(callText(1)).toContain('cur.author_participant_id = ?');
     expect(callText(1)).toContain('FOR SHARE');
+    expect(callText(1)).toContain('AND comments.deleted_at IS NULL AND comments.author_participant_id = ?');
     expect(callValues(1)).toEqual(expect.arrayContaining([ID, 'new', 'p1', 'discuss']));
     expect(mocks.publish).toHaveBeenCalledWith('b1', 'comment-updated', row({ body: 'new', edited_at: '2026-11-20T10:05:00.000Z' }));
   });
@@ -226,6 +247,14 @@ describe('edit', () => {
     const res = await patch({ commentId: ID, body: 'x' });
     expect(res.status).toBe(status);
     expect((await res.json()).error).toBe(message);
+    expect(mocks.publish).not.toHaveBeenCalled();
+  });
+
+  it('a row that was not updated although the snapshot was fine answers 409 This comment was deleted', async () => {
+    mocks.sql.mockResolvedValueOnce([guidedRow()]).mockResolvedValueOnce([{ ...editFlags, ...row(), id: null }]);
+    const res = await patch({ commentId: ID, body: 'x' });
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe('This comment was deleted');
     expect(mocks.publish).not.toHaveBeenCalled();
   });
 
@@ -279,6 +308,7 @@ describe('delete', () => {
     expect(mocks.sql).toHaveBeenCalledTimes(2);
     expect(callText(1)).toContain("SET body = '', deleted_at = now()");
     expect(callText(1)).toContain('p.deleted_at IS NOT NULL');
+    expect(callText(1)).toContain("WHERE comments.id = allowed.id AND has_replies.yes AND comments.deleted_at IS NULL");
     expect(callText(1)).toContain('FOR SHARE');
     expect(mocks.publishDeleted).toHaveBeenCalledWith('b1', [], expect.objectContaining({ id: ID, deleted_at: '2026-11-20T10:09:00.000Z' }));
     expect(mocks.publishDeleted.mock.calls[0][2]).not.toHaveProperty('removed_ids');
@@ -346,6 +376,14 @@ describe('delete', () => {
     const res = await del({ commentId: ID });
     expect(res.status).toBe(status);
     expect((await res.json()).error).toBe(message);
+    expect(mocks.publishDeleted).not.toHaveBeenCalled();
+  });
+
+  it('permitted but nothing changed (the row changed underneath) answers 409 and publishes nothing', async () => {
+    mocks.sql.mockResolvedValueOnce([guidedRow()]).mockResolvedValueOnce([{ ...deleteFlags, removed_ids: [], id: null }]);
+    const res = await del({ commentId: ID });
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe('This comment was deleted');
     expect(mocks.publishDeleted).not.toHaveBeenCalled();
   });
 

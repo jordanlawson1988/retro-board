@@ -1,4 +1,5 @@
 import { sql } from '@/lib/db';
+import { dbErrorCode, FOREIGN_KEY_VIOLATION } from '@/lib/db-error';
 import { ablyServer } from '@/lib/ably-server';
 import { NextResponse } from 'next/server';
 import { rateLimitOr429 } from '@/lib/rate-limit';
@@ -160,7 +161,9 @@ async function guidedCreate(loaded: Loaded, boardId: string, body: Record<string
   // Same as the open create on a v2 board: null for a signed-in facilitator who has not joined.
   const createdBy = loaded.actor.participantId;
 
-  const [row] = await sql`
+  let row: Record<string, unknown>;
+  try {
+    [row] = await sql`
     WITH ok AS (
       SELECT 1 AS one FROM boards
       WHERE id = ${boardId} AND phase = ${phase} AND archived_at IS NULL AND deleted_at IS NULL
@@ -184,6 +187,14 @@ async function guidedCreate(loaded: Loaded, boardId: string, body: Record<string
            i.*
     FROM (SELECT 1) one LEFT JOIN inserted i ON true
   `;
+  } catch (err) {
+    // The owner or the topic's card was removed between the reads and the insert. Only the code is read.
+    if (dbErrorCode(err) === FOREIGN_KEY_VIOLATION) {
+      if (ownerId !== null) return NextResponse.json({ error: ASSIGNEE_NOT_FOUND_ERROR }, { status: 404 });
+      if (topicId !== null) return NextResponse.json({ error: TOPIC_NOT_FOUND_ERROR }, { status: 404 });
+    }
+    throw err;
+  }
   const outcome = topicActionOutcome(row as Parameters<typeof topicActionOutcome>[0]);
   if (outcome === 'phase-changed') return NextResponse.json({ error: PHASE_CHANGED_ERROR }, { status: 409 });
   if (outcome === 'topic-missing') return NextResponse.json({ error: TOPIC_NOT_FOUND_ERROR }, { status: 404 });

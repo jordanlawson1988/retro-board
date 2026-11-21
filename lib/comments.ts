@@ -132,6 +132,25 @@ export function parseComment(v: unknown): Comment | null {
   return comment;
 }
 
+/** The parsable comments of a list; anything that is not a comment is dropped. */
+export function parseCommentList(v: unknown): Comment[] {
+  if (!Array.isArray(v)) return [];
+  return v.flatMap((item) => {
+    const c = parseComment(item);
+    return c ? [c] : [];
+  });
+}
+
+/** A `comment-deleted` payload or a delete answer: the ids, and the tombstone or null. Null when malformed. */
+export function parseCommentDeletion(v: unknown): { ids: string[]; tombstone: Comment | null } | null {
+  if (typeof v !== 'object' || v === null) return null;
+  const o = v as Record<string, unknown>;
+  if (!Array.isArray(o.ids) || !o.ids.every((id) => typeof id === 'string')) return null;
+  if (o.tombstone === null || o.tombstone === undefined) return { ids: o.ids as string[], tombstone: null };
+  const tombstone = parseComment(o.tombstone);
+  return tombstone ? { ids: o.ids as string[], tombstone } : null;
+}
+
 /** The incoming row wins; ownership, which only this client knows, is never lost. */
 export function mergeIncomingComment(local: Comment | undefined, incoming: Comment): Comment {
   return { ...incoming, is_mine: (local?.is_mine ?? false) || (incoming.is_mine ?? false) };

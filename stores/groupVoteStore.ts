@@ -1,10 +1,11 @@
 import { create } from 'zustand';
 import { useBoardStore, failWrite, refetchBoardCoalesced } from '@/stores/boardStore';
+import { failAction, noAnswer } from '@/stores/failAction';
 import { NETWORK_ERROR } from '@/stores/phaseStore';
 import { GUIDED_MODE } from '@/lib/constants/phases';
 import { validateGroupTitle, ungroupAll, SET_TITLE_FALLBACK, RESET_GROUPING_FALLBACK } from '@/lib/groups';
 import {
-  ADD_VOTE_FALLBACK, REMOVE_VOTE_FALLBACK, EMPTY_VOTE_SLOT, applyVoteDelta, applyVoteTally, errorMessageOf, finishVoteClick,
+  ADD_VOTE_FALLBACK, REMOVE_VOTE_FALLBACK, EMPTY_VOTE_SLOT, applyVoteDelta, applyVoteTally, finishVoteClick,
   groupRemoveTarget, maxVotesPerCard, myGroupVotesOn, settleOwnVote, startVoteClick, voteControlState, voteResult, votesUsedBy,
   type VoteSlot,
 } from '@/lib/votes';
@@ -32,30 +33,6 @@ function guidedBoard(): Board | null {
 }
 
 const onBoard = (boardId: string) => useBoardStore.getState().board?.id === boardId;
-
-/**
- * The error a failed write rejects with. While the board is still the current one it goes through
- * failWrite (message, banner, 401 handling, phase refetch on 409), and a 5xx or unanswered request,
- * which the server may have saved anyway, also pulls the real state back through the coalesced
- * refetch (`refetch: false` leaves that to the caller). For a board the user has left it applies
- * NOTHING: the error only carries the server's message.
- */
-async function failAction(
-  res: Response | null,
-  fallback: string,
-  boardId: string,
-  opts: { refetch: boolean } = { refetch: true },
-): Promise<Error> {
-  if (!onBoard(boardId)) {
-    const data = res ? await res.json().catch(() => null) : null;
-    return new Error(errorMessageOf(data, fallback));
-  }
-  const err = await failWrite(res ?? noAnswer(), fallback);
-  if (opts.refetch && (!res || res.status >= 500) && onBoard(boardId)) await refetchBoardCoalesced(boardId);
-  return err;
-}
-
-const noAnswer = () => new Response(null, { status: 500 });
 
 async function castVote(cardId: string, action: 'add' | 'remove'): Promise<void> {
   const { board, currentParticipantId: voterId, votes, cards } = useBoardStore.getState();

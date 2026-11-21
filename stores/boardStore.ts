@@ -13,9 +13,11 @@ import { withPhaseDefaults } from '@/lib/phases';
 import { createKeyedCoalescer } from '@/lib/coalescedRunner';
 import { tallyAfterFetch, type VoteTally } from '@/lib/votes';
 import { currentTallyVersion } from '@/lib/voteTallyVersion';
+import { commentChangesSince, commentSeq } from '@/lib/commentJournal';
+import { parseCommentList, replayComments } from '@/lib/comments';
 import { FINAL_PHASE, GUIDED_MODE, type BoardMode } from '@/lib/constants/phases';
 import type { BoardAccess } from '@/types';
-import type { Board, Column, Card, Vote, ActionItem, Participant, BoardTemplate, BoardSettings, ConnectionStatus } from '@/types';
+import type { Board, Column, Card, Vote, ActionItem, Comment, Participant, BoardTemplate, BoardSettings, ConnectionStatus } from '@/types';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
@@ -100,6 +102,8 @@ interface BoardState {
   lastWriteError: string | null;
   /** Team votes used on a guided board; null on an open board or before the first GET. */
   voteTally: VoteTally | null;
+  /** Comments of a guided board, shaped for this viewer; stays the same empty array on an open board. */
+  comments: Comment[];
   clearWriteError: () => void;
 
   // Board lifecycle
@@ -162,6 +166,7 @@ const initialState = {
   access: BOARD_ACCESS[0] as BoardAccess,
   lastWriteError: null as string | null,
   voteTally: null as VoteTally | null,
+  comments: [] as Comment[],
   onlineParticipantIds: [] as string[],
 };
 
@@ -252,6 +257,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     // The stored participant id is sent for legacy (v1) boards, where the server has no other
     // way to know who this is. Boards on the signed-cookie model ignore it.
     const tallyVersionAtStart = currentTallyVersion();
+    const commentSeqAtStart = commentSeq();
     let claimedPid: string | null = null;
     try { claimedPid = localStorage.getItem(`retro-pid-${boardId}`); } catch { /* ignore */ }
     const res = await fetch(
@@ -266,7 +272,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       return;
     }
 
-    const { board: rawBoard, columns, cards, votes, actionItems, participants, yourParticipantId, youCanFacilitate, youAre, access, voteTally } = await res.json();
+    const { board: rawBoard, columns, cards, votes, actionItems, participants, yourParticipantId, youCanFacilitate, youAre, access, voteTally, comments: rawComments } = await res.json();
     const board = withPhaseDefaults(rawBoard);
 
     // Completed and not part of it: keep only the stub. No history entry, no participant.
@@ -325,7 +331,15 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       isCompleted: !!board.archived_at,
     });
 
+    // A guided board's GET carries `comments`; replay what arrived while it was in flight. An open
+    // board's GET has none: the existing empty array stays (same reference), so nothing is woken.
+    const guidedComments = Array.isArray(rawComments)
+      ? replayComments(parseCommentList(rawComments), commentChangesSince(commentSeqAtStart), boardId)
+      : null;
+    const commentsPatch = guidedComments ? { comments: guidedComments } : get().comments.length > 0 ? { comments: initialState.comments } : {};
+
     set({
+      ...commentsPatch,
       board,
       columns: columns || [],
       cards: cards || [],

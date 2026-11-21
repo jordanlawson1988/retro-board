@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildRetroSummary, headlineItems, headlineSentence, summaryCommentAuthor, completedOnLabel, dueDateLabel,
-  ownerLabel, statusLabel, allActionItems, summaryAvailable, summaryViewState, summaryPath, summaryDocumentTitle,
+  ownerLabel, statusLabel, toSummaryComment, allActionItems, summaryAvailable, summaryViewState, summaryPath, summaryDocumentTitle,
 } from '@/lib/summary';
 
 const at = (ms: number) => new Date(Date.UTC(2026, 10, 21, 10, 0, 0, ms)).toISOString();
@@ -49,6 +49,25 @@ describe('buildRetroSummary', () => {
     expect(s.otherActionItems.map((i) => i.id)).toEqual(['i3', 'i4']);
     expect(allActionItems(s).map((i) => i.id)).toEqual(['i1', 'i2', 'i3', 'i4']);
   });
+  it('the summary holds no author ids and no is_mine', () => {
+    const json = JSON.stringify(s);
+    expect(json).not.toContain('p1');
+    expect(json).not.toContain('is_mine');
+    expect(json).not.toContain('author_participant_id');
+    expect(s.topics[0].threads[0].replies[0]).toMatchObject({ author: 'Anonymous', deleted: false });
+  });
+  it('a deleted top comment with a reply stays as a tombstone; one with no reply is left out', () => {
+    const t = buildRetroSummary({ ...input, comments: [
+      comment({ id: 'd1', deleted_at: at(5), body: '', author_name: null, author_participant_id: null, created_at: at(5) }),
+      comment({ id: 'r1', parent_id: 'd1', created_at: at(6) }),
+      comment({ id: 'd2', card_id: 'S', deleted_at: at(7), body: '', author_name: null, author_participant_id: null }),
+    ] } as never);
+    expect(t.topics[0].threads).toHaveLength(1);
+    expect(t.topics[0].threads[0].top).toMatchObject({ id: 'd1', deleted: true, body: '', author: '' });
+    expect(t.topics[0].threads[0].replies.map((r) => r.id)).toEqual(['r1']);
+    expect(t.topics[1].threads).toEqual([]);
+    expect(t.headline.comments).toBe(1);
+  });
   it('headline numbers', () => {
     expect(s.headline).toEqual({ participants: 3, cards: 4, votes: 4, topics: 3, comments: 2, actionItems: 4 });
     expect(headlineSentence({ participants: 1, cards: 1, votes: 0, topics: 1, comments: 0, actionItems: 0 }))
@@ -71,6 +90,23 @@ describe('labels', () => {
     expect(summaryCommentAuthor(comment({ is_anonymous: true, author_name: null, author_participant_id: null, is_mine: true }) as never)).toBe('Anonymous');
     expect(summaryCommentAuthor(comment({ is_mine: true }) as never)).toBe('Ann');
     expect(summaryCommentAuthor(comment({ deleted_at: at(1), body: '', author_name: null }) as never)).toBe('');
+  });
+  it('toSummaryComment carries finished labels and exactly six keys', () => {
+    const keys = ['author', 'body', 'createdAt', 'deleted', 'edited', 'id'];
+    expect(toSummaryComment(comment({ id: 'x', is_mine: true }) as never)).toEqual(
+      { id: 'x', author: 'Ann', body: 'hi', deleted: false, edited: false, createdAt: at(0) });
+    expect(toSummaryComment(comment({ is_anonymous: true, is_mine: true }) as never).author).toBe('Anonymous');
+    expect(toSummaryComment(comment({ is_anonymous: true }) as never).author).toBe('Anonymous');
+    expect(toSummaryComment(comment({ author_name: null }) as never).author).toBe('Anonymous');
+    expect(toSummaryComment(comment({ deleted_at: at(1), body: '', author_name: null }) as never))
+      .toMatchObject({ author: '', body: '', deleted: true });
+    expect(toSummaryComment(comment({ edited_at: at(2) }) as never).edited).toBe(true);
+    expect(Object.keys(toSummaryComment(comment({ extra: 1, is_mine: true }) as never)).sort()).toEqual(keys);
+  });
+  it('completedOnLabel is null for nothing or an unreadable date', () => {
+    expect(completedOnLabel(null)).toBeNull();
+    expect(completedOnLabel('')).toBeNull();
+    expect(completedOnLabel('not a date')).toBeNull();
   });
   it('dates', () => {
     expect(completedOnLabel('2026-11-21T23:30:00.000Z', 'UTC')).toBe('Completed on November 21, 2026');

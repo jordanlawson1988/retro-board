@@ -1,5 +1,5 @@
 import { actionItemsForTopic, buildAgenda, topicHeading } from '@/lib/agenda';
-import { threadsFor, type CommentThread } from '@/lib/comments';
+import { threadsFor } from '@/lib/comments';
 import { ACTION_ITEM_STATUS_LABELS, SUMMARY_ANONYMOUS, SUMMARY_PAGE_TITLE } from '@/lib/constants/summary';
 import { GUIDED_MODE } from '@/lib/constants/phases';
 import { compareByCreated } from '@/lib/groups';
@@ -26,6 +26,27 @@ export interface SummaryCard {
   isChild: boolean;
 }
 
+/**
+ * A comment as the summary shows it: a finished label, never the author's id, the viewer's
+ * ownership or the anonymity flag, so nothing downstream can render "You" or read an author.
+ */
+export interface SummaryComment {
+  id: string;
+  /** The summaryCommentAuthor label; '' for a deleted comment. */
+  author: string;
+  /** '' for a deleted comment. */
+  body: string;
+  /** A tombstone kept for its replies. */
+  deleted: boolean;
+  edited: boolean;
+  createdAt: string;
+}
+
+export interface SummaryThread {
+  top: SummaryComment;
+  replies: SummaryComment[];
+}
+
 export interface SummaryTopic {
   cardId: string;
   rank: number;
@@ -33,7 +54,7 @@ export interface SummaryTopic {
   score: number;
   /** The root first, then its children in creation order. */
   cards: SummaryCard[];
-  threads: CommentThread[];
+  threads: SummaryThread[];
   actionItems: ActionItem[];
 }
 
@@ -91,7 +112,10 @@ export function buildRetroSummary(input: SummaryInput): RetroSummary {
       const card = cards.find((c) => c.id === id);
       return card ? [{ id, text: exportCardText(card), isChild: id !== item.cardId }] : [];
     }),
-    threads: threadsFor(comments, item.cardIds),
+    threads: threadsFor(comments, item.cardIds).map((t) => ({
+      top: toSummaryComment(t.top),
+      replies: t.replies.map(toSummaryComment),
+    })),
     actionItems: actionItemsForTopic(actionItems, item.cardIds),
   }));
   const otherActionItems = actionItems
@@ -142,10 +166,25 @@ export function summaryCommentAuthor(c: Comment): string {
   return c.author_name;
 }
 
+/** The one mapping from a comment to the summary's comment, key by key (never a spread). */
+export function toSummaryComment(c: Comment): SummaryComment {
+  const deleted = c.deleted_at !== null;
+  return {
+    id: c.id,
+    author: summaryCommentAuthor(c),
+    body: deleted ? '' : c.body,
+    deleted,
+    edited: c.edited_at !== null && c.edited_at !== undefined,
+    createdAt: c.created_at,
+  };
+}
+
 const dateFormat = (timeZone?: string) =>
   new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone });
 
-export function completedOnLabel(iso: string, timeZone?: string): string {
+/** Null for nothing or a date that cannot be read; the page then omits the line. */
+export function completedOnLabel(iso: string | null | undefined, timeZone?: string): string | null {
+  if (!iso || Number.isNaN(Date.parse(iso))) return null;
   return `Completed on ${dateFormat(timeZone).format(new Date(iso))}`;
 }
 

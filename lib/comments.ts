@@ -262,8 +262,9 @@ export function commentsHeading(threads: readonly CommentThread[]): string {
   return live > 0 ? `${COMMENTS_HEADING} (${live})` : COMMENTS_HEADING;
 }
 
-export function commentsEmptyText(writable: boolean): string {
-  return writable ? COMMENTS_EMPTY_WRITABLE : COMMENTS_EMPTY_READONLY;
+/** `canPost`: the board is writable and the viewer has joined (so a composer is shown). */
+export function commentsEmptyText(canPost: boolean): string {
+  return canPost ? COMMENTS_EMPTY_WRITABLE : COMMENTS_EMPTY_READONLY;
 }
 
 /** The anonymous checkbox starts (and returns to) the board's setting. */
@@ -307,4 +308,77 @@ export function commentEditDecision(
   const checked = validateCommentBody(typed);
   if (!checked.ok) return { kind: 'invalid', error: checked.error };
   return checked.value === openedWith.trim() ? { kind: 'unchanged' } : { kind: 'send', value: checked.value };
+}
+
+/** After a write answered: the box may clear or close only if nothing was typed since the send. */
+export function sentTextUnchanged(sent: string, current: string): boolean {
+  return sent === current;
+}
+
+/**
+ * What a comment or reply box holds after its write answered: what was typed after the sent text.
+ * Text that no longer starts with what was sent (it was edited meanwhile) is kept whole.
+ */
+export function textAfterSend(sent: string, current: string): string {
+  if (current === '') return '';
+  return current.startsWith(sent) ? current.slice(sent.length) : current;
+}
+
+export interface CommentDraft {
+  text: string;
+  anonymous: boolean;
+}
+
+/** A topic's draft; with none stored, empty text and the board's default checkbox value. */
+export function draftFor(drafts: ReadonlyMap<string, CommentDraft>, topicId: string, defaultAnonymous: boolean): CommentDraft {
+  return drafts.get(topicId) ?? { text: '', anonymous: defaultAnonymous };
+}
+
+/** The drafts after a change in one topic's composer; an untouched composer leaves no entry. */
+export function withDraft(
+  drafts: ReadonlyMap<string, CommentDraft>,
+  topicId: string,
+  draft: CommentDraft,
+  defaultAnonymous: boolean,
+): Map<string, CommentDraft> {
+  const next = new Map(drafts);
+  if (draft.text === '' && draft.anonymous === defaultAnonymous) next.delete(topicId);
+  else next.set(topicId, draft);
+  return next;
+}
+
+export function withoutDraft(drafts: ReadonlyMap<string, CommentDraft>, topicId: string): Map<string, CommentDraft> {
+  const next = new Map(drafts);
+  next.delete(topicId);
+  return next;
+}
+
+export function draftsScope(boardId: string | null, phase: PhaseId | null): string {
+  return `${boardId ?? ''}:${phase ?? ''}`;
+}
+
+/** The held drafts while the board and phase are the same; none at all once either changes. */
+export function scopedDrafts(
+  held: { scope: string; drafts: Map<string, CommentDraft> } | null,
+  scope: string,
+): { scope: string; drafts: Map<string, CommentDraft> } {
+  return held && held.scope === scope ? held : { scope, drafts: new Map() };
+}
+
+/**
+ * Holds the half-typed comments of one thread instance, one per topic, for one board and phase.
+ * Asking for another scope (the phase or board changed) drops everything held.
+ */
+export function createDraftKeeper() {
+  let held: { scope: string; drafts: Map<string, CommentDraft> } | null = null;
+  return {
+    drafts(scope: string): ReadonlyMap<string, CommentDraft> {
+      held = scopedDrafts(held, scope);
+      return held.drafts;
+    },
+    /** An empty draft at the default checkbox value is removed (a post cleared it). */
+    put(scope: string, topicId: string, draft: CommentDraft, defaultAnonymous: boolean): void {
+      held = { scope, drafts: withDraft(scopedDrafts(held, scope).drafts, topicId, draft, defaultAnonymous) };
+    },
+  };
 }

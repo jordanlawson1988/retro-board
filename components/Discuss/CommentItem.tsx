@@ -117,11 +117,10 @@ function CommentItemView({ comment, replies, participantId, isFacilitator, gate,
                 initialAnonymous={false}
                 autoFocus
                 onCancel={() => close('edit')}
+                onDone={() => close('edit')}
                 onSubmit={async (typed) => {
                   const decision = commentEditDecision(comment.body, typed);
-                  if (decision.kind === 'invalid') throw new Error(decision.error);
                   if (decision.kind === 'send') await useDiscussStore.getState().editComment(comment.id, decision.value);
-                  close('edit');
                 }}
               />
             </div>
@@ -177,10 +176,10 @@ function CommentItemView({ comment, replies, participantId, isFacilitator, gate,
             initialAnonymous={anonymousDefault}
             autoFocus
             onCancel={() => close('reply')}
-            onSubmit={async (typed, anonymous) => {
-              await useDiscussStore.getState().createComment({ cardId: comment.card_id, body: typed.trim(), anonymous, parentId: comment.id });
-              close('reply');
-            }}
+            onDone={() => close('reply')}
+            onSubmit={(typed, anonymous) =>
+              useDiscussStore.getState().createComment({ cardId: comment.card_id, body: typed.trim(), anonymous, parentId: comment.id })
+            }
           />
         </div>
       )}

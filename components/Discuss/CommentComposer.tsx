@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Textarea } from '@/components/common';
 import { cn } from '@/utils/cn';
 import { useBoardStore } from '@/stores/boardStore';
-import { clampComment, commentCounterText, commentEnterPosts, commentsWritable, showCommentCounter } from '@/lib/comments';
+import { clampComment, commentCounterText, commentEnterPosts, commentsWritable, sentTextUnchanged, showCommentCounter, textAfterSend } from '@/lib/comments';
 import { COMMENT_ANONYMOUS_LABEL } from '@/lib/constants/comments';
 import { editorStillOpen } from '@/lib/groups';
 
@@ -25,8 +25,14 @@ interface CommentComposerProps {
   mode: ComposerMode;
   /** The text an editor opens with; empty for a comment or reply. */
   initialText?: string;
-  /** The checkbox's starting value, and the value it returns to after a post. Unused in edit mode. */
+  /** The checkbox's starting value. Unused in edit mode. */
   initialAnonymous: boolean;
+  /** The value the checkbox returns to after a post; the board's setting. Defaults to `initialAnonymous`. */
+  defaultAnonymous?: boolean;
+  /** Reports the draft after each change and after a successful post (the thread keeps one per topic). */
+  onDraftChange?: (text: string, anonymous: boolean) => void;
+  /** Called after a reply or edit was written and nothing was typed since; the parent closes the box. */
+  onDone?: () => void;
   /** Resolves when the write is done; a rejection keeps the text and shows its message under the box. */
   onSubmit: (text: string, anonymous: boolean) => Promise<void>;
   /** Escape and the Cancel button; absent for the thread's own composer. */
@@ -39,7 +45,7 @@ interface CommentComposerProps {
  * It belongs to the phase it was mounted in and sends nothing once that phase is over or the
  * board stops being writable. Blur does nothing; Enter or the button posts.
  */
-export function CommentComposer({ mode, initialText = '', initialAnonymous, onSubmit, onCancel, autoFocus }: CommentComposerProps) {
+export function CommentComposer({ mode, initialText = '', initialAnonymous, defaultAnonymous = initialAnonymous, onDraftChange, onDone, onSubmit, onCancel, autoFocus }: CommentComposerProps) {
   const copy = COPY[mode];
   const clearWriteError = useBoardStore((s) => s.clearWriteError);
   const [openedIn] = useState(() => useBoardStore.getState().board?.phase ?? null);
@@ -48,6 +54,7 @@ export function CommentComposer({ mode, initialText = '', initialAnonymous, onSu
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
+  const textRef = useRef(initialText);
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const uid = useId();
   const counterId = `${uid}-count`;
@@ -69,11 +76,23 @@ export function CommentComposer({ mode, initialText = '', initialAnonymous, onSu
     busyRef.current = true;
     setBusy(true);
     setProblem(null);
+    const sent = text;
     onSubmit(text, anonymous)
       .then(() => {
-        if (mode !== 'comment') return;
-        setText('');
-        setAnonymous(initialAnonymous);
+        // Text typed while the write was in flight is the person's: never erased, never sent twice.
+        if (mode === 'edit') return sentTextUnchanged(sent, textRef.current) ? onDone?.() : undefined;
+        const rest = textAfterSend(sent, textRef.current);
+        if (rest === '') {
+          if (mode === 'reply') return onDone?.();
+          textRef.current = '';
+          setText('');
+          setAnonymous(defaultAnonymous);
+          onDraftChange?.('', defaultAnonymous);
+        } else {
+          textRef.current = rest;
+          setText(rest);
+          onDraftChange?.(rest, anonymous);
+        }
         areaRef.current?.focus();
       })
       .catch((e: unknown) => {
@@ -102,7 +121,12 @@ export function CommentComposer({ mode, initialText = '', initialAnonymous, onSu
         rows={2}
         aria-invalid={problem ? true : undefined}
         aria-describedby={describedBy || undefined}
-        onChange={(e) => setText(clampComment(e.target.value))}
+        onChange={(e) => {
+          const next = clampComment(e.target.value);
+          textRef.current = next;
+          setText(next);
+          onDraftChange?.(next, anonymous);
+        }}
         onKeyDown={(e) => {
           if (commentEnterPosts(e.key, e.shiftKey, e.nativeEvent.isComposing || e.keyCode === 229)) {
             e.preventDefault();
@@ -128,7 +152,10 @@ export function CommentComposer({ mode, initialText = '', initialAnonymous, onSu
       <div className="flex flex-wrap items-center gap-2">
         {mode !== 'edit' && (
           <label htmlFor={checkId} className="flex min-h-11 items-center gap-2 text-sm text-[var(--ink-2)] md:min-h-9">
-            <input id={checkId} type="checkbox" checked={anonymous} onChange={(e) => setAnonymous(e.target.checked)} className="h-4 w-4" />
+            <input id={checkId} type="checkbox" checked={anonymous} onChange={(e) => {
+                setAnonymous(e.target.checked);
+                onDraftChange?.(text, e.target.checked);
+              }} className="h-4 w-4" />
             {COMMENT_ANONYMOUS_LABEL}
           </label>
         )}

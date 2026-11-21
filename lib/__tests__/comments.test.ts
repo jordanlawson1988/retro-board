@@ -4,7 +4,7 @@ import {
   threadsFor, isMyComment, canEditComment, canDeleteComment, canReplyTo, commentAuthorLabel, parseComment,
   mergeIncomingComment, upsertComment, removeComments, replayComments, createCommentOutcome,
   editCommentOutcome, deleteCommentOutcome, type CommentChange, commentEnterPosts, commentsHeading,
-  commentsEmptyText, initialAnonymous, commentCounterText, commentFormOpen, commentEditDecision,
+  commentsEmptyText, initialAnonymous, sentTextUnchanged, textAfterSend, createDraftKeeper, draftFor, withDraft, withoutDraft, scopedDrafts, draftsScope, commentCounterText, commentFormOpen, commentEditDecision,
 } from '@/lib/comments';
 import type { Comment } from '@/types';
 
@@ -433,10 +433,10 @@ describe('commentsHeading', () => {
 });
 
 describe('commentsEmptyText', () => {
-  it('invites a comment while writable', () => {
+  it('invites a comment when the viewer can post', () => {
     expect(commentsEmptyText(true)).toBe('No comments yet. Start the discussion.');
   });
-  it('only states the fact when not writable', () => {
+  it('only states the fact when the viewer cannot post (read-only, or not joined)', () => {
     expect(commentsEmptyText(false)).toBe('No comments yet.');
   });
 });
@@ -498,5 +498,87 @@ describe('commentEditDecision', () => {
   });
   it('refuses a blank edit without sending', () => {
     expect(commentEditDecision('First thought', '   ')).toEqual({ kind: 'invalid', error: 'Write a comment first' });
+  });
+});
+
+describe('sentTextUnchanged', () => {
+  it('is true when nothing was typed since the send', () => {
+    expect(sentTextUnchanged('first', 'first')).toBe(true);
+  });
+  it('is false when more was typed during the post', () => {
+    expect(sentTextUnchanged('first', 'first and more')).toBe(false);
+  });
+  it('is false when the text was emptied meanwhile', () => {
+    expect(sentTextUnchanged('first', '')).toBe(false);
+  });
+});
+
+describe('per-topic drafts', () => {
+  const none = new Map<string, { text: string; anonymous: boolean }>();
+  it('a topic with no draft starts empty at the default checkbox value', () => {
+    expect(draftFor(none, 't1', false)).toEqual({ text: '', anonymous: false });
+    expect(draftFor(none, 't1', true)).toEqual({ text: '', anonymous: true });
+  });
+  it('stores a draft per topic and gives each back', () => {
+    const a = withDraft(none, 't1', { text: 'half a thought', anonymous: true }, false);
+    const b = withDraft(a, 't2', { text: 'second', anonymous: false }, false);
+    expect(draftFor(b, 't1', false)).toEqual({ text: 'half a thought', anonymous: true });
+    expect(draftFor(b, 't2', false)).toEqual({ text: 'second', anonymous: false });
+  });
+  it('does not mutate the map it was given', () => {
+    withDraft(none, 't1', { text: 'x', anonymous: false }, false);
+    expect(none.size).toBe(0);
+  });
+  it('an untouched draft (empty, default checkbox) is not kept', () => {
+    const a = withDraft(none, 't1', { text: 'x', anonymous: true }, false);
+    expect(withDraft(a, 't1', { text: '', anonymous: false }, false).size).toBe(0);
+  });
+  it('a ticked checkbox with no text is kept when it differs from the default', () => {
+    expect(withDraft(none, 't1', { text: '', anonymous: true }, false).size).toBe(1);
+  });
+  it('a successful post clears that topic only', () => {
+    const a = withDraft(withDraft(none, 't1', { text: 'a', anonymous: false }, false), 't2', { text: 'b', anonymous: false }, false);
+    const c = withoutDraft(a, 't1');
+    expect(draftFor(c, 't1', false).text).toBe('');
+    expect(draftFor(c, 't2', false).text).toBe('b');
+  });
+  it('drafts are dropped when the phase or the board changes, kept otherwise', () => {
+    const held = { scope: draftsScope('b1', 'discuss'), drafts: withDraft(none, 't1', { text: 'a', anonymous: false }, false) };
+    expect(scopedDrafts(held, draftsScope('b1', 'discuss'))).toBe(held);
+    expect(scopedDrafts(held, draftsScope('b1', 'vote')).drafts.size).toBe(0);
+    expect(scopedDrafts(held, draftsScope('b2', 'discuss')).drafts.size).toBe(0);
+    expect(scopedDrafts(null, draftsScope('b1', 'discuss')).drafts.size).toBe(0);
+  });
+});
+
+describe('createDraftKeeper', () => {
+  it('keeps a draft per topic within a scope and drops all on a new scope', () => {
+    const k = createDraftKeeper();
+    const s1 = draftsScope('b1', 'discuss');
+    k.put(s1, 't1', { text: 'half a thought', anonymous: true }, false);
+    k.put(s1, 't2', { text: 'second', anonymous: false }, false);
+    expect(draftFor(k.drafts(s1), 't1', false)).toEqual({ text: 'half a thought', anonymous: true });
+    expect(draftFor(k.drafts(s1), 't2', false).text).toBe('second');
+    k.put(s1, 't2', { text: '', anonymous: false }, false);
+    expect(draftFor(k.drafts(s1), 't2', false).text).toBe('');
+    expect(draftFor(k.drafts(s1), 't1', false).text).toBe('half a thought');
+    expect(k.drafts(draftsScope('b1', 'vote')).size).toBe(0);
+    expect(k.drafts(s1).size).toBe(0);
+  });
+});
+
+describe('textAfterSend', () => {
+  it('is empty when nothing was typed since the send', () => {
+    expect(textAfterSend('first', 'first')).toBe('');
+  });
+  it('keeps only what was typed after the sent text', () => {
+    expect(textAfterSend('first', 'first and more')).toBe(' and more');
+  });
+  it('keeps everything when the sent part itself was changed meanwhile', () => {
+    expect(textAfterSend('first', 'second')).toBe('second');
+    expect(textAfterSend('first', 'fir')).toBe('fir');
+  });
+  it('is empty when the text was emptied meanwhile', () => {
+    expect(textAfterSend('first', '')).toBe('');
   });
 });

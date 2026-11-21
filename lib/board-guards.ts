@@ -46,7 +46,11 @@ function isLockable(action: BoardAction): boolean {
     action === 'group.title' ||
     action === 'card.react' ||
     action === 'vote.toggle' ||
-    action === 'action-item.write'
+    action === 'action-item.write' ||
+    action === 'comment.create' ||
+    action === 'comment.edit' ||
+    action === 'comment.delete' ||
+    action === 'action-item.link'
   );
 }
 
@@ -99,6 +103,7 @@ function checkIdentity(
     case 'participant.manage':
     case 'board.settings':
     case 'group.reset':
+    case 'topic.set':
       return actor.isFacilitator ? OK : deny(403, FACILITATOR_REQUIRED);
     case 'participant.leave': {
       const isSelf =
@@ -107,12 +112,17 @@ function checkIdentity(
         target.participantId === actor.participantId;
       return isSelf ? OK : deny(403, 'You can only leave as yourself');
     }
+    // Who wrote a comment is decided inside the comment statements, as card ownership is in the cards PATCH.
     case 'card.create':
     case 'card.move':
     case 'group.title':
     case 'card.react':
     case 'vote.toggle':
     case 'action-item.write':
+    case 'comment.create':
+    case 'comment.edit':
+    case 'comment.delete':
+    case 'action-item.link':
       return OK;
     default: {
       const unhandled: never = action;
@@ -134,7 +144,10 @@ export function checkAction(
   if (actor.trustVersion !== 1) return checkIdentity(action, actor, target);
 
   // Rule 3: v1 skips identity rules except board.settings.
-  if ((action === 'board.settings' || action === 'group.reset') && !actor.isFacilitator) {
+  if (
+    (action === 'board.settings' || action === 'group.reset' || action === 'topic.set') &&
+    !actor.isFacilitator
+  ) {
     return deny(403, FACILITATOR_REQUIRED);
   }
   return OK;

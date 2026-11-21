@@ -85,10 +85,15 @@ export const ACTION_PHASE_GATE: Record<BoardAction, keyof PhaseProfile | null> =
   'group.reset': 'canGroup',
   'card.react': null,
   'vote.toggle': 'canVote',
+  'topic.set': 'canComment',
+  'comment.create': 'canComment',
+  'comment.edit': 'canComment',
+  'comment.delete': 'canComment',
   'column.write': null,
   'participant.manage': null,
   'participant.leave': null,
   'action-item.write': null,
+  'action-item.link': 'canComment',
   'board.settings': null,
 };
 

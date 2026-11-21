@@ -1,4 +1,4 @@
-import type { BoardSettings, Card, Vote } from '@/types';
+import type { BoardSettings, Card, Comment, Vote } from '@/types';
 
 export interface Viewer {
   participantId: string | null;
@@ -68,4 +68,38 @@ export function isRevealingChange(prev: BoardSettings, next: BoardSettings): boo
     (prev.secret_voting && !next.secret_voting) ||
     (prev.anonymous_cards && !next.anonymous_cards)
   );
+}
+
+/**
+ * Decide what `viewer` may see of `c`. Builds a new object key by key so a column added to the
+ * table later never passes through. An anonymous comment carries no author to anyone (a
+ * facilitator is just a viewer); its author learns it is theirs from is_mine. A deleted comment
+ * carries no body, no author and is nobody's.
+ */
+export function shapeComment(c: Comment, viewer: Viewer): Comment {
+  const deleted = c.deleted_at !== null;
+  const hideAuthor = deleted || c.is_anonymous;
+  const isMine =
+    !deleted &&
+    viewer.participantId !== null &&
+    c.author_participant_id !== null &&
+    c.author_participant_id === viewer.participantId;
+  return {
+    id: c.id,
+    board_id: c.board_id,
+    card_id: c.card_id,
+    parent_id: c.parent_id,
+    author_participant_id: hideAuthor ? null : c.author_participant_id,
+    author_name: hideAuthor ? null : c.author_name,
+    is_anonymous: c.is_anonymous,
+    body: deleted ? '' : c.body,
+    created_at: c.created_at,
+    edited_at: c.edited_at,
+    deleted_at: c.deleted_at,
+    is_mine: isMine,
+  };
+}
+
+export function shapeComments(list: readonly Comment[], viewer: Viewer): Comment[] {
+  return list.map((c) => shapeComment(c, viewer));
 }

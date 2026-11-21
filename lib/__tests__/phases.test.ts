@@ -73,6 +73,7 @@ describe('phaseDenial', () => {
     ['card.create', 'group'], ['card.edit', 'vote'], ['card.delete', 'discuss'],
     ['card.move', 'reflect'], ['card.move', 'vote'], ['vote.toggle', 'reflect'], ['vote.toggle', 'discuss'],
     ['group.title', 'reflect'], ['group.title', 'vote'], ['group.reset', 'discuss'],
+    ['comment.create', 'reflect'], ['comment.edit', 'group'], ['comment.delete', 'vote'], ['topic.set', 'vote'], ['action-item.link', 'reflect'],
   ] as const)('%s is denied in %s', (action, phase) => {
     expect(phaseDenial(action, phase)).toBe(`Not available during ${PHASES[phase].label}`);
   });
@@ -80,6 +81,7 @@ describe('phaseDenial', () => {
     ['card.create', 'reflect'], ['card.edit', 'group'], ['card.move', 'group'], ['vote.toggle', 'vote'],
     ['group.title', 'group'], ['group.reset', 'group'],
     ['card.react', 'vote'], ['action-item.write', 'reflect'], ['board.settings', 'vote'], ['participant.leave', 'done'],
+    ['comment.create', 'discuss'], ['topic.set', 'discuss'], ['action-item.link', 'discuss'],
   ] as const)('%s is allowed in %s', (action, phase) => {
     expect(phaseDenial(action, phase)).toBeNull();
   });
@@ -227,6 +229,11 @@ describe('phaseDenial full table', () => {
     'participant.manage': PHASE_IDS,
     'participant.leave': PHASE_IDS,
     'action-item.write': PHASE_IDS,
+    'action-item.link': ['discuss'],
+    'topic.set': ['discuss'],
+    'comment.create': ['discuss'],
+    'comment.edit': ['discuss'],
+    'comment.delete': ['discuss'],
     'board.settings': PHASE_IDS,
   };
   it('covers every action', () => {

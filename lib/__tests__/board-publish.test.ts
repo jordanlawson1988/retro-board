@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { cardEventPayload, voteEventPayload, voteTallyPayload } from '@/lib/board-publish';
-import type { BoardSettings, Card } from '@/types';
+import { cardEventPayload, commentDeletedPayload, commentEventPayload, voteEventPayload, voteTallyPayload } from '@/lib/board-publish';
+import type { BoardSettings, Card, Comment } from '@/types';
 import type { ViewBoard } from '@/lib/board-view';
 
 const settings = (o: Partial<BoardSettings>) =>
@@ -46,5 +46,36 @@ describe('voteEventPayload', () => {
 describe('voteTallyPayload', () => {
   it('the tally payload carries only used and at', () => {
     expect(voteTallyPayload({ used: 4, at: 17, voter_id: 'p2' } as never)).toEqual({ used: 4, at: 17 });
+  });
+});
+
+const comment = (over: Partial<Comment> = {}): Comment => ({ id: 'm1', board_id: 'b1', card_id: 'L', parent_id: null,
+  author_participant_id: 'p2', author_name: 'Bo', is_anonymous: false, body: 'hi', created_at: 'x', edited_at: null, deleted_at: null, ...over });
+
+describe('comment payloads', () => {
+  it('are shaped for nobody', () => {
+    expect(commentEventPayload(comment({ is_anonymous: true })).comment).toMatchObject({ author_participant_id: null, is_mine: false });
+    expect(commentDeletedPayload(['m2'], comment({ deleted_at: 'y', body: '' })))
+      .toEqual({ ids: ['m2'], tombstone: expect.objectContaining({ id: 'm1', body: '', author_name: null }) });
+    expect(commentDeletedPayload(['m2'], null)).toEqual({ ids: ['m2'], tombstone: null });
+  });
+  it('always carry is_mine false, named or anonymous, whatever the input said', () => {
+    for (const c of [comment(), comment({ is_anonymous: true }), comment({ is_mine: true })]) {
+      const { comment: out } = commentEventPayload(c);
+      expect('is_mine' in out).toBe(true);
+      expect(out.is_mine).toBe(false);
+    }
+    const tomb = commentDeletedPayload(['m2'], comment({ is_mine: true, deleted_at: 'y', body: '' })).tombstone;
+    expect(tomb?.is_mine).toBe(false);
+  });
+  it('a named comment keeps its author on the wire; an anonymous one never does', () => {
+    expect(commentEventPayload(comment()).comment).toMatchObject({ author_participant_id: 'p2', author_name: 'Bo' });
+    const anon = commentEventPayload(comment({ is_anonymous: true })).comment;
+    expect(anon.author_participant_id).toBeNull();
+    expect(anon.author_name).toBeNull();
+  });
+  it('have exactly the documented keys', () => {
+    expect(Object.keys(commentEventPayload(comment()))).toEqual(['comment']);
+    expect(Object.keys(commentDeletedPayload(['m2'], null)).sort()).toEqual(['ids', 'tombstone']);
   });
 });

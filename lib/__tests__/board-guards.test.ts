@@ -329,3 +329,39 @@ describe('group actions', () => {
     expect(checkAction('group.title', actor({ isFacilitator: true }), locked)).toEqual({ ok: true });
   });
 });
+
+describe('discuss actions', () => {
+  const inDiscuss = state({ phase: 'discuss', settings: phaseSettings('discuss') });
+  const inVote = state({ phase: 'vote', settings: phaseSettings('vote') });
+  it('comment.create, comment.edit and action-item.link: any joined participant during Discuss only', () => {
+    for (const a of ['comment.create', 'comment.edit', 'action-item.link'] as const) {
+      expect(checkAction(a, actor(), inDiscuss)).toEqual({ ok: true });
+      expect(checkAction(a, actor(), inVote)).toEqual({ ok: false, status: 409, error: 'Not available during Vote' });
+      expect(checkAction(a, actor({ participantId: null }), inDiscuss)).toEqual({ ok: false, status: 401, error: 'Join the board first' });
+    }
+  });
+  it('comment.delete passes a facilitator who has no participant row', () => {
+    expect(checkAction('comment.delete', actor({ participantId: null, isFacilitator: true }), inDiscuss)).toEqual({ ok: true });
+  });
+  it('topic.set: facilitator only, Discuss only, on any trust version', () => {
+    expect(checkAction('topic.set', actor(), inDiscuss)).toEqual({ ok: false, status: 403, error: 'Facilitator access required' });
+    expect(checkAction('topic.set', actor({ isFacilitator: true }), inDiscuss)).toEqual({ ok: true });
+    expect(checkAction('topic.set', actor({ isFacilitator: true }), inVote)).toEqual({ ok: false, status: 409, error: 'Not available during Vote' });
+    expect(checkAction('topic.set', actor({ trustVersion: 1 }), state())).toEqual({ ok: false, status: 403, error: 'Facilitator access required' });
+    expect(checkAction('topic.set', actor({ trustVersion: 1, isFacilitator: true }), state())).toEqual({ ok: true });
+  });
+  it('a completed board refuses every comment action', () => {
+    const done = state({ phase: 'done', archived: true, settings: phaseSettings('done') });
+    expect(checkAction('comment.create', actor(), done)).toEqual({ ok: false, status: 409, error: 'Board is completed' });
+    for (const a of ['topic.set', 'comment.edit', 'comment.delete', 'action-item.link'] as const) {
+      expect(checkAction(a, actor({ isFacilitator: true }), done)).toEqual({ ok: false, status: 409, error: 'Board is completed' });
+    }
+  });
+  it('a locked board refuses the comment and link actions for a non-facilitator, not a facilitator', () => {
+    const locked = state({ phase: 'discuss', settings: { ...phaseSettings('discuss'), board_locked: true } });
+    for (const a of ['comment.create', 'comment.edit', 'comment.delete', 'action-item.link'] as const) {
+      expect(checkAction(a, actor(), locked)).toEqual({ ok: false, status: 409, error: 'Board is locked' });
+      expect(checkAction(a, actor({ isFacilitator: true }), locked)).toEqual({ ok: true });
+    }
+  });
+});

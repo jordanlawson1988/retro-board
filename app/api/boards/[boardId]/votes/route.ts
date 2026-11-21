@@ -161,9 +161,18 @@ async function guidedVote(
         WITH ok AS (
           SELECT 1 FROM boards
           WHERE id = ${boardId} AND phase = ${phase} AND archived_at IS NULL AND deleted_at IS NULL
+          FOR SHARE
+        ), target AS (
+          SELECT id, merged_with FROM cards WHERE id = ${cardId} AND board_id = ${boardId}
         ), cur AS (
-          SELECT id, count FROM votes
-          WHERE card_id = ${cardId} AND voter_id = ${voterId} AND board_id = ${boardId}
+          SELECT v.id, v.count, v.card_id
+          FROM votes v JOIN cards c ON c.id = v.card_id AND c.board_id = v.board_id
+          WHERE v.board_id = ${boardId} AND v.voter_id = ${voterId}
+            AND (v.card_id = ${cardId}
+                 OR (c.merged_with = ${cardId} AND EXISTS (SELECT 1 FROM target WHERE merged_with IS NULL)))
+          ORDER BY (v.card_id = ${cardId}::text) DESC,
+                   date_trunc('milliseconds', c.created_at) ASC, c.id COLLATE "C" ASC
+          LIMIT 1
         ), decremented AS (
           UPDATE votes SET count = votes.count - 1 FROM cur
           WHERE votes.id = cur.id AND cur.count > 1 AND EXISTS (SELECT 1 FROM ok)
@@ -176,7 +185,8 @@ async function guidedVote(
           SELECT COALESCE(SUM(count), 0)::int AS used FROM votes WHERE board_id = ${boardId}
         )
         SELECT EXISTS (SELECT 1 FROM ok) AS board_ok,
-               cur.id AS vote_id, cur.count AS count_before, team.used AS team_used_before,
+               cur.id AS vote_id, cur.card_id AS vote_card_id, cur.count AS count_before,
+               team.used AS team_used_before,
                floor(extract(epoch from clock_timestamp()) * 1000)::float8 AS tally_at
         FROM team LEFT JOIN cur ON true
       `,
@@ -193,6 +203,7 @@ async function guidedVote(
     return NextResponse.json({
       action: 'removed',
       voteId: row.vote_id,
+      cardId: row.vote_card_id,
       count: Number(row.count_before) - 1,
       tally,
     });
@@ -204,9 +215,11 @@ async function guidedVote(
     txn`
       WITH card AS (
         SELECT id, merged_with FROM cards WHERE id = ${cardId} AND board_id = ${boardId}
+      ), grp AS (
+        SELECT id FROM cards WHERE board_id = ${boardId} AND (id = ${cardId} OR merged_with = ${cardId})
       ), mine AS (
         SELECT COALESCE(SUM(count), 0)::int AS spent,
-               COALESCE(SUM(count) FILTER (WHERE card_id = ${cardId}), 0)::int AS on_card
+               COALESCE(SUM(count) FILTER (WHERE card_id IN (SELECT id FROM grp)), 0)::int AS on_group
         FROM votes WHERE board_id = ${boardId} AND voter_id = ${voterId}
       ), team AS (
         SELECT COALESCE(SUM(count), 0)::int AS used FROM votes WHERE board_id = ${boardId}
@@ -215,16 +228,17 @@ async function guidedVote(
                COALESCE((settings ->> 'max_votes_per_card')::int, ${OPEN_MAX_VOTES_PER_CARD}::int) AS per_card
         FROM boards
         WHERE id = ${boardId} AND phase = ${phase} AND archived_at IS NULL AND deleted_at IS NULL
+        FOR SHARE
       ), upserted AS (
         INSERT INTO votes (id, card_id, board_id, voter_id, count)
         SELECT ${newVoteId}, ${cardId}, ${boardId}, ${voterId}, 1 FROM card, mine, lim
-        WHERE card.merged_with IS NULL AND mine.spent < lim.per_person AND mine.on_card < lim.per_card
+        WHERE card.merged_with IS NULL AND mine.spent < lim.per_person AND mine.on_group < lim.per_card
         ON CONFLICT (card_id, voter_id) DO UPDATE SET count = votes.count + 1
         RETURNING *
       )
       SELECT EXISTS (SELECT 1 FROM lim) AS board_ok,
              (SELECT COUNT(*) FROM card)::int AS card_found, (SELECT merged_with FROM card) AS card_parent,
-             mine.spent, mine.on_card, lim.per_person, lim.per_card, team.used AS team_used_before,
+             mine.spent, mine.on_group, lim.per_person, lim.per_card, team.used AS team_used_before,
              floor(extract(epoch from clock_timestamp()) * 1000)::float8 AS tally_at,
              u.id, u.card_id, u.board_id, u.voter_id, u.count, u.created_at
       FROM mine CROSS JOIN team LEFT JOIN lim ON true LEFT JOIN upserted u ON true

@@ -3,6 +3,7 @@ import {
   OPEN_MAX_VOTES_PER_CARD,
 } from '@/lib/constants/board-settings';
 import { GUIDED_MODE, PHASES, type BoardMode } from '@/lib/constants/phases';
+import { compareByCreated, isRootCard } from '@/lib/groups';
 import type { Board, BoardSettings, Card, Vote } from '@/types';
 
 export const GROUP_VOTE_ERROR = 'Votes go on the group, not on a card inside it';
@@ -38,6 +39,42 @@ export function votesUsedBy(votes: readonly Vote[], participantId: string | null
 export function myVotesOn(votes: readonly Vote[], cardId: string, participantId: string | null): number {
   if (!participantId) return 0;
   return sumVoteCounts(votes.filter((v) => v.card_id === cardId && v.voter_id === participantId));
+}
+
+/**
+ * My votes counted the way the per-card limit counts them: for a root card, my count on it and on
+ * every card whose `merged_with` is it; for a child card, my count on that card only.
+ */
+export function myGroupVotesOn(
+  votes: readonly Vote[],
+  cards: readonly Pick<Card, 'id' | 'merged_with'>[],
+  cardId: string,
+  participantId: string | null,
+): number {
+  if (!participantId) return 0;
+  const root = isRootCard(cardId, cards);
+  const inGroup = (id: string) => id === cardId || (root && cards.some((c) => c.id === id && c.merged_with === cardId));
+  return sumVoteCounts(votes.filter((v) => v.voter_id === participantId && inGroup(v.card_id)));
+}
+
+/**
+ * The card whose row a remove takes from: my row on `cardId` when I have one; otherwise, for a
+ * root, the child holding a row of mine that was created first; otherwise null.
+ */
+export function groupRemoveTarget(
+  votes: readonly Vote[],
+  cards: readonly Pick<Card, 'id' | 'merged_with' | 'created_at'>[],
+  cardId: string,
+  participantId: string | null,
+): string | null {
+  if (!participantId) return null;
+  const mine = votes.filter((v) => v.voter_id === participantId);
+  if (mine.some((v) => v.card_id === cardId)) return cardId;
+  if (!isRootCard(cardId, cards)) return null;
+  const children = cards
+    .filter((c) => c.merged_with === cardId && mine.some((v) => v.card_id === c.id))
+    .sort(compareByCreated);
+  return children[0]?.id ?? null;
 }
 
 /** A group scores its lead card plus its children. */
@@ -274,6 +311,8 @@ export function tallyAfterFetch(
 /** One server answer to a click: the team tally and my row on the card (null when it is gone). */
 export interface VoteResult {
   tally: VoteTally;
+  /** The card of the row the answer describes (a remove on a lead can change a child's row). */
+  cardId: string;
   vote: Vote | null;
 }
 
@@ -286,9 +325,11 @@ export interface VoteSlot {
   newest: { at: number; vote: Vote | null } | null;
   expected: number;
   failed: boolean;
+  /** An answer changed a row on a card other than the clicked one. */
+  otherRow: boolean;
 }
 
-export const EMPTY_VOTE_SLOT: VoteSlot = { pending: 0, newest: null, expected: 0, failed: false };
+export const EMPTY_VOTE_SLOT: VoteSlot = { pending: 0, newest: null, expected: 0, failed: false, otherRow: false };
 
 /** A click was applied optimistically; `expectedAfter` is my count on the card right after it. */
 export function startVoteClick(slot: VoteSlot, expectedAfter: number): VoteSlot {
@@ -296,7 +337,7 @@ export function startVoteClick(slot: VoteSlot, expectedAfter: number): VoteSlot 
 }
 
 export type VoteClickOutcome =
-  | { kind: 'ok'; at: number; vote: Vote | null }
+  | { kind: 'ok'; at: number; vote: Vote | null; otherRow: boolean }
   | {
       kind: 'failed';
       /** True when the failure's own handling already refetched the board (a 409 on a guided board). */
@@ -320,8 +361,10 @@ export function finishVoteClick(
   let newest = slot.newest;
   let expected = slot.expected;
   let failed = slot.failed;
+  let otherRow = slot.otherRow;
   let reverse = false;
   if (outcome.kind === 'ok') {
+    if (outcome.otherRow) otherRow = true;
     if (!newest || outcome.at >= newest.at) newest = { at: outcome.at, vote: outcome.vote };
   } else {
     if (!outcome.refetched) failed = true;
@@ -331,7 +374,9 @@ export function finishVoteClick(
     }
   }
   const pending = Math.max(0, slot.pending - 1);
-  if (pending > 0) return { slot: { pending, newest, expected, failed }, settle: null, reverse, refetch: false };
+  if (pending > 0) return { slot: { pending, newest, expected, failed, otherRow }, settle: null, reverse, refetch: false };
+  // A burst that changed another card's row cannot be settled from one row: the server's truth replaces it.
+  if (otherRow) return { slot: EMPTY_VOTE_SLOT, settle: null, reverse, refetch: true };
   return { slot: EMPTY_VOTE_SLOT, settle: newest ? { vote: newest.vote } : null, reverse, refetch: failed };
 }
 
@@ -348,22 +393,24 @@ export function voteResult(
   ctx: { boardId: string; cardId: string; voterId: string; nowIso: string },
 ): VoteResult | null {
   if (!answer || typeof answer !== 'object') return null;
-  const a = answer as { action?: unknown; vote?: unknown; voteId?: unknown; count?: unknown; tally?: unknown };
+  const a = answer as { action?: unknown; vote?: unknown; voteId?: unknown; cardId?: unknown; count?: unknown; tally?: unknown };
   const tally = applyVoteTally(null, a.tally);
   if (!tally) return null;
   if (a.action === 'added') {
     const v = a.vote as Vote | null | undefined;
     if (!v || typeof v !== 'object' || typeof v.id !== 'string') return null;
-    return { tally, vote: v };
+    return { tally, cardId: v.card_id, vote: v };
   }
   if (a.action === 'removed') {
     if (typeof a.count !== 'number' || !Number.isInteger(a.count) || a.count < 0) return null;
-    if (a.count === 0) return { tally, vote: null };
-    if (local) return { tally, vote: { ...local, count: a.count } };
+    const cardId = typeof a.cardId === 'string' ? a.cardId : ctx.cardId;
+    if (a.count === 0) return { tally, cardId, vote: null };
+    if (local && local.card_id === cardId) return { tally, cardId, vote: { ...local, count: a.count } };
     if (typeof a.voteId !== 'string') return null;
     return {
       tally,
-      vote: { id: a.voteId, card_id: ctx.cardId, board_id: ctx.boardId, voter_id: ctx.voterId, count: a.count, created_at: ctx.nowIso },
+      cardId,
+      vote: { id: a.voteId, card_id: cardId, board_id: ctx.boardId, voter_id: ctx.voterId, count: a.count, created_at: ctx.nowIso },
     };
   }
   return null;

@@ -4,6 +4,7 @@ import {
   guidedVoteDefaults, voteControlKind, voteControlState, applyVoteDelta, settleOwnVote, applyVoteTally,
   teamVotesRemaining, teamVotesLeftFor, teamVotesLabel, votesPerCardError, voteLimitProblem, limitRefusal,
   hasLimitKey, voteLimitsEditable, teamUsedAfter, GROUP_VOTE_ERROR, NO_VOTES_LEFT, VOTE_LIMIT_RELATION_ERROR,
+  myGroupVotesOn, groupRemoveTarget, finishVoteClick, EMPTY_VOTE_SLOT, startVoteClick, voteResult,
 } from '@/lib/votes';
 import { phaseSettings } from '@/lib/phases';
 import { DEFAULT_BOARD_SETTINGS } from '@/utils/constants';
@@ -173,5 +174,55 @@ describe('teamUsedAfter', () => {
     expect(teamUsedAfter(4, 1)).toBe(5);
     expect(teamUsedAfter(5, -1)).toBe(4);
     expect(teamUsedAfter(0, 1)).toBe(1);
+  });
+});
+
+describe('group-aware votes', () => {
+  const at = (ms: number) => new Date(Date.UTC(2026, 10, 20, 10, 0, 0, ms)).toISOString();
+  const cards = [
+    { id: 'L', merged_with: null, created_at: at(0) },
+    { id: 'c2', merged_with: 'L', created_at: at(2) },
+    { id: 'c1', merged_with: 'L', created_at: at(1) },
+    { id: 'S', merged_with: null, created_at: at(3) },
+  ];
+  it('a lead counts my votes on it and its children; a child or solo card counts its own row', () => {
+    const vs = [
+      v({ card_id: 'L', voter_id: 'p1', count: 1 }), v({ card_id: 'c2', voter_id: 'p1', count: 2 }),
+      v({ card_id: 'c1', voter_id: 'p2', count: 1 }), v({ card_id: 'S', voter_id: 'p1', count: 1 }),
+    ];
+    expect(myGroupVotesOn(vs, cards, 'L', 'p1')).toBe(3);
+    expect(myGroupVotesOn(vs, cards, 'L', 'p2')).toBe(1);
+    expect(myGroupVotesOn(vs, cards, 'c2', 'p1')).toBe(2);
+    expect(myGroupVotesOn(vs, cards, 'S', 'p1')).toBe(1);
+    expect(myGroupVotesOn(vs, cards, 'L', null)).toBe(0);
+  });
+  it('a remove on a lead takes the lead row first, then my earliest child row', () => {
+    const both = [v({ card_id: 'L', voter_id: 'p1' }), v({ card_id: 'c2', voter_id: 'p1' }), v({ card_id: 'c1', voter_id: 'p1' })];
+    expect(groupRemoveTarget(both, cards, 'L', 'p1')).toBe('L');
+    expect(groupRemoveTarget(both.slice(1), cards, 'L', 'p1')).toBe('c1');
+    expect(groupRemoveTarget([v({ card_id: 'c2', voter_id: 'p1' })], cards, 'L', 'p1')).toBe('c2');
+  });
+  it('a child target uses its own row only; no vote in the group is null', () => {
+    expect(groupRemoveTarget([v({ card_id: 'L', voter_id: 'p1' })], cards, 'c1', 'p1')).toBeNull();
+    expect(groupRemoveTarget([v({ card_id: 'c1', voter_id: 'p2' })], cards, 'L', 'p1')).toBeNull();
+  });
+  it('a removed answer names the row it changed', () => {
+    const r = voteResult({ action: 'removed', voteId: 'v9', cardId: 'c2', count: 1, tally: { used: 3, at: 7 } }, undefined,
+      { boardId: 'b1', cardId: 'L', voterId: 'p1', nowIso: 'x' });
+    expect(r).toEqual({ tally: { used: 3, at: 7 }, cardId: 'c2', vote: expect.objectContaining({ id: 'v9', card_id: 'c2', count: 1 }) });
+  });
+});
+
+describe('a click that changes another row', () => {
+  it('ends its burst with no settle and one refetch', () => {
+    const slot = startVoteClick(EMPTY_VOTE_SLOT, 1);
+    const done = finishVoteClick(slot, { kind: 'ok', at: 5, vote: null, otherRow: true });
+    expect(done.settle).toBeNull();
+    expect(done.refetch).toBe(true);
+  });
+  it('an ordinary burst still settles on the newest answer and does not refetch', () => {
+    const done = finishVoteClick(startVoteClick(EMPTY_VOTE_SLOT, 1), { kind: 'ok', at: 5, vote: null, otherRow: false });
+    expect(done.settle).toEqual({ vote: null });
+    expect(done.refetch).toBe(false);
   });
 });

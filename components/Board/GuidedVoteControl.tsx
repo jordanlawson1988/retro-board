@@ -6,7 +6,7 @@ import { cn } from '@/utils/cn';
 import { useBoardStore } from '@/stores/boardStore';
 import { useGroupVoteStore } from '@/stores/groupVoteStore';
 import { GUIDED_MODE } from '@/lib/constants/phases';
-import { maxVotesPerCard, myVotesOn, voteControlState, votesUsedBy } from '@/lib/votes';
+import { maxVotesPerCard, myGroupVotesOn, myVotesOn, voteControlState, votesUsedBy } from '@/lib/votes';
 
 interface GuidedVoteControlProps {
   cardId: string;
@@ -29,7 +29,11 @@ export function GuidedVoteControl({ cardId, childCard }: GuidedVoteControlProps)
   const addVote = useGroupVoteStore((s) => s.addVote);
   const removeVote = useGroupVoteStore((s) => s.removeVote);
   const onCard = useBoardStore((s) =>
-    s.board?.mode === GUIDED_MODE ? myVotesOn(s.votes, cardId, s.currentParticipantId) : 0,
+    s.board?.mode !== GUIDED_MODE
+      ? 0
+      : childCard
+        ? myVotesOn(s.votes, cardId, s.currentParticipantId)
+        : myGroupVotesOn(s.votes, s.cards, cardId, s.currentParticipantId),
   );
   const spent = useBoardStore((s) =>
     s.board?.mode === GUIDED_MODE ? votesUsedBy(s.votes, s.currentParticipantId) : 0,

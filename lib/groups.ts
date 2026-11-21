@@ -11,6 +11,29 @@ export function isLeadCard(cardId: string, cards: readonly Parented[]): boolean 
   return cards.some((c) => c.merged_with === cardId);
 }
 
+/**
+ * The card exists and has no parent on this board. The database nulls `merged_with` when a lead is
+ * deleted, so a client still holding a deleted lead's children treats them as roots, as the server does.
+ */
+export function isRootCard(cardId: string, cards: readonly Parented[]): boolean {
+  const card = cards.find((c) => c.id === cardId);
+  if (!card) return false;
+  return card.merged_with === null || !cards.some((c) => c.id === card.merged_with);
+}
+
+/**
+ * Creation order to the millisecond, then id in UTF-16 code-unit order (for the URL-safe id
+ * alphabet that equals the byte order of COLLATE "C").
+ */
+export function compareByCreated(
+  a: { created_at: string; id: string },
+  b: { created_at: string; id: string },
+): number {
+  const diff = Date.parse(a.created_at) - Date.parse(b.created_at);
+  if (diff !== 0) return diff;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
 /** A title shows only on a lead card; one on a card that is not a lead stays stored but hidden. */
 export function visibleGroupTitle(
   cardId: string,

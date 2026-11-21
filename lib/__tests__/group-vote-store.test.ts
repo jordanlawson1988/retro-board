@@ -191,6 +191,37 @@ describe('guided votes', () => {
     expect(useBoardStore.getState().votes).toEqual([vote(1)]);
   });
 
+  it('a lead counts my child votes: add is refused locally at the per-card limit', async () => {
+    useBoardStore.setState({ cards: [cardFixture('c1'), { ...cardFixture('c2'), merged_with: 'c1' }],
+      votes: [vote(1), { ...vote(2, 'v2'), card_id: 'c2' }] });
+    routes({});
+    await useGroupVoteStore.getState().addVote('c1');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('remove on a lead with no row of its own takes the child row at once and ends with one coalesced GET', async () => {
+    useBoardStore.setState({ cards: [cardFixture('c1'), { ...cardFixture('c2'), merged_with: 'c1' }],
+      votes: [{ ...vote(2, 'v2'), card_id: 'c2' }] });
+    routes({
+      'POST /api/boards/b1/votes': () => json(200, { action: 'removed', voteId: 'v2', cardId: 'c2', count: 1, tally: { used: 1, at: 40 } }),
+      'GET /api/boards/b1': getBoardResponse(board(), { votes: [{ ...vote(1, 'v2'), card_id: 'c2' }] }),
+    });
+    const p = useGroupVoteStore.getState().removeVote('c1');
+    expect(useBoardStore.getState().votes).toEqual([expect.objectContaining({ card_id: 'c2', count: 1 })]);
+    await p;
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ cardId: 'c1', action: 'remove' });
+    expect(calls()).toContain('GET /api/boards/b1');
+  });
+
+  it('toggleGuidedVote on a lead whose only vote is on a child sends remove', async () => {
+    useBoardStore.setState({ cards: [cardFixture('c1'), { ...cardFixture('c2'), merged_with: 'c1' }],
+      votes: [{ ...vote(1, 'v2'), card_id: 'c2' }] });
+    routes({ 'POST /api/boards/b1/votes': () => json(200, { action: 'removed', voteId: 'v2', cardId: 'c2', count: 0, tally: { used: 0, at: 41 } }),
+      'GET /api/boards/b1': getBoardResponse(board(), { votes: [] }) });
+    await useGroupVoteStore.getState().toggleGuidedVote('c1');
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ action: 'remove' });
+  });
+
   it('removeVote with no vote on the card sends nothing', async () => {
     routes({});
     await useGroupVoteStore.getState().removeVote('c1');

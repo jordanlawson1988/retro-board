@@ -202,14 +202,14 @@ test('removing votes one at a time ends with no row', async ({ browser }) => {
   const first = await apiVote(p.ctxB.request, p.boardId, c1.id, 'remove');
   expect(first.status(), await first.text()).toBe(200);
   const firstBody = await first.json();
-  expect(firstBody).toEqual({ action: 'removed', voteId: expect.any(String), count: 1, tally: { used: 1, at: expect.any(Number) } });
+  expect(firstBody).toEqual({ action: 'removed', voteId: expect.any(String), cardId: c1.id, count: 1, tally: { used: 1, at: expect.any(Number) } });
   expect(await mine()).toEqual([{ voter_id: p.bobId, card_id: c1.id, count: 1 }]);
 
   // Second remove: 1 -> 0, the row is deleted. The answer keeps the same shape, with count 0.
   const second = await apiVote(p.ctxB.request, p.boardId, c1.id, 'remove');
   expect(second.status(), await second.text()).toBe(200);
   const secondBody = await second.json();
-  expect(secondBody).toEqual({ action: 'removed', voteId: firstBody.voteId, count: 0, tally: { used: 0, at: expect.any(Number) } });
+  expect(secondBody).toEqual({ action: 'removed', voteId: firstBody.voteId, cardId: c1.id, count: 0, tally: { used: 0, at: expect.any(Number) } });
   expect(await mine()).toEqual([]);
 
   // Third remove: nothing left.

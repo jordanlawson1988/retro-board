@@ -246,7 +246,12 @@ export async function PATCH(
           SELECT COALESCE(MAX(per_voter), 0)::int AS max_spent
           FROM (SELECT SUM(count) AS per_voter FROM votes WHERE board_id = ${boardId} GROUP BY voter_id) s
         ), top AS (
-          SELECT COALESCE(MAX(count), 0)::int AS max_on_card FROM votes WHERE board_id = ${boardId}
+          SELECT COALESCE(MAX(per_group), 0)::int AS max_on_card FROM (
+            SELECT SUM(v.count) AS per_group
+            FROM votes v JOIN cards c ON c.id = v.card_id AND c.board_id = v.board_id
+            WHERE v.board_id = ${boardId}
+            GROUP BY v.voter_id, COALESCE(c.merged_with, c.id)
+          ) g
         ), updated AS (
           UPDATE boards SET
             title = CASE WHEN ${hasTitle}::boolean THEN ${title}::text ELSE title END,

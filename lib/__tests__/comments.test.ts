@@ -3,7 +3,8 @@ import {
   commentLength, clampComment, showCommentCounter, validateCommentBody, commentsReadable, commentsWritable,
   threadsFor, isMyComment, canEditComment, canDeleteComment, canReplyTo, commentAuthorLabel, parseComment,
   mergeIncomingComment, upsertComment, removeComments, replayComments, createCommentOutcome,
-  editCommentOutcome, deleteCommentOutcome, type CommentChange,
+  editCommentOutcome, deleteCommentOutcome, type CommentChange, commentEnterPosts, commentsHeading,
+  commentsEmptyText, initialAnonymous, commentCounterText, commentFormOpen, commentEditDecision,
 } from '@/lib/comments';
 import type { Comment } from '@/types';
 
@@ -389,5 +390,113 @@ describe('outcome precedence', () => {
   });
   it('deleteCommentOutcome: gone beats denied', () => {
     expect(deleteCommentOutcome({ ...del, already_deleted: true, permitted: false })).toBe('gone');
+  });
+});
+
+describe('commentEnterPosts', () => {
+  it('posts on a plain Enter', () => {
+    expect(commentEnterPosts('Enter', false, false)).toBe(true);
+  });
+  it('does not post on Shift+Enter, which is a line break', () => {
+    expect(commentEnterPosts('Enter', true, false)).toBe(false);
+  });
+  it('does not post while an IME composition is in progress', () => {
+    expect(commentEnterPosts('Enter', false, true)).toBe(false);
+  });
+  it('does not post on other keys', () => {
+    expect(commentEnterPosts('a', false, false)).toBe(false);
+    expect(commentEnterPosts('Escape', false, false)).toBe(false);
+  });
+});
+
+describe('commentsHeading', () => {
+  it('is plain with no live comments', () => {
+    expect(commentsHeading([])).toBe('Discussion');
+  });
+  it('counts live comments, replies included', () => {
+    const threads = [
+      { top: comment({ id: 'a' }), replies: [comment({ id: 'b', parent_id: 'a' }), comment({ id: 'c', parent_id: 'a' })] },
+      { top: comment({ id: 'd' }), replies: [] },
+    ];
+    expect(commentsHeading(threads)).toBe('Discussion (4)');
+  });
+  it('does not count a tombstone', () => {
+    const threads = [
+      { top: comment({ id: 'a', deleted_at: at(5) }), replies: [comment({ id: 'b', parent_id: 'a' })] },
+    ];
+    expect(commentsHeading(threads)).toBe('Discussion (1)');
+  });
+  it('is plain when only a tombstone is left with deleted replies', () => {
+    const threads = [{ top: comment({ id: 'a', deleted_at: at(5) }), replies: [comment({ id: 'b', parent_id: 'a', deleted_at: at(6) })] }];
+    expect(commentsHeading(threads)).toBe('Discussion');
+  });
+});
+
+describe('commentsEmptyText', () => {
+  it('invites a comment while writable', () => {
+    expect(commentsEmptyText(true)).toBe('No comments yet. Start the discussion.');
+  });
+  it('only states the fact when not writable', () => {
+    expect(commentsEmptyText(false)).toBe('No comments yet.');
+  });
+});
+
+describe('initialAnonymous', () => {
+  it('follows the board setting', () => {
+    expect(initialAnonymous({ settings: { anonymous_cards: true } } as never)).toBe(true);
+    expect(initialAnonymous({ settings: { anonymous_cards: false } } as never)).toBe(false);
+  });
+  it('is false with no board', () => {
+    expect(initialAnonymous(null)).toBe(false);
+  });
+});
+
+describe('commentCounterText', () => {
+  it('reads n of the limit, in code points', () => {
+    expect(commentCounterText('a'.repeat(1000))).toBe('1000 of 1000');
+    expect(commentCounterText('😀'.repeat(950))).toBe('950 of 1000');
+  });
+});
+
+describe('commentFormOpen', () => {
+  const writableBoard = { mode: 'guided', phase: 'discuss', archived_at: null } as const;
+  const mine = comment({ is_mine: true });
+  it('keeps a reply box open on a live top-level comment in the same phase', () => {
+    expect(commentFormOpen('reply', 'discuss', 'discuss', mine, writableBoard, 'p1', false)).toBe(true);
+  });
+  it('closes a reply box when the phase changed', () => {
+    expect(commentFormOpen('reply', 'discuss', 'vote', mine, { ...writableBoard, phase: 'vote' }, 'p1', false)).toBe(false);
+  });
+  it('closes a reply box when the comment was deleted', () => {
+    expect(commentFormOpen('reply', 'discuss', 'discuss', { ...mine, deleted_at: at(9) }, writableBoard, 'p1', false)).toBe(false);
+  });
+  it('closes everything when the comment is gone', () => {
+    expect(commentFormOpen('edit', 'discuss', 'discuss', undefined, writableBoard, 'p1', false)).toBe(false);
+  });
+  it('closes everything when the board is no longer writable', () => {
+    const done = { mode: 'guided', phase: 'done', archived_at: at(1) } as const;
+    expect(commentFormOpen('edit', 'discuss', 'done', mine, done, 'p1', false)).toBe(false);
+  });
+  it('closes an editor on a comment that is not mine', () => {
+    expect(commentFormOpen('edit', 'discuss', 'discuss', comment({ author_participant_id: 'p2' }), writableBoard, 'p1', true)).toBe(false);
+  });
+  it('lets a facilitator keep a delete confirmation on anyone\'s comment', () => {
+    expect(commentFormOpen('delete', 'discuss', 'discuss', comment({ author_participant_id: 'p2' }), writableBoard, 'p1', true)).toBe(true);
+  });
+  it('does not let a participant keep a delete confirmation on another comment', () => {
+    expect(commentFormOpen('delete', 'discuss', 'discuss', comment({ author_participant_id: 'p2' }), writableBoard, 'p1', false)).toBe(false);
+  });
+});
+
+describe('commentEditDecision', () => {
+  it('sends nothing for unchanged text', () => {
+    expect(commentEditDecision('First thought', 'First thought')).toEqual({ kind: 'unchanged' });
+    expect(commentEditDecision('First thought', '  First thought  ')).toEqual({ kind: 'unchanged' });
+  });
+  it('sends the trimmed new text', () => {
+    expect(commentEditDecision('First thought', ' First thought, edited ')).toEqual({ kind: 'send', value: 'First thought, edited' });
+  });
+  it('refuses a blank edit without sending', () => {
+    expect(commentEditDecision('First thought', '   ')).toEqual({ kind: 'invalid', error: 'Write a comment first' });
   });
 });

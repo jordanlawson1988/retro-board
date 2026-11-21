@@ -26,3 +26,11 @@ export const DELETED_COMMENT_TEXT = 'This comment was deleted.';
 export const POST_COMMENT_FALLBACK = 'Failed to post the comment';
 export const SAVE_COMMENT_FALLBACK = 'Failed to save the comment';
 export const DELETE_COMMENT_FALLBACK = 'Failed to delete the comment';
+
+export const COMMENTS_HEADING = 'Discussion';
+export const COMMENTS_EMPTY_WRITABLE = 'No comments yet. Start the discussion.';
+export const COMMENTS_EMPTY_READONLY = 'No comments yet.';
+export const COMMENT_ANONYMOUS_LABEL = 'Post anonymously';
+export const COMMENT_EDITED_MARK = '(edited)';
+export const COMMENT_DELETE_PROMPT = 'Delete this comment?';
+export const COMMENT_DELETE_PROMPT_WITH_REPLIES = 'Delete this comment? Its replies stay.';

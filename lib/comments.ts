@@ -2,12 +2,15 @@ import {
   COMMENT_BODY_MAX,
   COMMENT_COUNTER_FROM,
   COMMENT_EMPTY_ERROR,
+  COMMENTS_HEADING,
+  COMMENTS_EMPTY_READONLY,
+  COMMENTS_EMPTY_WRITABLE,
   COMMENT_TOO_LONG_ERROR,
 } from '@/lib/constants/comments';
-import { FINAL_PHASE, GUIDED_MODE, PHASES } from '@/lib/constants/phases';
+import { FINAL_PHASE, GUIDED_MODE, PHASES, type PhaseId } from '@/lib/constants/phases';
 import { INVALID_BODY } from '@/lib/board-validation';
-import { compareByCreated } from '@/lib/groups';
-import type { Board, Comment } from '@/types';
+import { compareByCreated, editorStillOpen } from '@/lib/groups';
+import type { Board, BoardSettings, Comment } from '@/types';
 
 /** Length in code points, so an emoji counts as one. */
 export function commentLength(v: string): number {
@@ -243,4 +246,65 @@ export function deleteCommentOutcome(
   if (row.found === 0) return 'missing';
   if (row.already_deleted) return 'gone';
   return row.permitted ? 'ok' : 'denied';
+}
+
+/** Whether a key press in a comment textarea posts. Shift+Enter is a line break; a composition (IME) is never cut short. */
+export function commentEnterPosts(key: string, shiftKey: boolean, isComposing: boolean): boolean {
+  return key === 'Enter' && !shiftKey && !isComposing;
+}
+
+/** `Discussion`, with ` (n)` when there are live comments (tombstones are not counted). */
+export function commentsHeading(threads: readonly CommentThread[]): string {
+  const live = threads.reduce(
+    (n, t) => n + (t.top.deleted_at === null ? 1 : 0) + t.replies.filter((r) => r.deleted_at === null).length,
+    0,
+  );
+  return live > 0 ? `${COMMENTS_HEADING} (${live})` : COMMENTS_HEADING;
+}
+
+export function commentsEmptyText(writable: boolean): string {
+  return writable ? COMMENTS_EMPTY_WRITABLE : COMMENTS_EMPTY_READONLY;
+}
+
+/** The anonymous checkbox starts (and returns to) the board's setting. */
+export function initialAnonymous(board: { settings: Pick<BoardSettings, 'anonymous_cards'> } | null): boolean {
+  return board?.settings.anonymous_cards === true;
+}
+
+export function commentCounterText(v: string): string {
+  return `${commentLength(v)} of ${COMMENT_BODY_MAX}`;
+}
+
+/**
+ * Whether a reply box, editor or delete confirmation stays open: it belongs to the phase it opened in,
+ * to a writable board, and to a live comment that still allows that action for this person.
+ */
+export function commentFormOpen(
+  kind: 'reply' | 'edit' | 'delete',
+  openedIn: PhaseId,
+  currentPhase: PhaseId | null,
+  live: Comment | undefined,
+  board: Pick<Board, 'mode' | 'phase' | 'archived_at'> | null,
+  participantId: string | null,
+  isFacilitator: boolean,
+): boolean {
+  if (!live) return false;
+  const writable = commentsWritable(board);
+  const allowed =
+    kind === 'reply'
+      ? canReplyTo(live, writable)
+      : kind === 'edit'
+        ? canEditComment(live, participantId, writable)
+        : canDeleteComment(live, participantId, isFacilitator, writable);
+  return editorStillOpen(openedIn, currentPhase, allowed);
+}
+
+/** What saving an edit does: nothing for unchanged text, a local refusal for a blank one, else the trimmed text. */
+export function commentEditDecision(
+  openedWith: string,
+  typed: string,
+): { kind: 'unchanged' } | { kind: 'invalid'; error: string } | { kind: 'send'; value: string } {
+  const checked = validateCommentBody(typed);
+  if (!checked.ok) return { kind: 'invalid', error: checked.error };
+  return checked.value === openedWith.trim() ? { kind: 'unchanged' } : { kind: 'send', value: checked.value };
 }

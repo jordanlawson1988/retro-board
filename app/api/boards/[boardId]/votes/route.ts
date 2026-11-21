@@ -1,7 +1,7 @@
 import { sqlTransaction } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { rateLimitOr429 } from '@/lib/rate-limit';
-import { loadBoardActor, guardResponse, requireParticipantOn, BOARD_NOT_FOUND } from '@/lib/board-actor';
+import { loadBoardActor, guardResponse, requireParticipantOn, BOARD_NOT_FOUND, JOIN_FIRST_ERROR } from '@/lib/board-actor';
 import { publishVote, publishVoteTally } from '@/lib/board-publish';
 import { checkAction } from '@/lib/board-guards';
 import { readJsonObject } from '@/lib/request-body';
@@ -145,9 +145,10 @@ async function guidedVote(
   }
   const needsJoin = requireParticipantOn(loaded);
   if (needsJoin) return needsJoin;
-  // Guided boards are always trust_version 2, so requireParticipantOn above already answered 401
-  // when there is no participant.
-  const voterId = loaded.actor.participantId as string;
+  // requireParticipantOn answers for trust_version 2, which every guided board is; this keeps the
+  // voter id a checked value, not a cast.
+  const voterId = loaded.actor.participantId;
+  if (voterId === null) return NextResponse.json({ error: JOIN_FIRST_ERROR }, { status: 401 });
 
   const lockKey = voteLockKey(boardId);
   // The phase the gate above checked; the statement below must still find the board in it.

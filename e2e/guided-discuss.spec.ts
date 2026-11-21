@@ -219,29 +219,41 @@ test('entering Discuss stores the first agenda item, the same order every browse
   const added = await apiAddColumn(p.ctxA.request, p.boardId, { id: col2, title: 'Second', position: 1 });
   expect(added.status(), await added.text()).toBe(200);
 
-  // Creation order r, s, p, q, t. Ids rise with creation order, so the last tie-break (the id)
-  // cannot hide a broken creation-time tie-break and a descending id order differs from the right one.
-  const r = await addCardWithId(p.ctxA.request, p.boardId, p.columnId, `a${nanoid(8)}`, 'r');
-  const s = await addCardWithId(p.ctxA.request, p.boardId, p.columnId, `b${nanoid(8)}`, 's');
-  const cardP = await addCardWithId(p.ctxA.request, p.boardId, p.columnId, `c${nanoid(8)}`, 'p');
-  const q = await addCardWithId(p.ctxA.request, p.boardId, col2, `d${nanoid(8)}`, 'q');
-  const t = await addCardWithId(p.ctxA.request, p.boardId, col2, `e${nanoid(8)}`, 't');
+  // Creation order p, q, t, r, s. The two TIED top cards (p, q) have ids whose byte order contradicts
+  // their creation order (p, created first, has the later id), so only the creation-time clause can
+  // put p first; the stored topic is decided by that tie. The group (r with child s) scores below the
+  // tie and above t, but only through its child's vote: without it r and t tie at 0 and t, created
+  // before r, would come first.
+  const cardP = await addCardWithId(p.ctxA.request, p.boardId, p.columnId, `z${nanoid(8)}`, 'p');
+  const q = await addCardWithId(p.ctxA.request, p.boardId, col2, `a${nanoid(8)}`, 'q');
+  const t = await addCardWithId(p.ctxA.request, p.boardId, col2, `m${nanoid(8)}`, 't');
+  const r = await addCardWithId(p.ctxA.request, p.boardId, p.columnId, `n${nanoid(8)}`, 'r');
+  const s = await addCardWithId(p.ctxA.request, p.boardId, p.columnId, `o${nanoid(8)}`, 's');
+  const created = (await getBoard(p.ctxA.request, p.boardId)).cards as { id: string; created_at: string }[];
+  const at = (id: string) => Date.parse(created.find((c) => c.id === id)!.created_at);
+  expect(at(q.id), 'p and q were created at different times').toBeGreaterThan(at(cardP.id));
+  expect(cardP.id > q.id, "p's id sorts after q's although p is older").toBe(true);
+  test.info().annotations.push({
+    type: 'tie-ids',
+    description: JSON.stringify({ p: [cardP.id, created.find((c) => c.id === cardP.id)!.created_at], q: [q.id, created.find((c) => c.id === q.id)!.created_at] }),
+  });
+  console.log(`tie ids and created_at: p ${cardP.id} ${created.find((c) => c.id === cardP.id)!.created_at}; q ${q.id} ${created.find((c) => c.id === q.id)!.created_at}`);
 
   await move(p.ctxA.request, p.boardId, 'reflect', 'next');
   await move(p.ctxA.request, p.boardId, 'group', 'next');
-  // Vote: B puts one vote on r and one on s (both are cards of their own for now) and one on q;
-  // A puts two on p and one on q. Scores once s is under r: r 2 (own 1 + child 1), p 2, q 2, t 0.
+  // Vote: A and B each put one vote on p and one on q (p 2, q 2); B puts one on s while s is still a
+  // card of its own. Once s is under r, the group scores 1 (the child's vote) and t scores 0.
   const cast = async (req: APIRequestContext, cardId: string, n: number) => {
     for (let i = 0; i < n; i++) {
       const res = await apiVote(req, p.boardId, cardId, 'add');
       expect(res.status(), await res.text()).toBe(200);
     }
   };
-  await cast(p.ctxB.request, r.id, 1);
-  await cast(p.ctxB.request, s.id, 1);
-  await cast(p.ctxB.request, q.id, 1);
-  await cast(p.ctxA.request, cardP.id, 2);
+  await cast(p.ctxA.request, cardP.id, 1);
   await cast(p.ctxA.request, q.id, 1);
+  await cast(p.ctxB.request, cardP.id, 1);
+  await cast(p.ctxB.request, q.id, 1);
+  await cast(p.ctxB.request, s.id, 1);
   // Back to Group, s under r, Vote again: the votes stay and the child's vote counts for its lead.
   await move(p.ctxA.request, p.boardId, 'vote', 'back');
   await combine(p.ctxA.request, p.boardId, s.id, r.id);
@@ -252,9 +264,9 @@ test('entering Discuss stores the first agenda item, the same order every browse
   await expectDiscussShown(pageA);
   await expectDiscussShown(pageB);
 
-  // The expected agenda: r's group first (it ties p and q at 2 and was created first), then p
-  // before q (created first), then t with no votes.
-  const expected = [/Group of 2 cards.*2 votes.*2 cards/, new RegExp(`${escapeRe(cardP.text)}.*2 votes`), new RegExp(`${escapeRe(q.text)}.*2 votes`), new RegExp(`${escapeRe(t.text)}.*No votes`)];
+  // The expected agenda: p, then q (tied at 2; p was created first although its id sorts later), then
+  // r's group (1 vote, from its child), then t with no votes.
+  const expected = [new RegExp(`${escapeRe(cardP.text)}.*2 votes`), new RegExp(`${escapeRe(q.text)}.*2 votes`), /Group of 2 cards.*1 vote.*2 cards/, new RegExp(`${escapeRe(t.text)}.*No votes`)];
   await expect(agendaItems(pageA)).toHaveText(expected, { timeout: 10_000 });
   await expect(agendaItems(pageB)).toHaveText(expected, { timeout: 10_000 });
   const aTexts = await agendaItems(pageA).allTextContents();
@@ -262,14 +274,17 @@ test('entering Discuss stores the first agenda item, the same order every browse
   expect(bTexts).toEqual(aTexts);
   test.info().annotations.push({ type: 'agenda-order', description: JSON.stringify(aTexts) });
   console.log(`agenda order (both browsers): ${JSON.stringify(aTexts)}`);
+  // The server's stored topic must be the card both browsers rank first.
+  const storedFirst = (await getBoard(p.ctxA.request, p.boardId)).board.phase_config.topic;
+  expect(storedFirst, `stored topic ${storedFirst}; both browsers rank p (${cardP.id}) first`).toBe(cardP.id);
   await expect(agendaItems(pageA).first()).toHaveAttribute('aria-current', 'true');
   await expect(agendaItems(pageB).first()).toHaveAttribute('aria-current', 'true');
   await expect(agendaItems(pageA).nth(1)).not.toHaveAttribute('aria-current', 'true');
 
   // The server stored the same first topic the browsers rank first.
   let board = await getBoard(p.ctxA.request, p.boardId);
-  expect(board.board.phase_config.topic, `stored topic ${board.board.phase_config.topic}, r is ${r.id}`).toBe(r.id);
-  await expect(topicPanel(pageA)).toHaveAttribute('aria-label', 'Group of 2 cards');
+  expect(board.board.phase_config.topic, `stored topic ${board.board.phase_config.topic}, first agenda item p is ${cardP.id}`).toBe(cardP.id);
+  await expect(topicPanel(pageA)).toHaveAttribute('aria-label', cardP.text);
 
   // Back to Vote clears it; Discuss again stores the same first item.
   await move(p.ctxA.request, p.boardId, 'discuss', 'back');
@@ -278,7 +293,7 @@ test('entering Discuss stores the first agenda item, the same order every browse
   expect(board.board.phase_config.topic).toBeNull();
   await move(p.ctxA.request, p.boardId, 'vote', 'next');
   board = await getBoard(p.ctxA.request, p.boardId);
-  expect(board.board.phase_config.topic).toBe(r.id);
+  expect(board.board.phase_config.topic).toBe(cardP.id);
   await expect(agendaItems(pageB)).toHaveText(expected, { timeout: 10_000 });
 
   await p.ctxA.close();

@@ -99,8 +99,20 @@ export const FINAL_PHASE: PhaseId = 'done';
 
 export interface PhaseConfig {
   deadline: string | null;
+  /** topic: the current Discuss topic's root card id. Optional, never in DEFAULT_PHASE_CONFIG, so an open board's phase_config stays { deadline: null }. */
+  topic?: string | null;
 }
 export const DEFAULT_PHASE_CONFIG: PhaseConfig = { deadline: null };
+
+/** The phase whose entry sets a topic. */
+export const AGENDA_PHASE: PhaseId = 'discuss';
+
+/** The one list of actions the phase route accepts. */
+export const PHASE_ROUTE_ACTIONS = ['move', 'set-deadline', 'set-topic'] as const;
+export type PhaseRouteAction = (typeof PHASE_ROUTE_ACTIONS)[number];
+export function isPhaseRouteAction(v: unknown): v is PhaseRouteAction {
+  return typeof v === 'string' && (PHASE_ROUTE_ACTIONS as readonly string[]).includes(v);
+}
 
 /** Phase route refusals, declared once. */
 export const NOT_GUIDED_ERROR = 'This board is not in guided mode';

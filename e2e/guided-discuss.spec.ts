@@ -363,6 +363,21 @@ test('everyone follows the facilitator; a participant can look elsewhere and com
   expect(inVote.status()).toBe(409);
   expect(await inVote.json()).toEqual({ error: 'Not available during Vote' });
 
+  // Following resumes after the board leaves Discuss and comes back: a viewed topic does not outlive its phase.
+  await move(p.ctxA.request, p.boardId, 'vote', 'next');
+  await expectDiscussShown(pageB);
+  await expect(topicPanel(pageB)).toHaveAttribute('aria-label', t1.text);
+  await agendaItems(pageB).nth(3).click();
+  await expect(topicPanel(pageB)).toHaveAttribute('aria-label', 'Group of 2 cards');
+  await expect(pageB.getByText('You are looking at another topic.').filter({ visible: true })).toBeVisible();
+  await move(p.ctxA.request, p.boardId, 'discuss', 'back');
+  await expectPhase(pageB, 'vote');
+  await move(p.ctxA.request, p.boardId, 'vote', 'next');
+  await expectDiscussShown(pageB);
+  await expect(topicPanel(pageB)).toHaveAttribute('aria-label', t1.text);
+  await expect(viewingBar(pageB)).toHaveCount(0);
+  await expect(pageB.getByText('You are looking at another topic.').filter({ visible: true })).toHaveCount(0);
+
   await p.ctxA.close();
   await p.ctxB.close();
 });
@@ -379,6 +394,8 @@ test('comments: replies, edits, deletes and the rules that guard them', async ({
   await expectDiscussShown(pageA);
   await expectDiscussShown(pageB);
   await expect(topicPanel(pageB).getByText('No comments yet. Start the discussion.')).toBeVisible();
+  // On a guided board in Discuss the Discussion heading IS shown (so the open board's absence check is not vacuous).
+  await expect(pageB.getByRole('heading').filter({ visible: true }).filter({ hasText: /^Discussion/ }).first()).toBeVisible();
 
   let patches = 0;
   pageB.on('request', (r) => {
@@ -461,7 +478,7 @@ test('comments: replies, edits, deletes and the rules that guard them', async ({
   expect(stranger.status()).toBe(404);
   expect(await stranger.json()).toEqual({ error: 'Comment not found' });
 
-  // B deletes the reply through the UI (B is not the author: only A can, so A does it as its author).
+  // A deletes the reply through the UI: A is its author, and B cannot delete A's reply (the API refusal below).
   const replyOnA = topicPanel(pageA).locator('article article').filter({ hasText: replyBody });
   await replyOnA.getByRole('button', { name: 'Delete', exact: true }).click();
   await expect(replyOnA.getByText('Delete this comment?')).toBeVisible();
@@ -472,6 +489,32 @@ test('comments: replies, edits, deletes and the rules that guard them', async ({
   await expect.poll(async () => (await commentRowsDirect(p.boardId)).length, { timeout: 10_000 }).toBe(0);
   await expect(topicPanel(pageA).getByText('No comments yet. Start the discussion.')).toBeVisible();
   await expect(topicPanel(pageB).getByText('No comments yet. Start the discussion.')).toBeVisible({ timeout: 10_000 });
+
+  // A participant deletes their own reply through the UI, and the other page sees it go without a reload.
+  const topBody = `top-${rand()}`;
+  const topCreated = await apiComment(p.ctxA.request, p.boardId, { cardId: x.id, body: topBody });
+  expect(topCreated.status(), await topCreated.text()).toBe(200);
+  const topId: string = (await topCreated.json()).comment.id;
+  await expect(topicPanel(pageB).getByText(topBody)).toBeVisible({ timeout: 10_000 });
+  const ownReply = `own-reply-${rand()}`;
+  await topicPanel(pageB).locator('article').filter({ hasText: topBody }).first().getByRole('button', { name: 'Reply', exact: true }).click();
+  const ownBox = topicPanel(pageB).getByPlaceholder('Write a reply');
+  await ownBox.fill(ownReply);
+  await ownBox.press('Enter');
+  await expect(topicPanel(pageB).getByText(ownReply)).toBeVisible();
+  await expect(topicPanel(pageA).getByText(ownReply)).toBeVisible({ timeout: 10_000 });
+  expect((await commentRowsDirect(p.boardId)).some((r) => r.body === ownReply)).toBe(true);
+  const ownOnB = topicPanel(pageB).locator('article article').filter({ hasText: ownReply });
+  await ownOnB.getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect(ownOnB.getByText('Delete this comment?')).toBeVisible();
+  await ownOnB.getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect(topicPanel(pageA).getByText(ownReply)).toHaveCount(0, { timeout: 10_000 });
+  await expect(topicPanel(pageB).getByText(ownReply)).toHaveCount(0);
+  expect((await commentRowsDirect(p.boardId)).some((r) => r.body === ownReply)).toBe(false);
+  // Leave the board with no comments for the checks that follow.
+  const cleanup = await apiDeleteComment(p.ctxA.request, p.boardId, topId);
+  expect(cleanup.status(), await cleanup.text()).toBe(200);
+  await expect.poll(async () => (await commentRowsDirect(p.boardId)).length, { timeout: 10_000 }).toBe(0);
 
   // In Vote nobody can comment.
   await move(p.ctxA.request, p.boardId, 'discuss', 'back');
@@ -734,7 +777,8 @@ test("an open board's action items, board GET and views are unchanged", async ({
   expect(await commentRowsDirect(boardId)).toEqual([]);
 
   // The page keeps its board views: no Discuss view, agenda or Discussion heading.
-  const pageC = await joinAs(await browser.newContext(), boardId, `Cara-${rand()}`);
+  const ctxC = await browser.newContext();
+  const pageC = await joinAs(ctxC, boardId, `Cara-${rand()}`);
   await expect(shown(pageC, card.text)).toBeVisible({ timeout: 10_000 });
   await pageC.waitForTimeout(1000);
   await expect(pageC.getByTestId('discuss-view')).toHaveCount(0);
@@ -744,6 +788,7 @@ test("an open board's action items, board GET and views are unchanged", async ({
 
   await ctxA.close();
   await ctxB.close();
+  await ctxC.close();
 });
 
 test('the phone agenda sheet is fully on screen', async ({ browser }) => {

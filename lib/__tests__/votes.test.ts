@@ -213,6 +213,16 @@ describe('group-aware votes', () => {
   });
 });
 
+describe('voteResult with a local row on another card', () => {
+  it('ignores a local row that is not on the card the answer names', () => {
+    const local = v({ id: 'v1', card_id: 'L', voter_id: 'p1', count: 3 });
+    const r = voteResult({ action: 'removed', voteId: 'v9', cardId: 'c2', count: 1, tally: { used: 3, at: 7 } }, local,
+      { boardId: 'b1', cardId: 'L', voterId: 'p1', nowIso: 'x' });
+    expect(r?.vote).toEqual(expect.objectContaining({ id: 'v9', card_id: 'c2', count: 1 }));
+    expect(r?.vote?.id).not.toBe('v1');
+  });
+});
+
 describe('a click that changes another row', () => {
   it('ends its burst with no settle and one refetch', () => {
     const slot = startVoteClick(EMPTY_VOTE_SLOT, 1);

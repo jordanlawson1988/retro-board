@@ -92,3 +92,21 @@ export function showTitleCounter(v: string): boolean {
 export function editorStillOpen(openedIn: PhaseId, current: PhaseId | null, editingAllowed: boolean): boolean {
   return editingAllowed && openedIn === current;
 }
+
+/**
+ * Whether closing the title editor sends a write. Nothing goes out for text the person did not
+ * change from what the editor opened with (whatever the store's title became meanwhile, so
+ * another person's rename is never overwritten by an untouched editor), nor for a value the
+ * store already holds. A different text is sent as typed: last write wins.
+ */
+export function titleSaveDecision(
+  openedWith: string,
+  current: string,
+  storeTitle: string | null,
+): { send: false } | { send: true; value: string | null } {
+  const typed = current.trim();
+  if (typed === openedWith.trim()) return { send: false };
+  const value = typed === '' ? null : typed;
+  if (value === storeTitle) return { send: false };
+  return { send: true, value };
+}

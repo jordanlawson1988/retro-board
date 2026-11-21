@@ -9,6 +9,7 @@ import {
   groupTitleLength,
   showTitleCounter,
   editorStillOpen,
+  titleSaveDecision,
 } from '@/lib/groups';
 import { GROUP_TITLE_MAX, GROUP_TITLE_COUNTER_FROM } from '@/lib/constants/groups';
 
@@ -67,5 +68,36 @@ describe('group title editor logic', () => {
     expect(editorStillOpen('group', 'vote', true)).toBe(false);
     expect(editorStillOpen('group', null, true)).toBe(false);
     expect(editorStillOpen('group', 'group', false)).toBe(false);
+  });
+});
+
+describe('titleSaveDecision', () => {
+  it('sends nothing when the text is unchanged and the store is unchanged', () => {
+    expect(titleSaveDecision('Old', 'Old', 'Old')).toEqual({ send: false });
+  });
+  it('sends nothing when the text is unchanged but someone else changed the title meanwhile', () => {
+    expect(titleSaveDecision('Old', 'Old', 'New')).toEqual({ send: false });
+    expect(titleSaveDecision('', '', 'New')).toEqual({ send: false });
+  });
+  it('sends the new title when the person typed something different (last write wins)', () => {
+    expect(titleSaveDecision('Old', 'Mine', 'Old')).toEqual({ send: true, value: 'Mine' });
+    expect(titleSaveDecision('Old', 'Mine', 'New')).toEqual({ send: true, value: 'Mine' });
+    expect(titleSaveDecision('', 'Mine', null)).toEqual({ send: true, value: 'Mine' });
+  });
+  it('sends null when the person emptied a title that exists', () => {
+    expect(titleSaveDecision('Old', '', 'Old')).toEqual({ send: true, value: null });
+    expect(titleSaveDecision('Old', '   ', 'New')).toEqual({ send: true, value: null });
+  });
+  it('sends nothing when emptied and there is no title to clear', () => {
+    expect(titleSaveDecision('Old', '', null)).toEqual({ send: false });
+    expect(titleSaveDecision('', '', null)).toEqual({ send: false });
+  });
+  it('ignores whitespace-only changes', () => {
+    expect(titleSaveDecision('Old', '  Old  ', 'Old')).toEqual({ send: false });
+    expect(titleSaveDecision('Old', 'Old ', 'New')).toEqual({ send: false });
+    expect(titleSaveDecision('', '   ', null)).toEqual({ send: false });
+  });
+  it('sends nothing when the typed text already is the stored title', () => {
+    expect(titleSaveDecision('Old', 'New', 'New')).toEqual({ send: false });
   });
 });

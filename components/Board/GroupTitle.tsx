@@ -9,7 +9,7 @@ import { useBoardStore } from '@/stores/boardStore';
 import { useGroupVoteStore } from '@/stores/groupVoteStore';
 import { GROUP_TITLE_MAX } from '@/lib/constants/groups';
 import { GUIDED_MODE, type PhaseId } from '@/lib/constants/phases';
-import { clampGroupTitle, editorStillOpen, groupTitleLength, isLeadCard, showTitleCounter, visibleGroupTitle } from '@/lib/groups';
+import { clampGroupTitle, editorStillOpen, groupTitleLength, isLeadCard, showTitleCounter, titleSaveDecision, visibleGroupTitle } from '@/lib/groups';
 
 const PLACEHOLDER = 'Name this group';
 
@@ -30,7 +30,7 @@ export function GroupTitle({ cardId }: GroupTitleProps) {
   const setGroupTitle = useGroupVoteStore((s) => s.setGroupTitle);
   const clearWriteError = useBoardStore((s) => s.clearWriteError);
 
-  const [editor, setEditor] = useState<{ phase: PhaseId; value: string } | null>(null);
+  const [editor, setEditor] = useState<{ phase: PhaseId; value: string; openedWith: string } | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -73,7 +73,7 @@ export function GroupTitle({ cardId }: GroupTitleProps) {
     savingRef.current = false;
     cancelledRef.current = false;
     setProblem(null);
-    setEditor({ phase, value: title ?? '' });
+    setEditor({ phase, value: title ?? '', openedWith: title ?? '' });
   };
 
   const save = (returnFocus: boolean) => {
@@ -81,20 +81,24 @@ export function GroupTitle({ cardId }: GroupTitleProps) {
     // Judge by the live store: a blur that arrives while the editor is being torn down must not save.
     const live = useBoardStore.getState();
     if (!editorStillOpen(editor.phase, live.board?.phase ?? null, true) || !isLeadCard(cardId, live.cards)) return;
-    const value = editor.value.trim();
-    if (value === (title ?? '')) return close(returnFocus);
+    // What goes out is judged from what the editor opened with, not from the store's title now:
+    // an untouched editor never overwrites someone else's rename.
+    const liveTitle = live.cards.find((c) => c.id === cardId)?.group_title ?? null;
+    const decision = titleSaveDecision(editor.openedWith, editor.value, liveTitle);
+    if (!decision.send) return close(returnFocus);
+    // Once a save is sent, this editor instance sends nothing more: the flag is cleared only by a
+    // rejection (so the person can retry) or by opening the editor again.
     savingRef.current = true;
     setProblem(null);
-    // A rejection leaves the editor open with what was typed and shows the reason here, so the
-    // connection banner's copy of the same message is cleared rather than shown twice.
-    setGroupTitle(cardId, value === '' ? null : value)
+    // A rejection leaves the editor open with what was typed and shows the reason here.
+    setGroupTitle(cardId, decision.value)
       .then(() => close(returnFocus))
       .catch((e: unknown) => {
-        clearWriteError();
-        setProblem(e instanceof Error ? e.message : String(e));
-      })
-      .finally(() => {
         savingRef.current = false;
+        const message = e instanceof Error ? e.message : String(e);
+        // Only this editor's own error: another write's banner message stays.
+        if (useBoardStore.getState().lastWriteError === message) clearWriteError();
+        setProblem(message);
       });
   };
 

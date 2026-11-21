@@ -23,9 +23,12 @@ import { allActionItems, dueDateLabel, headlineSentence, ownerLabel, summaryPath
  * heading and score, and the action items. It never reads topic.threads, topic.cards or an author.
  */
 
+/** A bare http(s) origin (host, optional port) after trailing slashes are removed; anything else is null. */
+const BARE_ORIGIN = /^https?:\/\/[A-Za-z0-9.-]+(:\d{1,5})?$/;
+
 export function appBaseUrl(env: Record<string, string | undefined>): string | null {
-  const raw = (env.NEXT_PUBLIC_APP_URL || env.BETTER_AUTH_URL || '').trim().replace(/\/+$/, '');
-  return /^https?:\/\/[^/\s]+/.test(raw) ? raw : null;
+  const raw = (env.NEXT_PUBLIC_APP_URL || env.BETTER_AUTH_URL || '').replace(/\/+$/, '');
+  return BARE_ORIGIN.test(raw) ? raw : null;
 }
 
 export interface SummaryEmailLinks {
@@ -52,20 +55,32 @@ export function escapeHtml(s: string): string {
     .replace(/'/g, '&#39;');
 }
 
-const oneLine = (s: string): string => s.replace(/[\r\n]+/g, ' ');
+/**
+ * The one cleaner for user-written text: every run of line separators and tabs (CR, LF, VT, FF,
+ * NEL, U+2028, U+2029, TAB) becomes one space, every other control character (C0, DEL, C1,
+ * including NUL) is removed, and the result is trimmed.
+ */
+export function cleanText(s: string): string {
+  return s
+    // eslint-disable-next-line no-control-regex -- control characters are the point of this function
+    .replace(/[\t\n\u000b\u000c\r\u0085\u2028\u2029]+/g, ' ')
+    // eslint-disable-next-line no-control-regex -- control characters are the point of this function
+    .replace(/[\u0000-\u001f\u007f-\u009f]/g, '')
+    .trim();
+}
 
 export function truncateHeading(s: string, max: number = SUMMARY_EMAIL_HEADING_MAX): string {
-  const chars = Array.from(oneLine(s));
+  const chars = Array.from(cleanText(s));
   return chars.length > max ? `${chars.slice(0, max).join('')}...` : chars.join('');
 }
 
 export function renderSummaryEmail(summary: RetroSummary, to: string, links: SummaryEmailLinks): MailMessage {
-  const title = oneLine(summary.title);
+  const title = cleanText(summary.title);
   const headline = headlineSentence(summary.headline);
   const topics = summary.topics.map((t) => `${truncateHeading(t.heading)} (${agendaVotesLabel(t.score)})`);
   const actions = allActionItems(summary).map(
     (i) =>
-      `${oneLine(i.description)} (${OWNER_PREFIX}${oneLine(ownerLabel(i) ?? NO_OWNER_LABEL)}; ${DUE_PREFIX}${dueDateLabel(i.due_date) ?? NO_DUE_DATE})`,
+      `${cleanText(i.description)} (${OWNER_PREFIX}${(cleanText(ownerLabel(i) ?? '') || NO_OWNER_LABEL)}; ${DUE_PREFIX}${dueDateLabel(i.due_date) ?? NO_DUE_DATE})`,
   );
 
   const text = [

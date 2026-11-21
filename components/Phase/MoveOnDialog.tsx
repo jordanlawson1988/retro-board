@@ -1,5 +1,6 @@
 'use client';
 
+import { createPortal } from 'react-dom';
 import { Button, Modal } from '@/components/common';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 
@@ -17,7 +18,11 @@ export function MoveOnDialog({ open, readyCount, onlineTotal, onStay, onMoveOn }
   // dialog's own content does: focus lands on Stay, Tab wraps between the two buttons, and
   // focus returns to the Next button on close.
   const contentRef = useFocusTrap<HTMLDivElement>(open);
-  return (
+  // Rendered on the body: the rail sits in the sticky, blurred header, which would otherwise become
+  // the containing block of the Modal's fixed overlay and clip it. Open only after a click, so the
+  // server never renders it.
+  if (!open) return null;
+  return createPortal(
     <Modal open={open} onClose={onStay} title="Move on?" size="sm">
       <div ref={contentRef} className="flex flex-col gap-4">
         <p className="text-[var(--ink-2)]">
@@ -32,6 +37,7 @@ export function MoveOnDialog({ open, readyCount, onlineTotal, onStay, onMoveOn }
           </Button>
         </div>
       </div>
-    </Modal>
+    </Modal>,
+    document.body
   );
 }

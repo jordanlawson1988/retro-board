@@ -8,9 +8,9 @@ export const COMMENTS_PER_BOARD_MAX = 500;
 /** The one list of comment events published on the board channel. */
 export const COMMENT_EVENTS = ['comment-created', 'comment-updated', 'comment-deleted'] as const;
 export type CommentEvent = (typeof COMMENT_EVENTS)[number];
-export const COMMENT_CREATED: CommentEvent = COMMENT_EVENTS[0];
-export const COMMENT_UPDATED: CommentEvent = COMMENT_EVENTS[1];
-export const COMMENT_DELETED: CommentEvent = COMMENT_EVENTS[2];
+export const COMMENT_CREATED = COMMENT_EVENTS[0];
+export const COMMENT_UPDATED = COMMENT_EVENTS[1];
+export const COMMENT_DELETED = COMMENT_EVENTS[2];
 
 export const COMMENT_EMPTY_ERROR = 'Write a comment first';
 export const COMMENT_TOO_LONG_ERROR = `Comments can be at most ${COMMENT_BODY_MAX} characters`;

@@ -1,12 +1,12 @@
 import type { Card, Comment } from '@/types';
-import { COMMENT_DELETED, type COMMENT_EVENTS } from '@/lib/constants/comments';
+import { COMMENT_DELETED, type COMMENT_CREATED, type COMMENT_UPDATED } from '@/lib/constants/comments';
 import type { VoteTally } from '@/lib/votes';
 import { PUBLIC_VIEWER, shapeCard, shapeComment, votesAreSecret, type ViewBoard } from '@/lib/board-view';
 
 export type CardEvent = 'card-created' | 'card-updated';
 export type VoteEvent = 'vote-cast' | 'vote-removed';
 /** The two comment events that carry a whole comment (the deleted event carries ids). */
-export type CommentWriteEvent = (typeof COMMENT_EVENTS)[0 | 1];
+export type CommentWriteEvent = typeof COMMENT_CREATED | typeof COMMENT_UPDATED;
 
 /** Pure: the Ably payload for a card event. Everyone on the channel gets the public view. */
 export function cardEventPayload(card: Card, board: ViewBoard): { card: Card } {

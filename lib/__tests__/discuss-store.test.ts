@@ -318,6 +318,19 @@ describe('comment events', () => {
     expect(useBoardStore.getState().comments).toBe(before);
   });
 
+  it('an event carrying is_mine true for a comment I do not have ends is_mine false', () => {
+    applyCommentUpsertEvent('b1', { comment: comment({ id: 'x1', is_mine: true }) });
+    expect(useBoardStore.getState().comments[0].is_mine).toBe(false);
+    applyCommentDeletedEvent('b1', { ids: [], tombstone: comment({ id: 'x2', is_mine: true, deleted_at: 'now', body: '' }) });
+    expect(useBoardStore.getState().comments.find((c) => c.id === 'x2')?.is_mine).toBe(false);
+  });
+
+  it('an event carrying is_mine true for a comment I already own stays true from the local copy', () => {
+    useBoardStore.setState({ comments: [comment({ id: 'x1', is_mine: true })] });
+    applyCommentUpsertEvent('b1', { comment: comment({ id: 'x1', is_mine: true, body: 'edited' }) });
+    expect(useBoardStore.getState().comments[0]).toMatchObject({ is_mine: true, body: 'edited' });
+  });
+
   it('a duplicate create event leaves one comment', () => {
     applyCommentUpsertEvent('b1', { comment: comment() });
     applyCommentUpsertEvent('b1', { comment: comment() });
@@ -408,6 +421,69 @@ describe('setTopic and viewTopic', () => {
     routes({ 'POST /api/boards/b1/phase': () => json(200, answer('c2')) });
     await useDiscussStore.getState().setTopic('c2');
     expect(topic()).toBe('c2');
+  });
+
+  it('a late answer for c2 does not replace a newer topic c3 or its deadline and settings', async () => {
+    const d = deferred<Response>();
+    fetchMock = vi.fn(() => d.promise); vi.stubGlobal('fetch', fetchMock);
+    useDiscussStore.getState().viewTopic('c1');
+    const p = useDiscussStore.getState().setTopic('c2');
+    const newer = { ...board().settings, timer: { ...board().settings.timer, durationSeconds: 77 } } as Board['settings'];
+    useBoardStore.setState({ board: { ...board(), settings: newer, phase_config: { deadline: 'D2', topic: 'c3' } } });
+    d.resolve(json(200, answer('c2')));
+    await p;
+    const b = useBoardStore.getState().board!;
+    expect(b.phase_config).toEqual({ deadline: 'D2', topic: 'c3' });
+    expect(b.settings).toBe(newer);
+    expect(useDiscussStore.getState().viewed).toBeNull();
+    expect(useDiscussStore.getState().settingTopic).toBe(false);
+  });
+
+  it('a 5xx restores the topic while still shown, refetches once and rejects', async () => {
+    routes({
+      'POST /api/boards/b1/phase': () => json(500, { error: 'boom' }),
+      'GET /api/boards/b1': getBoardResponse(board(), { comments: [] }),
+    });
+    await expect(useDiscussStore.getState().setTopic('c2')).rejects.toThrow('boom');
+    expect(topic()).toBe('c1');
+    expect(calls()).toEqual(['POST /api/boards/b1/phase', 'GET /api/boards/b1']);
+  });
+
+  it('a failure after the phase changed restores nothing and leaves the new phase alone', async () => {
+    const d = deferred<Response>();
+    fetchMock = vi.fn(() => d.promise); vi.stubGlobal('fetch', fetchMock);
+    const p = useDiscussStore.getState().setTopic('c2');
+    const done = { ...board(), phase: 'done', phase_config: { deadline: null, topic: 'c2' } } as unknown as Board;
+    useBoardStore.setState({ board: done });
+    d.resolve(json(404, { error: 'That topic is not on the agenda' }));
+    await expect(p).rejects.toThrow('That topic is not on the agenda');
+    expect(useBoardStore.getState().board).toBe(done);
+  });
+
+  it('settingTopic is false again after a success, a refusal, a network failure and a left board', async () => {
+    const flag = () => useDiscussStore.getState().settingTopic;
+    routes({ 'POST /api/boards/b1/phase': () => json(200, answer('c2')) });
+    await useDiscussStore.getState().setTopic('c2');
+    expect(flag()).toBe(false);
+    routes({
+      'POST /api/boards/b1/phase': () => json(403, { error: 'no' }),
+    });
+    await expect(useDiscussStore.getState().setTopic('c3')).rejects.toThrow('no');
+    expect(flag()).toBe(false);
+    fetchMock = vi.fn()
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValue(json(200, baseGet(board(), { comments: [] })));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(useDiscussStore.getState().setTopic('c3')).rejects.toThrow();
+    expect(flag()).toBe(false);
+    const d = deferred<Response>();
+    fetchMock = vi.fn(() => d.promise); vi.stubGlobal('fetch', fetchMock);
+    const p = useDiscussStore.getState().setTopic('c3');
+    expect(flag()).toBe(true);
+    useBoardStore.setState({ board: board({ id: 'b2' }) });
+    d.resolve(json(200, answer('c3')));
+    await p;
+    expect(flag()).toBe(false);
   });
 
   it('viewTopic stores the viewed topic and a successful setTopic clears it', async () => {

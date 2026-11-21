@@ -50,7 +50,8 @@ export function applyCommentUpsertEvent(boardId: string, data: unknown): void {
   if (!board || board.id !== boardId) return;
   const comment = parseComment((data as { comment?: unknown } | null | undefined)?.comment);
   if (!comment || comment.board_id !== boardId) return;
-  applyCommentChange({ boardId, kind: 'upsert', comment });
+  // An event is public: it never claims ownership. The local copy, if any, keeps its own is_mine.
+  applyCommentChange({ boardId, kind: 'upsert', comment: { ...comment, is_mine: false } });
 }
 
 /** A `comment-deleted` event: ignored unless it is for this guided board and parses. */
@@ -59,7 +60,12 @@ export function applyCommentDeletedEvent(boardId: string, data: unknown): void {
   if (!board || board.id !== boardId) return;
   const deletion = parseCommentDeletion(data);
   if (!deletion) return;
-  applyCommentChange({ boardId, kind: 'remove', ids: deletion.ids, tombstone: deletion.tombstone });
+  applyCommentChange({
+    boardId,
+    kind: 'remove',
+    ids: deletion.ids,
+    tombstone: deletion.tombstone ? { ...deletion.tombstone, is_mine: false } : null,
+  });
 }
 
 /** Sends a JSON write for a board; rejects through failAction when it fails, else returns the parsed answer. */
@@ -136,9 +142,13 @@ export const useDiscussStore = create<DiscussState>((set, get) => ({
     try {
       const data = await send(boardId, 'phase', 'POST', { action: 'set-topic', cardId }, SET_TOPIC_FALLBACK, revert);
       if (!onBoard(boardId)) return;
-      const applies = useBoardStore.getState().board?.phase === sentIn;
-      if (!applies) return;
-      useBoardStore.setState((s) => ({ board: s.board && s.board.phase === sentIn ? applyPhaseChanged(s.board, data) : s.board }));
+      const shown = useBoardStore.getState().board;
+      if (shown?.phase !== sentIn) return;
+      // The answer is applied only while the board still shows the topic this request set; a newer
+      // topic (an event applied meanwhile) is kept with its own deadline and settings.
+      if (shown.phase_config.topic === cardId) {
+        useBoardStore.setState((s) => ({ board: s.board && s.board.phase === sentIn ? applyPhaseChanged(s.board, data) : s.board }));
+      }
       if (get().viewed !== null) set({ viewed: null });
     } finally {
       set({ settingTopic: false });

@@ -83,8 +83,10 @@ export function VoteLimits({ layout = 'inline' }: VoteLimitsProps) {
     updateSettings(patch)
       .then(() => close(true))
       .catch((e: unknown) => {
-        clearWriteError();
-        setProblem(e instanceof Error ? e.message : String(e));
+        const message = e instanceof Error ? e.message : String(e);
+        // Only this form's own error: another write's banner message stays.
+        if (useBoardStore.getState().lastWriteError === message) clearWriteError();
+        setProblem(message);
       })
       .finally(() => setBusy(false));
   };

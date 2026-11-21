@@ -58,6 +58,22 @@ export function myGroupVotesOn(
 }
 
 /**
+ * Whether the single vote button reads as voted. An open board asks the card's own row (what every
+ * view always did). A guided board counts the group on a root card, so a vote stranded on a child
+ * reads as voted on the lead, matching what a click there does; a child card asks its own row.
+ */
+export function hasVotedOn(
+  guided: boolean,
+  votes: readonly Vote[],
+  cards: readonly Pick<Card, 'id' | 'merged_with'>[],
+  cardId: string,
+  participantId: string | null,
+): boolean {
+  if (!guided) return votes.some((v) => v.card_id === cardId && v.voter_id === participantId);
+  return myGroupVotesOn(votes, cards, cardId, participantId) > 0;
+}
+
+/**
  * The card whose row a remove takes from: my row on `cardId` when I have one; otherwise, for a
  * root, the child holding a row of mine that was created first; otherwise null.
  */

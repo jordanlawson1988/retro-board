@@ -15,7 +15,9 @@ import { ColumnSortMenu } from './ColumnSortMenu';
 import { IconButton } from '@/components/common/IconButton';
 import { sortCards, effectiveCardSort } from '@/utils/sortCards';
 import { voteTotalsRevealed } from '@/lib/votePillPolicy';
-import { voteTotalsByCard, votesUsedBy } from '@/lib/votes';
+import { hasVotedOn, voteTotalsByCard, votesUsedBy } from '@/lib/votes';
+import { useBoardStore } from '@/stores/boardStore';
+import { GUIDED_MODE } from '@/lib/constants/phases';
 import type { Column, Card, Vote, Participant } from '@/types';
 
 interface BoardColumnProps {
@@ -119,6 +121,8 @@ export function BoardColumn({
   canDeleteColumn,
   participants = [],
 }: BoardColumnProps) {
+  // One primitive for the whole view (not per card): an open board answers false.
+  const guided = useBoardStore((s) => s.board?.mode === GUIDED_MODE);
   const cardText = useCardText();
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
@@ -501,11 +505,10 @@ export function BoardColumn({
         <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
           {sortedCards.map((card) => {
             const children = childrenByParent.get(card.id) || [];
-            const cardVotes = votes.filter((v) => v.card_id === card.id);
             const childVotes = children.reduce(
               (sum, c) => sum + (voteCountByCard.get(c.id) || 0), 0
             );
-            const hasVoted = cardVotes.some((v) => v.voter_id === currentParticipantId);
+            const hasVoted = hasVotedOn(guided, votes, cards, card.id, currentParticipantId);
             const isExpanded = expandedCards.has(card.id);
             const showCombineZone = isDragActive && activeDragRootId !== card.id && canMerge
               && (activeDragId?.startsWith('child:') ? `child:${card.id}` !== activeDragId : true);

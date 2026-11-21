@@ -1397,7 +1397,6 @@ Expected: `tsc` clean; every unit test passes (927 in 61 files before this plan 
 - Replies deeper than one level: not building.
 - A per-topic timer: owner's decision (the stored phase timer still works in Discuss).
 - Blocking column deletion on guided boards in Discuss (`column.write` is not phase-gated, so a facilitator can delete a column, its cards, their comments and votes mid-discussion): hardening list, before the flag goes on.
-- Group-aware "voted" state on the single vote button of a guided board whose per-card limit is 1 (the stepper is group-aware; the pill's `hasVoted` still reads the card's own row in five views): hardening list; reachable only with a stranded vote and a limit of 1.
 - Shaping or whitelisting action item events (they publish raw rows today, which carry nothing withheld): hardening list.
 - Removing the unused `highlighted_card_id` setting: owner's decision. Guided boards ignore it; nothing renders it today.
 - Admin archive and unarchive made phase- and topic-aware (Step 1 ruling R15) and the `fetchBoard` stale-board guard (Step 2 ruling R17): unchanged, still on the "before the flag goes on" list. The vote completion race (Step 2 ruling R19) is closed by Task 1's `FOR SHARE`.

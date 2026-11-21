@@ -28,7 +28,7 @@ import { RetroCard } from './RetroCard';
 import { ColumnSortMenu } from './ColumnSortMenu';
 import { sortCards, effectiveCardSort } from '@/utils/sortCards';
 import { isMine } from '@/utils/isMine';
-import { leadCardVotes, voteSortKey, voteTotalsByCard, votesUsedBy } from '@/lib/votes';
+import { hasVotedOn, leadCardVotes, voteSortKey, voteTotalsByCard, votesUsedBy } from '@/lib/votes';
 import { useCardText } from '@/hooks/useCardText';
 import { useTeamVotesLeft } from '@/hooks/useTeamVotesLeft';
 import type { Column, Card, Vote, ActionItem, CardReactions, Participant, CardSort, BoardSettings } from '@/types';
@@ -236,8 +236,7 @@ export function MobileBoardShell({
       <div className="flex-1 min-h-0 px-4 pt-3 pb-[calc(84px+var(--safe-bottom))] flex flex-col gap-2 overflow-y-auto overscroll-contain">
         {rootCards.length > 0 ? (
           rootCards.map((card) => {
-            const cardVotes = votes.filter((v) => v.card_id === card.id);
-            const hasVoted = cardVotes.some((v) => v.voter_id === currentParticipantId);
+            const hasVoted = hasVotedOn(guided, votes, cards, card.id, currentParticipantId);
 
             return (
               <RetroCard

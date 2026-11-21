@@ -4,7 +4,7 @@ import {
   guidedVoteDefaults, voteControlKind, voteControlState, applyVoteDelta, settleOwnVote, applyVoteTally,
   teamVotesRemaining, teamVotesLeftFor, teamVotesLabel, votesPerCardError, voteLimitProblem, limitRefusal,
   hasLimitKey, voteLimitsEditable, teamUsedAfter, GROUP_VOTE_ERROR, NO_VOTES_LEFT, VOTE_LIMIT_RELATION_ERROR,
-  myGroupVotesOn, groupRemoveTarget, finishVoteClick, EMPTY_VOTE_SLOT, startVoteClick, voteResult,
+  myGroupVotesOn, groupRemoveTarget, hasVotedOn, finishVoteClick, EMPTY_VOTE_SLOT, startVoteClick, voteResult,
 } from '@/lib/votes';
 import { phaseSettings } from '@/lib/phases';
 import { DEFAULT_BOARD_SETTINGS } from '@/utils/constants';
@@ -224,5 +224,33 @@ describe('a click that changes another row', () => {
     const done = finishVoteClick(startVoteClick(EMPTY_VOTE_SLOT, 1), { kind: 'ok', at: 5, vote: null, otherRow: false });
     expect(done.settle).toEqual({ vote: null });
     expect(done.refetch).toBe(false);
+  });
+});
+
+describe('hasVotedOn', () => {
+  const cards = [
+    { id: 'L', merged_with: null },
+    { id: 'c', merged_with: 'L' },
+    { id: 'S', merged_with: null },
+  ];
+  const onChild = [v({ card_id: 'c', voter_id: 'p1' })];
+  const onLead = [v({ card_id: 'L', voter_id: 'p1' })];
+  it('an open board reads the card own row only, as the views always did', () => {
+    expect(hasVotedOn(false, onChild, cards, 'L', 'p1')).toBe(false);
+    expect(hasVotedOn(false, onLead, cards, 'L', 'p1')).toBe(true);
+    expect(hasVotedOn(false, onLead, cards, 'L', 'p2')).toBe(false);
+  });
+  it('a guided root counts the whole group', () => {
+    expect(hasVotedOn(true, onChild, cards, 'L', 'p1')).toBe(true);
+    expect(hasVotedOn(true, onLead, cards, 'L', 'p1')).toBe(true);
+    expect(hasVotedOn(true, onChild, cards, 'S', 'p1')).toBe(false);
+  });
+  it('a guided child reads its own row only', () => {
+    expect(hasVotedOn(true, onLead, cards, 'c', 'p1')).toBe(false);
+    expect(hasVotedOn(true, onChild, cards, 'c', 'p1')).toBe(true);
+  });
+  it('no participant never has voted', () => {
+    expect(hasVotedOn(true, onLead, cards, 'L', null)).toBe(false);
+    expect(hasVotedOn(false, onLead, cards, 'L', null)).toBe(false);
   });
 });

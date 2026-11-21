@@ -8,7 +8,9 @@ import { sortCards, effectiveCardSort } from '@/utils/sortCards';
 import { isMine } from '@/utils/isMine';
 import { useCardText } from '@/hooks/useCardText';
 import { voteTotalsRevealed } from '@/lib/votePillPolicy';
-import { voteTotalsByCard, votesUsedBy } from '@/lib/votes';
+import { hasVotedOn, voteTotalsByCard, votesUsedBy } from '@/lib/votes';
+import { useBoardStore } from '@/stores/boardStore';
+import { GUIDED_MODE } from '@/lib/constants/phases';
 import type { Column, Card, Vote, Participant, CardSort } from '@/types';
 
 interface SwimlaneViewProps {
@@ -48,6 +50,8 @@ export function SwimlaneView({
   isAdmin,
   onUpdateColumn,
 }: SwimlaneViewProps) {
+  // One primitive for the whole view (not per card): an open board answers false.
+  const guided = useBoardStore((s) => s.board?.mode === GUIDED_MODE);
   const cardText = useCardText();
   const [collapsedRows, setCollapsedRows] = useState<Set<string>>(new Set());
 
@@ -139,8 +143,7 @@ export function SwimlaneView({
                   {colCards.length > 0 ? (
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                       {colCards.map((card) => {
-                        const cardVotes = votes.filter((v) => v.card_id === card.id);
-                        const hasVoted = cardVotes.some((v) => v.voter_id === currentParticipantId);
+                        const hasVoted = hasVotedOn(guided, votes, cards, card.id, currentParticipantId);
 
                         return (
                           <RetroCard

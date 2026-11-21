@@ -39,10 +39,16 @@ export function useDiscussTopics(isFacilitator: boolean) {
     if (cardId !== null) setTopic(cardId).catch(() => {});
   }, [setTopic]);
 
-  const select = useCallback((cardId: string) => {
+  /** Handles an agenda click; false when the store would drop it (a topic change is already in flight). */
+  const select = useCallback((cardId: string): boolean => {
     const action = selectTopicAction(followable, isFacilitator, cardId, current);
-    if (action.kind === 'set') move(action.cardId);
-    else viewTopic(action.cardId);
+    if (action.kind === 'set') {
+      if (useDiscussStore.getState().settingTopic) return false;
+      move(action.cardId);
+    } else {
+      viewTopic(action.cardId);
+    }
+    return true;
   }, [followable, isFacilitator, current, move, viewTopic]);
 
   return { agenda, headings, followable, current, shown, controls, select, move };

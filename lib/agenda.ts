@@ -178,8 +178,9 @@ export function discussTopics(
 }
 
 /**
- * What a click on an agenda item does. A facilitator in Discuss moves everyone; anyone else (and
- * everyone in Done) moves only their own view, and clicking the current topic returns to following.
+ * What a click on an agenda item does. A facilitator in Discuss moves everyone to another topic;
+ * anyone else (and everyone in Done) moves only their own view. Clicking the current topic, as
+ * anyone, returns to following it and sends nothing.
  */
 export function selectTopicAction(
   followable: boolean,
@@ -187,7 +188,8 @@ export function selectTopicAction(
   cardId: string,
   current: string | null,
 ): { kind: 'set'; cardId: string } | { kind: 'view'; cardId: string | null } {
-  if (followable && isFacilitator) return { kind: 'set', cardId };
+  // The current topic is already everyone's: no request, only a return to following.
+  if (followable && isFacilitator && cardId !== current) return { kind: 'set', cardId };
   return { kind: 'view', cardId: cardId === current ? null : cardId };
 }
 

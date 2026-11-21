@@ -12,11 +12,11 @@ import { useCardText } from '@/hooks/useCardText';
 import { isMine } from '@/utils/isMine';
 import { hasVotedOn, voteTotalsByCard, votesUsedBy } from '@/lib/votes';
 import {
-  topicControls, topicFollowable, topicHeading, topicPositionLabel, type AgendaItem,
+  topicControls, topicFollowable, topicPositionLabel, type AgendaItem,
 } from '@/lib/agenda';
 import {
   BACK_TO_CURRENT_TOPIC, CURRENT_TOPIC_PILL, DISCUSS_THIS_TOPIC, FIRST_TOPIC_TITLE, LAST_TOPIC_TITLE,
-  NEXT_TOPIC_LABEL, PREVIOUS_TOPIC_LABEL, TOPIC_CARDS_HEADING, VIEWING_ANOTHER_TOPIC,
+  NEXT_TEXT, NEXT_TOPIC_LABEL, PREVIOUS_TEXT, PREVIOUS_TOPIC_LABEL, TOPIC_CARDS_HEADING, VIEWING_ANOTHER_TOPIC,
 } from '@/lib/constants/agenda';
 import type { CardReactions } from '@/types';
 
@@ -41,6 +41,8 @@ export function ViewingAnotherBar() {
 
 interface TopicPanelProps {
   item: AgendaItem | null;
+  /** The topic's heading, from `topicHeading`, computed once by `useDiscussTopics`. */
+  heading: string;
   agenda: AgendaItem[];
   currentId: string | null;
   isFacilitator: boolean;
@@ -48,7 +50,7 @@ interface TopicPanelProps {
 }
 
 /** One topic: its heading, position, the facilitator's controls, and its cards through `RetroCard`. */
-export function TopicPanel({ item, agenda, currentId, isFacilitator, layout }: TopicPanelProps) {
+export function TopicPanel({ item, heading, agenda, currentId, isFacilitator, layout }: TopicPanelProps) {
   const board = useBoardStore((s) => s.board);
   const cards = useBoardStore((s) => s.cards);
   const votes = useBoardStore((s) => s.votes);
@@ -70,7 +72,6 @@ export function TopicPanel({ item, agenda, currentId, isFacilitator, layout }: T
   const controls = topicControls({ followable, isFacilitator, agenda, current: currentId, shown });
   const isCurrent = followable && shown === currentId;
   const position = topicPositionLabel(agenda, shown);
-  const heading = topicHeading(item, cards.map((c) => ({ id: c.id, text: cardText(c) })));
   const phone = layout === 'phone';
 
   const go = (cardId: string | null) => {
@@ -104,7 +105,7 @@ export function TopicPanel({ item, agenda, currentId, isFacilitator, layout }: T
                   className={BUTTON}
                 >
                   <ChevronLeft size={16} aria-hidden />
-                  Previous
+                  {PREVIOUS_TEXT}
                 </button>
                 <button
                   type="button"
@@ -114,7 +115,7 @@ export function TopicPanel({ item, agenda, currentId, isFacilitator, layout }: T
                   onClick={() => go(controls.nextId)}
                   className={BUTTON}
                 >
-                  Next
+                  {NEXT_TEXT}
                   <ChevronRight size={16} aria-hidden />
                 </button>
               </>
@@ -123,7 +124,9 @@ export function TopicPanel({ item, agenda, currentId, isFacilitator, layout }: T
         )}
       </div>
 
-      <h3 className="mt-2 break-words text-lg font-semibold leading-snug text-[var(--ink)]">{heading}</h3>
+      <h3 title={heading} className="mt-2 line-clamp-3 break-words text-lg font-semibold leading-snug text-[var(--ink)]">
+        {heading}
+      </h3>
 
       <h4 className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-[var(--ink-3)]">
         {TOPIC_CARDS_HEADING}

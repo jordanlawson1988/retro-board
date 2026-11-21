@@ -3,7 +3,7 @@
 import { AgendaList } from './AgendaList';
 import { TopicPanel, ViewingAnotherBar } from './TopicPanel';
 import { useDiscussTopics } from './useDiscussTopics';
-import { AGENDA_HEADING, TOPICS_HEADING } from '@/lib/constants/agenda';
+import { AGENDA_HEADING, NO_TOPICS_TEXT, TOPICS_HEADING } from '@/lib/constants/agenda';
 
 /** Desktop Discuss and Done: the agenda on the left, the shown topic on the right. */
 export function DiscussView({ isFacilitator }: { isFacilitator: boolean }) {
@@ -22,7 +22,18 @@ export function DiscussView({ isFacilitator }: { isFacilitator: boolean }) {
         />
         <div className="flex min-w-0 flex-col gap-3">
           {controls.viewingAnother && <ViewingAnotherBar />}
-          <TopicPanel item={item} agenda={agenda} currentId={current} isFacilitator={isFacilitator} layout="desktop" />
+          {item === null ? (
+            <p className="text-[13px] text-[var(--ink-3)]">{NO_TOPICS_TEXT}</p>
+          ) : (
+            <TopicPanel
+              item={item}
+              heading={headings.get(item.cardId) ?? ''}
+              agenda={agenda}
+              currentId={current}
+              isFacilitator={isFacilitator}
+              layout="desktop"
+            />
+          )}
         </div>
       </div>
     </div>

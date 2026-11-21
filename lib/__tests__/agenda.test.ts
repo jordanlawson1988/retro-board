@@ -153,9 +153,15 @@ describe('discussTopics', () => {
 });
 
 describe('selectTopicAction', () => {
-  it('a facilitator in Discuss sets the topic for everyone, even the current one', () => {
+  it('a facilitator in Discuss sets the topic for everyone when it is not already current', () => {
     expect(selectTopicAction(true, true, 'a', 'b')).toEqual({ kind: 'set', cardId: 'a' });
-    expect(selectTopicAction(true, true, 'b', 'b')).toEqual({ kind: 'set', cardId: 'b' });
+  });
+  // Changed on purpose: this used to pin a redundant set-topic request for the current topic.
+  it('a facilitator clicking the topic that is already current sends nothing and clears their own view', () => {
+    expect(selectTopicAction(true, true, 'b', 'b')).toEqual({ kind: 'view', cardId: null });
+  });
+  it('a facilitator with no current topic can still set one', () => {
+    expect(selectTopicAction(true, true, 'a', null)).toEqual({ kind: 'set', cardId: 'a' });
   });
   it('a participant views; the current topic returns to following', () => {
     expect(selectTopicAction(true, false, 'a', 'b')).toEqual({ kind: 'view', cardId: 'a' });

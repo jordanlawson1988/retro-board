@@ -9,7 +9,8 @@ import { useDiscussTopics } from './useDiscussTopics';
 import { useDiscussStore } from '@/stores/discussStore';
 import { agendaCountLabel, topicPositionLabel } from '@/lib/agenda';
 import {
-  AGENDA_HEADING, FIRST_TOPIC_TITLE, LAST_TOPIC_TITLE, NEXT_TOPIC_LABEL, PREVIOUS_TOPIC_LABEL, TOPICS_HEADING,
+  AGENDA_HEADING, FIRST_TOPIC_TITLE, LAST_TOPIC_TITLE, NEXT_TOPIC_LABEL, NO_TOPICS_TEXT, PREVIOUS_TOPIC_LABEL,
+  TOPICS_HEADING,
 } from '@/lib/constants/agenda';
 
 const TOUCH =
@@ -23,8 +24,8 @@ export function MobileDiscuss({ isFacilitator }: { isFacilitator: boolean }) {
   // Stable: the sheet re-registers Escape and Back handling whenever this changes.
   const closeAgenda = useCallback(() => setAgendaOpen(false), []);
   const onSelect = useCallback((cardId: string) => {
-    select(cardId);
-    setAgendaOpen(false);
+    // A click the store will drop (a topic change in flight) leaves the sheet open.
+    if (select(cardId)) setAgendaOpen(false);
   }, [select]);
 
   const item = agenda.find((i) => i.cardId === shown) ?? null;
@@ -73,7 +74,18 @@ export function MobileDiscuss({ isFacilitator }: { isFacilitator: boolean }) {
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain px-4 pt-3 pb-[calc(84px+var(--safe-bottom))]">
         {controls.viewingAnother && <ViewingAnotherBar />}
-        <TopicPanel item={item} agenda={agenda} currentId={current} isFacilitator={isFacilitator} layout="phone" />
+        {item === null ? (
+          <p className="text-[13px] text-[var(--ink-3)]">{NO_TOPICS_TEXT}</p>
+        ) : (
+          <TopicPanel
+            item={item}
+            heading={headings.get(item.cardId) ?? ''}
+            agenda={agenda}
+            currentId={current}
+            isFacilitator={isFacilitator}
+            layout="phone"
+          />
+        )}
       </div>
 
       <MobileSheet open={agendaOpen} onClose={closeAgenda} label={heading} title={heading}>

@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { Check, Circle, Clock, Trash2 } from 'lucide-react';
 import { cn } from '@/utils/cn';
+import { ownerChoice, ownerSelectModel } from '@/lib/agenda';
+import { OWNER_LABEL, UNASSIGNED_LABEL } from '@/lib/constants/agenda';
 import type { ActionItem, ActionItemStatus, Participant } from '@/types';
 
 interface ActionItemRowProps {
@@ -11,6 +13,12 @@ interface ActionItemRowProps {
   onUpdate: (itemId: string, updates: Partial<Pick<ActionItem, 'description' | 'assignee' | 'due_date' | 'status'>>) => void;
   onDelete: (itemId: string) => void;
   readOnly?: boolean;
+  /** `'participant'` (guided boards): the owner is picked from the board's people. Default `'name'`, as on an open board. */
+  assigneeMode?: 'name' | 'participant';
+  /** Called with the chosen participant id, or null for Unassigned, in `'participant'` mode. */
+  onAssign?: (itemId: string, participantId: string | null) => void;
+  /** The topic this item belongs to; shows a `Topic: ...` line under the description. */
+  topicLabel?: string | null;
 }
 
 const STATUS_CYCLE: ActionItemStatus[] = ['open', 'in_progress', 'done'];
@@ -21,7 +29,7 @@ const STATUS_ICONS = {
   done: Check,
 } as const;
 
-export function ActionItemRow({ item, participants, onUpdate, onDelete, readOnly }: ActionItemRowProps) {
+export function ActionItemRow({ item, participants, onUpdate, onDelete, readOnly, assigneeMode = 'name', onAssign, topicLabel }: ActionItemRowProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(item.description);
 
@@ -35,6 +43,8 @@ export function ActionItemRow({ item, participants, onUpdate, onDelete, readOnly
     }
     setIsEditing(false);
   };
+
+  const owner = assigneeMode === 'participant' ? ownerSelectModel(item, participants) : null;
 
   return (
     <div className={cn(
@@ -86,8 +96,37 @@ export function ActionItemRow({ item, participants, onUpdate, onDelete, readOnly
           </p>
         )}
 
+        {topicLabel && (
+          <p title={`Topic: ${topicLabel}`} className="mt-0.5 truncate text-xs text-[var(--ink-3)]">
+            {`Topic: ${topicLabel}`}
+          </p>
+        )}
+
         <div className="mt-1 flex items-center gap-2 text-xs text-[var(--ink-3)]">
           {/* Assignee */}
+          {owner ? (
+            <select
+              aria-label={OWNER_LABEL}
+              value={owner.value}
+              onChange={(e) => {
+                const choice = ownerChoice(e.target.value);
+                if (choice.kind === 'assign') onAssign?.(item.id, choice.participantId);
+              }}
+              disabled={readOnly || !onAssign}
+              className={cn(
+                'max-w-[120px] truncate rounded border-0 bg-transparent p-0 text-[16px] text-[var(--ink-3)] focus:outline-none md:text-xs',
+                readOnly || !onAssign ? 'cursor-default' : 'cursor-pointer hover:text-[var(--ink-2)]'
+              )}
+            >
+              {owner.textOption !== null && <option value={owner.value} disabled>{owner.textOption}</option>}
+              <option value="">{UNASSIGNED_LABEL}</option>
+              {participants.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.display_name}
+                </option>
+              ))}
+            </select>
+          ) : (
           <select
             value={item.assignee || ''}
             onChange={(e) => onUpdate(item.id, { assignee: e.target.value || null })}
@@ -104,6 +143,7 @@ export function ActionItemRow({ item, participants, onUpdate, onDelete, readOnly
               </option>
             ))}
           </select>
+          )}
 
           {/* Due date */}
           <input

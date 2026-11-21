@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { RetroCard } from '@/components/Board/RetroCard';
 import { CommentThread } from '@/components/Discuss/CommentThread';
+import { TopicActions } from '@/components/Discuss/TopicActions';
 import { Pill } from '@/components/common/Pill';
 import { cn } from '@/utils/cn';
 import { useBoardStore } from '@/stores/boardStore';
@@ -170,6 +171,7 @@ export function TopicPanel({ item, heading, agenda, currentId, isFacilitator, la
         })}
       </div>
       <CommentThread rootId={shown} cardIds={item.cardIds} isFacilitator={isFacilitator} />
+      <TopicActions rootId={shown} cardIds={item.cardIds} />
     </section>
   );
 }

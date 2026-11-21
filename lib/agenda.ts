@@ -1,7 +1,8 @@
 import { AGENDA_PHASE, FINAL_PHASE, GUIDED_MODE, type PhaseConfig, type PhaseId } from '@/lib/constants/phases';
 import { compareByCreated, isRootCard, visibleGroupTitle } from '@/lib/groups';
 import { groupScore, voteTotalsByCard } from '@/lib/votes';
-import type { ActionItem, Board, Card, Vote } from '@/types';
+import { TEXT_OWNER_VALUE } from '@/lib/constants/agenda';
+import type { ActionItem, Board, Card, Participant, Vote } from '@/types';
 
 export interface AgendaItem {
   cardId: string;
@@ -221,4 +222,46 @@ export function topicControls(input: {
     canDiscussShown: canMove && elsewhere,
     viewingAnother: !isFacilitator && elsewhere,
   };
+}
+
+/**
+ * The owner select of an action item on a guided board: the value to select and the free text, if
+ * any, to show as an extra first option. A participant owner wins. An id that names nobody on the
+ * board (the person left; the server keeps their name as text) falls back to the stored text, and
+ * to Unassigned when there is none, so the select never shows an empty box. Text that happens to
+ * equal a participant's name stays text: names are not identities.
+ */
+export function ownerSelectModel(
+  item: { assignee?: string | null; assignee_participant_id?: string | null },
+  participants: readonly Pick<Participant, 'id'>[],
+): { value: string; textOption: string | null } {
+  const id = item.assignee_participant_id ?? null;
+  if (id !== null && participants.some((p) => p.id === id)) return { value: id, textOption: null };
+  const text = item.assignee?.trim() ? item.assignee : null;
+  return text === null ? { value: '', textOption: null } : { value: TEXT_OWNER_VALUE, textOption: text };
+}
+
+/** What choosing a value in an owner select does: the free-text option is not a choice. */
+export function ownerChoice(value: string): { kind: 'assign'; participantId: string | null } | { kind: 'ignore' } {
+  if (value === TEXT_OWNER_VALUE) return { kind: 'ignore' };
+  return { kind: 'assign', participantId: value === '' ? null : value };
+}
+
+/** Every card of every topic (root and children) mapped to that topic's heading; a topic with no heading maps nothing. */
+export function topicLabelsByCard(
+  agenda: readonly Pick<AgendaItem, 'cardId' | 'cardIds'>[],
+  headings: ReadonlyMap<string, string>,
+): Map<string, string> {
+  const labels = new Map<string, string>();
+  for (const item of agenda) {
+    const heading = headings.get(item.cardId);
+    if (!heading) continue;
+    for (const id of item.cardIds) labels.set(id, heading);
+  }
+  return labels;
+}
+
+/** The label of an action item's card, or null for an unlinked item or a card that is gone. */
+export function topicLabelOf(labels: ReadonlyMap<string, string>, cardId: string | null | undefined): string | null {
+  return cardId == null ? null : labels.get(cardId) ?? null;
 }

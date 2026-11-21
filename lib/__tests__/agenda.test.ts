@@ -3,8 +3,9 @@ import {
   buildAgenda, currentTopicId, shownTopicId, neighbourTopicId, topicPositionLabel, agendaCountLabel,
   agendaVotesLabel, agendaCardsLabel, topicHeading, discussViewShown, topicFollowable, actionItemsForTopic,
   phaseTopic, topicActionOutcome, assignOutcome, setTopicOutcome,
-  discussTopics, selectTopicAction, topicControls,
+  discussTopics, selectTopicAction, topicControls, ownerSelectModel, ownerChoice, topicLabelsByCard, topicLabelOf,
 } from '@/lib/agenda';
+import { TEXT_OWNER_VALUE } from '@/lib/constants/agenda';
 
 const at = (ms: number) => new Date(Date.UTC(2026, 10, 20, 10, 0, 0, ms)).toISOString();
 const card = (id: string, ms: number, merged_with: string | null = null, group_title: string | null = null, text = `text ${id}`) =>
@@ -192,5 +193,64 @@ describe('topicControls', () => {
     expect(topicControls({ ...base, followable: false, current: null, shown: 'a' })).toEqual({
       canMove: false, previousId: null, nextId: null, canDiscussShown: false, viewingAnother: false,
     });
+  });
+});
+
+describe('ownerSelectModel', () => {
+  const people = [{ id: 'pa', display_name: 'Alice' }, { id: 'pb', display_name: 'Bob' }];
+  it('selects the participant who owns the item and adds no text option', () => {
+    expect(ownerSelectModel({ assignee: 'Alice', assignee_participant_id: 'pa' }, people)).toEqual({ value: 'pa', textOption: null });
+  });
+  it('shows free text alone as an extra selected option', () => {
+    expect(ownerSelectModel({ assignee: 'Casey', assignee_participant_id: null }, people)).toEqual({ value: TEXT_OWNER_VALUE, textOption: 'Casey' });
+    expect(ownerSelectModel({ assignee: 'Casey' }, people)).toEqual({ value: TEXT_OWNER_VALUE, textOption: 'Casey' });
+  });
+  it('selects Unassigned when there is no owner at all', () => {
+    expect(ownerSelectModel({ assignee: null, assignee_participant_id: null }, people)).toEqual({ value: '', textOption: null });
+    expect(ownerSelectModel({ assignee: '  ' }, people)).toEqual({ value: '', textOption: null });
+    expect(ownerSelectModel({}, people)).toEqual({ value: '', textOption: null });
+  });
+  it('an id that is not in the list falls back to the stored text', () => {
+    expect(ownerSelectModel({ assignee: 'Dana', assignee_participant_id: 'gone' }, people)).toEqual({ value: TEXT_OWNER_VALUE, textOption: 'Dana' });
+  });
+  it('an id that is not in the list with no text selects Unassigned, never an empty select', () => {
+    expect(ownerSelectModel({ assignee: null, assignee_participant_id: 'gone' }, people)).toEqual({ value: '', textOption: null });
+  });
+  it('free text that equals a participant name stays free text (names are not identities)', () => {
+    expect(ownerSelectModel({ assignee: 'Bob', assignee_participant_id: null }, people)).toEqual({ value: TEXT_OWNER_VALUE, textOption: 'Bob' });
+  });
+  it('an id in the list wins over different stored text', () => {
+    expect(ownerSelectModel({ assignee: 'Old name', assignee_participant_id: 'pb' }, people)).toEqual({ value: 'pb', textOption: null });
+  });
+});
+
+describe('ownerChoice', () => {
+  it('maps the select value to what onAssign gets', () => {
+    expect(ownerChoice('')).toEqual({ kind: 'assign', participantId: null });
+    expect(ownerChoice('pa')).toEqual({ kind: 'assign', participantId: 'pa' });
+  });
+  it('the free-text option is never a choice', () => {
+    expect(ownerChoice(TEXT_OWNER_VALUE)).toEqual({ kind: 'ignore' });
+  });
+});
+
+describe('topicLabelsByCard', () => {
+  const agenda = [
+    { cardId: 'r1', rank: 1, score: 2, cardIds: ['r1', 'c1'], title: null },
+    { cardId: 'r2', rank: 2, score: 0, cardIds: ['r2'], title: null },
+    { cardId: 'r3', rank: 3, score: 0, cardIds: ['r3'], title: null },
+  ];
+  const headings = new Map([['r1', 'Group of 2 cards'], ['r2', 'Deploys are slow'], ['r3', '']]);
+  const labels = topicLabelsByCard(agenda, headings);
+  it('maps the root and every child of a topic to that topic heading', () => {
+    expect(topicLabelOf(labels, 'r1')).toBe('Group of 2 cards');
+    expect(topicLabelOf(labels, 'c1')).toBe('Group of 2 cards');
+    expect(topicLabelOf(labels, 'r2')).toBe('Deploys are slow');
+  });
+  it('gives nothing for an unlinked item, a card that is gone, or a topic with no heading', () => {
+    expect(topicLabelOf(labels, null)).toBeNull();
+    expect(topicLabelOf(labels, undefined)).toBeNull();
+    expect(topicLabelOf(labels, 'unknown')).toBeNull();
+    expect(topicLabelOf(labels, 'r3')).toBeNull();
   });
 });

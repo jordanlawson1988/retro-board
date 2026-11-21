@@ -7,7 +7,7 @@ import { cn } from '@/utils/cn';
 import { usePhaseGates } from '@/hooks/usePhaseGates';
 import { useBoardStore } from '@/stores/boardStore';
 import { useGroupVoteStore } from '@/stores/groupVoteStore';
-import type { PhaseId } from '@/lib/constants/phases';
+import { GUIDED_MODE, type PhaseId } from '@/lib/constants/phases';
 import { hasGrouping } from '@/lib/groups';
 import { ResetGroupingDialog } from './ResetGroupingDialog';
 
@@ -23,7 +23,8 @@ interface ResetGroupingProps {
 export function ResetGrouping({ layout = 'inline' }: ResetGroupingProps) {
   const { guided, phase, moveLocked } = usePhaseGates();
   const completed = useBoardStore((s) => !!s.board?.archived_at);
-  const nothingToReset = useBoardStore((s) => !hasGrouping(s.cards));
+  // Answers before it reads `cards` when the board is not guided: the More sheet mounts this on open boards too.
+  const nothingToReset = useBoardStore((s) => (s.board?.mode === GUIDED_MODE ? !hasGrouping(s.cards) : true));
   const resetting = useGroupVoteStore((s) => s.resetting);
   const resetGrouping = useGroupVoteStore((s) => s.resetGrouping);
   const [openIn, setOpenIn] = useState<PhaseId | null>(null);

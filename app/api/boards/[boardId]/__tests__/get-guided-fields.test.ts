@@ -67,5 +67,26 @@ describe('board GET mode and phase', () => {
     expect(json.access).toBe('completed-closed');
     expect(Object.keys(json.board).sort()).toEqual(['archived_at', 'id', 'title', 'trust_version']);
     expect(mocks.tx).not.toHaveBeenCalled();
+    expect('voteTally' in json).toBe(false);
+  });
+});
+
+describe('board GET vote tally', () => {
+  it('a guided board GET carries the team tally summed from every vote, even while votes are secret', async () => {
+    mocks.sql.mockResolvedValue([ctxRow({ mode: 'guided', phase: 'vote', settings: { secret_voting: true, voting_enabled: true } })]);
+    mocks.tx.mockResolvedValue([[], [], [
+      { id: 'v1', card_id: 'c1', board_id: 'b1', voter_id: 'p1', count: 2, created_at: 'x' },
+      { id: 'v2', card_id: 'c1', board_id: 'b1', voter_id: 'p2', count: 3, created_at: 'x' },
+    ], [], []]);
+    const json = await (await call()).json();
+    expect(json.voteTally).toEqual({ used: 5, at: 0 });
+    expect(json.votes).toEqual([expect.objectContaining({ voter_id: 'p1', count: 2 })]);
+    expect(mocks.sql).toHaveBeenCalledTimes(1);
+    expect(mocks.tx).toHaveBeenCalledTimes(1);
+  });
+
+  it('an open board GET has no voteTally', async () => {
+    mocks.sql.mockResolvedValue([ctxRow({ mode: 'open', phase: null })]);
+    expect('voteTally' in (await (await call()).json())).toBe(false);
   });
 });

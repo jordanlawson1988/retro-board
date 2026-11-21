@@ -1,4 +1,4 @@
-import { sql } from '@/lib/db';
+import { sql, sqlTransaction } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { rateLimitOr429 } from '@/lib/rate-limit';
 import { loadBoardActor, guardResponse, BOARD_NOT_FOUND } from '@/lib/board-actor';
@@ -6,7 +6,15 @@ import { checkAction } from '@/lib/board-guards';
 import { readJsonObject } from '@/lib/request-body';
 import { INVALID_BODY } from '@/lib/board-validation';
 import { DEFAULT_BOARD_SETTINGS } from '@/utils/constants';
-import { DEFAULT_PHASE_CONFIG, GUIDED_MODE, isPhaseId, type PhaseConfig, type PhaseId } from '@/lib/constants/phases';
+import {
+  DEFAULT_PHASE_CONFIG,
+  GUIDED_MODE,
+  NOT_GUIDED_ERROR,
+  PHASE_CHANGED_ERROR,
+  isPhaseId,
+  type PhaseConfig,
+  type PhaseId,
+} from '@/lib/constants/phases';
 import {
   phaseSettings,
   resolvePhaseMove,
@@ -14,9 +22,8 @@ import {
   type PhaseChangedPayload,
   type PhaseTarget,
 } from '@/lib/phases';
+import { voteLockKey } from '@/lib/votes';
 import type { BoardSettings } from '@/types';
-
-const PHASE_CHANGED = 'The phase already changed';
 
 function isPhaseTarget(v: unknown): v is PhaseTarget {
   return v === 'next' || v === 'back' || isPhaseId(v);
@@ -57,22 +64,27 @@ export async function POST(
   if (!loaded) return BOARD_NOT_FOUND();
   const denied = guardResponse(checkAction('board.settings', loaded.actor, loaded.state));
   if (denied) return denied;
-  if (loaded.board.mode !== GUIDED_MODE) return fail('This board is not in guided mode', 409);
+  if (loaded.board.mode !== GUIDED_MODE) return fail(NOT_GUIDED_ERROR, 409);
 
   let row;
   if (action === 'move') {
-    if (from !== loaded.board.phase) return fail(PHASE_CHANGED, 409);
+    if (from !== loaded.board.phase) return fail(PHASE_CHANGED_ERROR, 409);
     const move = resolvePhaseMove(from as PhaseId, to as PhaseTarget);
     if (!move.ok) return fail(move.error, 409);
-    // Conditional on the phase the request named, so two facilitators cannot both win.
-    [row] = await sql`
+    // Conditional on the phase the request named, so two facilitators cannot both win. Runs under
+    // the per-board vote lock, so a guided vote in flight commits before the phase moves.
+    const [, moved] = await sqlTransaction((txn) => [
+      txn`SELECT pg_advisory_xact_lock(hashtext(${voteLockKey(boardId)}))`,
+      txn`
       UPDATE boards SET phase = ${move.phase},
         settings = settings || ${JSON.stringify(phaseSettings(move.phase))}::jsonb,
         phase_config = phase_config || '{"deadline":null}'::jsonb
       WHERE id = ${boardId} AND mode = 'guided' AND phase = ${from}
         AND archived_at IS NULL AND deleted_at IS NULL
       RETURNING phase, settings, phase_config
-    `;
+    `,
+    ]);
+    [row] = moved as Record<string, unknown>[];
   } else {
     [row] = await sql`
       UPDATE boards SET phase_config = phase_config || ${JSON.stringify({ deadline })}::jsonb
@@ -81,7 +93,7 @@ export async function POST(
       RETURNING phase, settings, phase_config
     `;
   }
-  if (!row) return fail(PHASE_CHANGED, 409);
+  if (!row) return fail(PHASE_CHANGED_ERROR, 409);
 
   const phase = row.phase as PhaseId;
   const settings = { ...DEFAULT_BOARD_SETTINGS, ...(row.settings as Partial<BoardSettings>) } as BoardSettings;

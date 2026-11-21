@@ -1,13 +1,16 @@
 'use client';
 
 import { ThumbsUp } from 'lucide-react';
+import { teamVotesLabel } from '@/lib/votes';
 
 interface MobileVoteTrackerProps {
   used: number;
   total: number;
+  /** The team's votes left (guided boards in a voting phase); a second line when it is a number. */
+  teamLeft?: number | null;
 }
 
-export function MobileVoteTracker({ used, total }: MobileVoteTrackerProps) {
+export function MobileVoteTracker({ used, total, teamLeft = null }: MobileVoteTrackerProps) {
   // Cap dot display at a reasonable max to avoid layout overflow
   const displayTotal = Math.min(total, 10);
   const displayUsed = Math.min(used, displayTotal);
@@ -25,6 +28,11 @@ export function MobileVoteTracker({ used, total }: MobileVoteTrackerProps) {
             {' '}of{' '}
             <span className="font-mono tabular-nums">{total}</span> used
           </p>
+          {teamLeft !== null && (
+            <p data-testid="team-votes-left" className="text-[13px] text-[var(--ink-3)] tnum">
+              {teamVotesLabel(teamLeft)}
+            </p>
+          )}
         </div>
       </div>
       {total > 10 ? (

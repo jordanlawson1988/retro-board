@@ -4,6 +4,8 @@ export const BOARD_ACTIONS = [
   'card.edit',
   'card.delete',
   'card.move',
+  'group.title',
+  'group.reset',
   'card.react',
   'vote.toggle',
   'column.write',

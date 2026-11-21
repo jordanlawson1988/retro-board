@@ -190,10 +190,12 @@ export function guardResponse(result: GuardResult | null): NextResponse | null {
 export const BOARD_NOT_FOUND = () =>
   NextResponse.json({ error: 'Board not found' }, { status: 404 });
 
+export const JOIN_FIRST_ERROR = 'Join the board first';
+
 /** v2 writes that must be attributed need a participant, even for a signed-in facilitator. */
 export function requireParticipantOn(loaded: LoadedBoard): NextResponse | null {
   if (loaded.actor.trustVersion === 2 && loaded.actor.participantId === null) {
-    return NextResponse.json({ error: 'Join the board first' }, { status: 401 });
+    return NextResponse.json({ error: JOIN_FIRST_ERROR }, { status: 401 });
   }
   return null;
 }

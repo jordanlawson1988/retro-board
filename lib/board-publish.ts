@@ -1,4 +1,5 @@
 import type { Card } from '@/types';
+import type { VoteTally } from '@/lib/votes';
 import { PUBLIC_VIEWER, shapeCard, votesAreSecret, type ViewBoard } from '@/lib/board-view';
 
 export type CardEvent = 'card-created' | 'card-updated';
@@ -12,6 +13,11 @@ export function cardEventPayload(card: Card, board: ViewBoard): { card: Card } {
 /** Pure: the Ably payload for a vote event, or null when secret voting means nothing is published. */
 export function voteEventPayload<T extends object>(payload: T, board: ViewBoard): T | null {
   return votesAreSecret(board) ? null : payload;
+}
+
+/** Pure: the team vote tally payload. An aggregate only; nothing else is ever copied across. */
+export function voteTallyPayload(t: VoteTally): VoteTally {
+  return { used: t.used, at: t.at };
 }
 
 // ably-server throws at import without ABLY_API_KEY, so load it only when publishing.
@@ -40,4 +46,9 @@ export async function publishVote(
   if (out === null) return;
   const channel = await channelFor(boardId);
   await channel.publish(event, out);
+}
+
+export async function publishVoteTally(boardId: string, t: VoteTally): Promise<void> {
+  const channel = await channelFor(boardId);
+  await channel.publish('vote-tally', voteTallyPayload(t));
 }

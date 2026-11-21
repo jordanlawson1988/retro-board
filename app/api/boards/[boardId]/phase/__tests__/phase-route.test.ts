@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   sql: vi.fn(),
+  tx: vi.fn(),
   session: vi.fn(),
   pid: vi.fn(),
   publish: vi.fn(),
@@ -11,7 +12,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/db', () => ({
   sql: (...a: unknown[]) => mocks.sql(...a),
-  sqlTransaction: vi.fn(),
+  sqlTransaction: (...a: unknown[]) => mocks.tx(...a),
 }));
 vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
 vi.mock('@/lib/auth', () => ({ auth: { api: { getSession: vi.fn() } } }));
@@ -35,6 +36,7 @@ vi.mock('@/lib/rate-limit', () => ({ rateLimitOr429: (...a: unknown[]) => mocks.
 import { POST } from '@/app/api/boards/[boardId]/phase/route';
 import { DEFAULT_BOARD_SETTINGS } from '@/utils/constants';
 import { phaseSettings } from '@/lib/phases';
+import { voteLockKey } from '@/lib/votes';
 
 const ctx = { params: Promise.resolve({ boardId: 'b1' }) };
 const req = (body: unknown) =>
@@ -59,6 +61,12 @@ const updateRow = (phase: string, deadline: string | null = null) => ({
   phase_config: { deadline },
 });
 
+const txCalls = () => {
+  const calls: { text: string; values: unknown[] }[] = [];
+  mocks.tx.mock.calls.at(-1)![0]((s: TemplateStringsArray, ...values: unknown[]) => { calls.push({ text: s.join('?'), values }); return {}; });
+  return calls;
+};
+
 const FUTURE = new Date(Date.now() + 2 * 86_400_000).toISOString();
 const PAST = '2020-01-01T00:00:00.000Z';
 
@@ -72,11 +80,13 @@ afterEach(() => vi.useRealTimers());
 
 describe('POST /phase move', () => {
   it('moves reflect to group in two round-trips and publishes phase-changed with refetch', async () => {
-    mocks.sql.mockResolvedValueOnce([guidedIn('reflect')]).mockResolvedValueOnce([updateRow('group')]);
+    mocks.sql.mockResolvedValueOnce([guidedIn('reflect')]);
+    mocks.tx.mockResolvedValueOnce([[], [updateRow('group')]]);
     const res = await POST(req({ action: 'move', from: 'reflect', to: 'next' }), ctx);
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ ok: true, phase: 'group', phaseConfig: { deadline: null } });
-    expect(mocks.sql).toHaveBeenCalledTimes(2);
+    expect(mocks.sql).toHaveBeenCalledTimes(1);
+    expect(mocks.tx).toHaveBeenCalledTimes(1);
     expect(mocks.channel).toHaveBeenCalledWith('retro-board:b1');
     expect(mocks.publish).toHaveBeenCalledTimes(1);
     expect(mocks.publish).toHaveBeenCalledWith(
@@ -86,10 +96,12 @@ describe('POST /phase move', () => {
   });
 
   it('the UPDATE merges phaseSettings and clears the deadline', async () => {
-    mocks.sql.mockResolvedValueOnce([guidedIn('reflect')]).mockResolvedValueOnce([updateRow('group')]);
+    mocks.sql.mockResolvedValueOnce([guidedIn('reflect')]);
+    mocks.tx.mockResolvedValueOnce([[], [updateRow('group')]]);
     await POST(req({ action: 'move', from: 'reflect', to: 'next' }), ctx);
-    const text = (mocks.sql.mock.calls[1][0] as string[]).join('?');
-    const values = mocks.sql.mock.calls[1].slice(1);
+    const [, update] = txCalls();
+    const text = update.text;
+    const values = update.values;
     expect(values).toContain('group');
     expect(values).toContain(JSON.stringify(phaseSettings('group')));
     expect(values).toContain('b1');
@@ -99,14 +111,34 @@ describe('POST /phase move', () => {
     expect(text).toContain('archived_at IS NULL AND deleted_at IS NULL');
   });
 
+  it('takes the per-board vote lock first, in the same transaction, and the UPDATE text is unchanged', async () => {
+    mocks.sql.mockResolvedValueOnce([guidedIn('vote')]);
+    mocks.tx.mockResolvedValueOnce([[], [updateRow('discuss')]]);
+    await POST(req({ action: 'move', from: 'vote', to: 'next' }), ctx);
+    const [lock, update] = txCalls();
+    expect(lock.text).toBe('SELECT pg_advisory_xact_lock(hashtext(?))');
+    expect(lock.values).toEqual([voteLockKey('b1')]);
+    expect(update.text).toBe(`
+      UPDATE boards SET phase = ?,
+        settings = settings || ?::jsonb,
+        phase_config = phase_config || '{"deadline":null}'::jsonb
+      WHERE id = ? AND mode = 'guided' AND phase = ?
+        AND archived_at IS NULL AND deleted_at IS NULL
+      RETURNING phase, settings, phase_config
+    `);
+    expect(mocks.sql).toHaveBeenCalledTimes(1);
+  });
+
   it('supports back and an explicit target', async () => {
-    mocks.sql.mockResolvedValueOnce([guidedIn('vote')]).mockResolvedValueOnce([updateRow('group')]);
+    mocks.sql.mockResolvedValueOnce([guidedIn('vote')]);
+    mocks.tx.mockResolvedValueOnce([[], [updateRow('group')]]);
     expect((await POST(req({ action: 'move', from: 'vote', to: 'back' }), ctx)).status).toBe(200);
-    expect(mocks.sql.mock.calls[1].slice(1)).toContain('group');
+    expect(txCalls()[1].values).toContain('group');
     mocks.sql.mockClear();
-    mocks.sql.mockResolvedValueOnce([guidedIn('reflect')]).mockResolvedValueOnce([updateRow('vote')]);
+    mocks.sql.mockResolvedValueOnce([guidedIn('reflect')]);
+    mocks.tx.mockResolvedValueOnce([[], [updateRow('vote')]]);
     expect((await POST(req({ action: 'move', from: 'reflect', to: 'vote' }), ctx)).status).toBe(200);
-    expect(mocks.sql.mock.calls[1].slice(1)).toContain('vote');
+    expect(txCalls()[1].values).toContain('vote');
   });
 
   it('409 when `from` is not the current phase, nothing written or published', async () => {
@@ -119,11 +151,13 @@ describe('POST /phase move', () => {
   });
 
   it('409 when the UPDATE matches no row (lost the race after the load)', async () => {
-    mocks.sql.mockResolvedValueOnce([guidedIn('reflect')]).mockResolvedValueOnce([]);
+    mocks.sql.mockResolvedValueOnce([guidedIn('reflect')]);
+    mocks.tx.mockResolvedValueOnce([[], []]);
     const res = await POST(req({ action: 'move', from: 'reflect', to: 'next' }), ctx);
     expect(res.status).toBe(409);
     expect((await res.json()).error).toBe('The phase already changed');
-    expect(mocks.sql).toHaveBeenCalledTimes(2);
+    expect(mocks.sql).toHaveBeenCalledTimes(1);
+    expect(mocks.tx).toHaveBeenCalledTimes(1);
     expect(mocks.publish).not.toHaveBeenCalled();
   });
 

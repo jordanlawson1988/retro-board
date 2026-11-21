@@ -28,7 +28,9 @@ import { RetroCard } from './RetroCard';
 import { ColumnSortMenu } from './ColumnSortMenu';
 import { sortCards, effectiveCardSort } from '@/utils/sortCards';
 import { isMine } from '@/utils/isMine';
+import { leadCardVotes, voteSortKey, voteTotalsByCard, votesUsedBy } from '@/lib/votes';
 import { useCardText } from '@/hooks/useCardText';
+import { useTeamVotesLeft } from '@/hooks/useTeamVotesLeft';
 import type { Column, Card, Vote, ActionItem, CardReactions, Participant, CardSort, BoardSettings } from '@/types';
 
 interface MobileBoardShellProps {
@@ -119,9 +121,13 @@ export function MobileBoardShell({
     () => sortedColumns[0]?.id ?? ''
   );
   const { guided, phase } = usePhaseGates();
+  const teamLeft = useTeamVotesLeft();
   const stepperShown = guided && !!phase;
   const [moreOpen, setMoreOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
+  // A stable function: the sheet re-registers its Escape and Back handling whenever this changes,
+  // and a re-render while the sheet is open (a saved setting, a joiner) would then close it.
+  const closeMore = useCallback(() => setMoreOpen(false), []);
 
   // Keep activeColumnId valid when columns change (e.g., real-time add/delete)
   const safeActiveColumnId = useMemo(() => {
@@ -134,15 +140,12 @@ export function MobileBoardShell({
     [sortedColumns, safeActiveColumnId]
   );
 
-  const voteCountByCard = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const v of votes) map.set(v.card_id, (map.get(v.card_id) || 0) + 1);
-    return map;
-  }, [votes]);
+  const voteCountByCard = useMemo(() => voteTotalsByCard(votes), [votes]);
 
-  const voteCountFor = useCallback(
-    (id: string) => voteCountByCard.get(id) || 0,
-    [voteCountByCard]
+  // Sorted by the number each card shows: a guided lead's group score, an open card's own total.
+  const voteCountFor = useMemo(
+    () => voteSortKey(guided, cards, voteCountByCard),
+    [guided, cards, voteCountByCard]
   );
 
   // Root cards for the active column (no merged-children in top-level list).
@@ -161,9 +164,7 @@ export function MobileBoardShell({
 
   // Votes used by the current participant (derived from store votes array)
   const votesUsed = useMemo(
-    () => (currentParticipantId
-      ? votes.filter((v) => v.voter_id === currentParticipantId).length
-      : 0),
+    () => votesUsedBy(votes, currentParticipantId),
     [votes, currentParticipantId]
   );
 
@@ -189,7 +190,7 @@ export function MobileBoardShell({
 
       {/* Vote tracker row — only shown when voting is enabled and user has joined */}
       {votingEnabled && !!currentParticipantId && (
-        <MobileVoteTracker used={votesUsed} total={maxVotesPerParticipant} />
+        <MobileVoteTracker used={votesUsed} total={maxVotesPerParticipant} teamLeft={teamLeft} />
       )}
 
       {/* Column tab strip */}
@@ -247,7 +248,7 @@ export function MobileBoardShell({
                 authorName={card.author_name}
                 authorId={card.author_id}
                 color={card.color}
-                voteCount={cardVotes.length}
+                voteCount={leadCardVotes(guided, card.id, cards, voteCountByCard)}
                 votes={votes}
                 hasVoted={hasVoted}
                 isAuthor={isMine(card, currentParticipantId)}
@@ -316,7 +317,7 @@ export function MobileBoardShell({
       {/* More sheet */}
       <MobileMoreSheet
         open={moreOpen}
-        onClose={() => setMoreOpen(false)}
+        onClose={closeMore}
         boardTitle={boardTitle}
         joinCode={joinCode}
         participants={participants}

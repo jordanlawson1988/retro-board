@@ -15,6 +15,7 @@ import { ColumnSortMenu } from './ColumnSortMenu';
 import { IconButton } from '@/components/common/IconButton';
 import { sortCards, effectiveCardSort } from '@/utils/sortCards';
 import { voteTotalsRevealed } from '@/lib/votePillPolicy';
+import { voteTotalsByCard, votesUsedBy } from '@/lib/votes';
 import type { Column, Card, Vote, Participant } from '@/types';
 
 interface BoardColumnProps {
@@ -238,13 +239,7 @@ export function BoardColumn({
   );
 
   // Vote counts per card
-  const voteCountByCard = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const v of votes) {
-      map.set(v.card_id, (map.get(v.card_id) || 0) + 1);
-    }
-    return map;
-  }, [votes]);
+  const voteCountByCard = useMemo(() => voteTotalsByCard(votes), [votes]);
 
   // While vote sorting is suppressed (secret voting pending), nothing may
   // reorder on incoming votes — children included.
@@ -289,14 +284,13 @@ export function BoardColumn({
   const cardIds = useMemo(() => sortedCards.map((c) => c.id), [sortedCards]);
 
   const columnVoteCount = useMemo(
-    () => votes.filter((v) => cards.some((c) => c.id === v.card_id)).length,
-    [votes, cards]
+    () => cards.reduce((sum, c) => sum + (voteCountByCard.get(c.id) ?? 0), 0),
+    [voteCountByCard, cards]
   );
 
   const voteLimitReached = useMemo(() => {
     if (!currentParticipantId) return false;
-    const myVoteCount = votes.filter((v) => v.voter_id === currentParticipantId).length;
-    return myVoteCount >= maxVotesPerParticipant;
+    return votesUsedBy(votes, currentParticipantId) >= maxVotesPerParticipant;
   }, [votes, currentParticipantId, maxVotesPerParticipant]);
 
   const canMerge = !isCompleted && !boardLocked;
@@ -528,7 +522,7 @@ export function BoardColumn({
                       authorName={card.author_name}
                       authorId={card.author_id}
                       color={card.color}
-                      voteCount={cardVotes.length + childVotes}
+                      voteCount={(voteCountByCard.get(card.id) ?? 0) + childVotes}
                       hasVoted={hasVoted}
                       isAuthor={isMine(card, currentParticipantId)}
                       isObscured={isObscured}
@@ -606,6 +600,7 @@ export function BoardColumn({
                               isCompleted={isCompleted}
                               canMerge={false}
                               participants={participants}
+                              isChildCard
                             />
                           </div>
                         </div>

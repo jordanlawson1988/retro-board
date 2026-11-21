@@ -281,3 +281,49 @@ export async function setFlagDirect(key: string, enabled: boolean): Promise<void
   const rows = await db`UPDATE feature_flags SET is_enabled = ${enabled} WHERE key = ${key} RETURNING key`;
   if (rows.length !== 1) throw new Error(`setFlagDirect expected to update exactly one flag, updated ${rows.length}`);
 }
+
+// ---- guided group and vote helpers -----------------------------------------
+
+/** Add or remove one vote on a guided board. Returns the raw response so callers can inspect status. */
+export function apiVote(request: APIRequestContext, boardId: string, cardId: string, action: 'add' | 'remove') {
+  return request.post(`/api/boards/${boardId}/votes`, { data: { cardId, action } });
+}
+
+/** POST to the groups route (set-title, reset). Returns the raw response. */
+export function apiGroups(request: APIRequestContext, boardId: string, body: Record<string, unknown>) {
+  return request.post(`/api/boards/${boardId}/groups`, { data: body });
+}
+
+/** Group `childId` under `parentId`, or ungroup it with null (the existing card PATCH). Returns the raw response. */
+export function apiCombine(request: APIRequestContext, boardId: string, childId: string, parentId: string | null) {
+  return request.patch(`/api/boards/${boardId}/cards`, {
+    data: { cardId: childId, updates: { merged_with: parentId } },
+  });
+}
+
+/**
+ * Matches `"key":N` for a number value whether or not the JSON is nested inside an escaped string
+ * (Ably frames), like hasJsonField does for strings. The value must end there: 2 matches `"count":2`
+ * and `"count":2}` but not `"count":20`, `"count":12` or `"count":2.5`. The key must start at a quote,
+ * so `count` does not match `"vote_count":2`.
+ * Self-check: hasJsonNumber('{"count":2}', 'count', 2) is true; ('{"count":20}', 'count', 2) and
+ * ('{"count":12}', 'count', 2) are false; ('{\\"count\\":2,', 'count', 2) is true.
+ */
+export function hasJsonNumber(haystack: string, key: string, n: number): boolean {
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`\\\\*"${esc(key)}\\\\*"\\s*:\\s*${esc(String(n))}(?![0-9.])`).test(haystack);
+}
+
+/** Every vote row of ONE board, straight from the dev database. Read-only (a SELECT), same dev-only guard. */
+export async function voteRowsDirect(
+  boardId: string
+): Promise<{ voter_id: string; card_id: string; count: number }[]> {
+  const url = process.env.DATABASE_URL ?? '';
+  if (process.env.NEON_BRANCH !== 'dev') throw new Error('voteRowsDirect refuses to run unless NEON_BRANCH=dev');
+  if (url.includes('ep-delicate-star')) throw new Error('voteRowsDirect refuses to run against the production host');
+  const db = neon(url);
+  const rows = await db`
+    SELECT voter_id, card_id, count::int AS count FROM votes
+    WHERE board_id = ${boardId} ORDER BY voter_id, card_id`;
+  return rows.map((r) => ({ voter_id: r.voter_id as string, card_id: r.card_id as string, count: Number(r.count) }));
+}

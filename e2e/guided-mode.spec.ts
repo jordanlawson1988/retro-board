@@ -9,6 +9,7 @@ import {
   hasJsonField,
   hiddenCards,
   joinAs,
+  patchSettings,
   setFlagDirect,
   shown,
   waitForRealtime,
@@ -59,6 +60,7 @@ test('a guided retro runs Reflect to Done with the server enforcing each phase',
   let capA!: ReturnType<typeof capture>;
   let capB!: ReturnType<typeof capture>;
   const pageA = await joinAs(ctxA, boardId, `Alice-${rand()}`, { beforeGoto: (p) => { capA = capture(p); } });
+  expect((await patchSettings(ctxA.request, boardId, { max_votes_per_card: 1 })).status()).toBe(200);
   const first = await getBoard(ctxA.request, boardId);
   expect(first.board).toMatchObject({ mode: 'guided', phase: 'reflect' });
   const pageB = await joinAs(ctxB, boardId, bobName, { beforeGoto: (p) => { capB = capture(p); } });

@@ -19,10 +19,11 @@ import { Link2, Check } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { AppShell } from '@/components/Layout';
 import { Button, Modal } from '@/components/common';
-import { BoardColumn, FacilitatorToolbar, VoteStatus, ViewToggle, SwimlaneView, ListView, TimelineView, ParticipantPopover, ConnectionStatusBanner, AddColumnButton } from '@/components/Board';
+import { BoardColumn, FacilitatorToolbar, VoteStatus, TeamVotesLeft, VoteLimits, ResetGrouping, ViewToggle, SwimlaneView, ListView, TimelineView, ParticipantPopover, ConnectionStatusBanner, AddColumnButton } from '@/components/Board';
 import { MobileBoardShell } from '@/components/Board/MobileBoardShell';
 import type { BoardView } from '@/types';
 import { useBoardStore } from '@/stores/boardStore';
+import { useGroupVoteStore } from '@/stores/groupVoteStore';
 import { useFeatureFlagStore } from '@/stores/featureFlagStore';
 import { useTimer } from '@/hooks/useTimer';
 import { useStoredTimer } from '@/hooks/useStoredTimer';
@@ -34,6 +35,7 @@ import { ActionItemsPanel } from '@/components/ActionItems';
 import { exportMarkdown, exportCsv } from '@/utils/export';
 import { useCardText } from '@/hooks/useCardText';
 import { GUIDED_MODE } from '@/lib/constants/phases';
+import { votesUsedBy } from '@/lib/votes';
 
 /** A drag distance no pointer reaches: used to switch dragging off. */
 const DRAG_NEVER_PX = 100_000;
@@ -81,6 +83,15 @@ export function BoardPage({ boardId }: { boardId: string }) {
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
 
   const { guided, addLocked, moveLocked } = usePhaseGates();
+  // A guided board sends add or remove; the store's rejection is already shown by the connection banner.
+  const toggleGuidedVote = useGroupVoteStore((s) => s.toggleGuidedVote);
+  const onToggleVote = useCallback(
+    (cardId: string) => {
+      if (guided) toggleGuidedVote(cardId).catch(() => {});
+      else void toggleVote(cardId);
+    },
+    [guided, toggleGuidedVote, toggleVote]
+  );
 
   // The sensor list keeps its size (dnd-kit requires it); when moving is locked, a drag can never start.
   const sensors = useSensors(
@@ -334,7 +345,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
             onAddCard={handleAddCard}
             onUpdateCard={updateCard}
             onDeleteCard={deleteCard}
-            onToggleVote={toggleVote}
+            onToggleVote={onToggleVote}
             onToggleReaction={toggleReaction}
             onCombineCards={combineCards}
             onUncombineCard={uncombineCard}
@@ -427,10 +438,11 @@ export function BoardPage({ boardId }: { boardId: string }) {
               </button>
               {isJoined && board.settings.voting_enabled && (
                 <VoteStatus
-                  votesUsed={votes.filter((v) => v.voter_id === currentParticipantId).length}
+                  votesUsed={votesUsedBy(votes, currentParticipantId)}
                   maxVotes={board.settings.max_votes_per_participant}
                 />
               )}
+              <TeamVotesLeft />
             </div>
           </div>
           {guided && board.phase && (
@@ -439,6 +451,8 @@ export function BoardPage({ boardId }: { boardId: string }) {
               {isJoined && <ReadyButton />}
               <PhaseTips phase={board.phase} />
               <PhaseDeadline isFacilitator={isAdmin} />
+              {isAdmin && <VoteLimits />}
+              {isAdmin && <ResetGrouping />}
             </div>
           )}
         </div>
@@ -525,7 +539,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
                           onAddCard={handleAddCard}
                           onUpdateCard={updateCard}
                           onDeleteCard={deleteCard}
-                          onToggleVote={toggleVote}
+                          onToggleVote={onToggleVote}
                           onCombineCards={combineCards}
                           onUncombineCard={uncombineCard}
                           onToggleReaction={toggleReaction}
@@ -568,7 +582,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
                 maxVotesPerParticipant={board.settings.max_votes_per_participant}
                 onUpdateCard={updateCard}
                 onDeleteCard={deleteCard}
-                onToggleVote={toggleVote}
+                onToggleVote={onToggleVote}
                 onToggleReaction={toggleReaction}
                 participants={participants}
                 isAdmin={isAdmin}
@@ -588,7 +602,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
                 isCompleted={isCompleted}
                 secretVoting={board.settings.secret_voting}
                 participants={participants}
-                onToggleVote={toggleVote}
+                onToggleVote={onToggleVote}
               />
             )}
 
@@ -604,7 +618,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
                 isCompleted={isCompleted}
                 secretVoting={board.settings.secret_voting}
                 participants={participants}
-                onToggleVote={toggleVote}
+                onToggleVote={onToggleVote}
               />
             )}
           </>

@@ -1,5 +1,6 @@
 import type { Column, Card, Vote, ActionItem } from '@/types';
 import { exportCardText } from './cardText';
+import { voteTotalsByCard } from '@/lib/votes';
 
 interface ExportData {
   boardTitle: string;
@@ -29,6 +30,7 @@ export function exportMarkdown(data: ExportData): void {
   lines.push('');
 
   const sortedColumns = [...columns].sort((a, b) => a.position - b.position);
+  const totals = voteTotalsByCard(votes);
 
   for (const col of sortedColumns) {
     lines.push(`## ${col.title}`);
@@ -43,7 +45,7 @@ export function exportMarkdown(data: ExportData): void {
       lines.push('*No cards*');
     } else {
       for (const card of colCards) {
-        const voteCount = votes.filter((v) => v.card_id === card.id).length;
+        const voteCount = totals.get(card.id) ?? 0;
         const voteSuffix = voteCount > 0 ? ` (${voteCount} vote${voteCount !== 1 ? 's' : ''})` : '';
         lines.push(`- ${exportCardText(card)}${voteSuffix} — *${card.author_name ?? 'Anonymous'}*`);
       }
@@ -77,6 +79,7 @@ export function exportCsv(data: ExportData): void {
   // Cards section
   lines.push('Column,Card,Author,Votes');
   const sortedColumns = [...columns].sort((a, b) => a.position - b.position);
+  const totals = voteTotalsByCard(votes);
 
   for (const col of sortedColumns) {
     const colCards = cards
@@ -84,7 +87,7 @@ export function exportCsv(data: ExportData): void {
       .sort((a, b) => a.position - b.position);
 
     for (const card of colCards) {
-      const voteCount = votes.filter((v) => v.card_id === card.id).length;
+      const voteCount = totals.get(card.id) ?? 0;
       lines.push(`${escape(col.title)},${escape(exportCardText(card))},${escape(card.author_name ?? 'Anonymous')},${voteCount}`);
     }
   }

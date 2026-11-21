@@ -81,6 +81,8 @@ export const ACTION_PHASE_GATE: Record<BoardAction, keyof PhaseProfile | null> =
   'card.edit': 'canEditCards',
   'card.delete': 'canEditCards',
   'card.move': 'canGroup',
+  'group.title': 'canGroup',
+  'group.reset': 'canGroup',
   'card.react': null,
   'vote.toggle': 'canVote',
   'column.write': null,

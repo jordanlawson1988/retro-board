@@ -6,6 +6,7 @@ import {
   CARD_VISIBILITIES,
   TIMER_STATUSES,
   MAX_VOTES_PER_PARTICIPANT_RANGE,
+  MAX_VOTES_PER_CARD_RANGE,
   TIMER_MAX_SECONDS,
   HIGHLIGHTED_ID_MAX,
 } from '@/lib/constants/board-settings';
@@ -118,13 +119,17 @@ function validTimer(v: unknown): boolean {
  * One checker per key of BoardSettings. Typing the table by the interface means a new setting
  * fails to compile until it is listed here; the unit test then proves every default passes.
  */
-const SETTING_CHECKS: { [K in keyof BoardSettings]: (v: unknown) => boolean } = {
+const SETTING_CHECKS: { [K in keyof BoardSettings]-?: (v: unknown) => boolean } = {
   card_visibility: (v) => (CARD_VISIBILITIES as readonly unknown[]).includes(v),
   voting_enabled: isBool,
   max_votes_per_participant: (v) =>
     Number.isInteger(v) &&
     (v as number) >= MAX_VOTES_PER_PARTICIPANT_RANGE.min &&
     (v as number) <= MAX_VOTES_PER_PARTICIPANT_RANGE.max,
+  max_votes_per_card: (v) =>
+    Number.isInteger(v) &&
+    (v as number) >= MAX_VOTES_PER_CARD_RANGE.min &&
+    (v as number) <= MAX_VOTES_PER_CARD_RANGE.max,
   secret_voting: isBool,
   board_locked: isBool,
   card_creation_disabled: isBool,

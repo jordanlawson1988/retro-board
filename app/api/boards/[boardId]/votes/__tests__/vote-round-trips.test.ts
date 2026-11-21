@@ -16,7 +16,10 @@ vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
 vi.mock('@/lib/auth', () => ({ auth: { api: { getSession: vi.fn() } } }));
 vi.mock('@/lib/ably-server', () => ({ ablyServer: {} }));
 vi.mock('@/lib/rate-limit', () => ({ rateLimitOr429: async () => null }));
-vi.mock('@/lib/board-publish', () => ({ publishVote: (...a: unknown[]) => mocks.publish(...a) }));
+vi.mock('@/lib/board-publish', () => ({
+  publishVote: (...a: unknown[]) => mocks.publish(...a),
+  publishVoteTally: vi.fn(),
+}));
 vi.mock('@/lib/auth-helpers', async () => {
   const actual = await vi.importActual<typeof import('@/lib/auth-helpers')>('@/lib/auth-helpers');
   return { ...actual, getSessionOrNull: () => mocks.session() };
@@ -25,6 +28,7 @@ vi.mock('@/lib/participant-session', () => ({ readParticipantId: () => mocks.pid
 
 import { POST } from '@/app/api/boards/[boardId]/votes/route';
 import { NextRequest } from 'next/server';
+import { ctxRow } from './vote-test-helpers';
 
 const ctx = { params: Promise.resolve({ boardId: 'b1' }) };
 const call = (body: unknown) =>
@@ -36,16 +40,6 @@ const call = (body: unknown) =>
     }),
     ctx
   );
-
-function ctxRow(settings: Record<string, unknown> = {}) {
-  return {
-    id: 'b1', title: 'T', trust_version: 2,
-    settings: { voting_enabled: true, max_votes_per_participant: 5, ...settings },
-    archived_at: null, deleted_at: null, owner_id: 'owner', created_by: null,
-    cp_id: 'p1', cp_is_admin: false, cp_display_name: 'Ann', claimed_exists: false,
-    member_role: null, is_member: false, is_system_admin: false, session_live: true, user_participant_id: null,
-  };
-}
 
 // Budget: the board-context query plus ONE transaction (lock + toggle statement) = 2 round trips.
 const expectTwoCalls = () => {
@@ -134,6 +128,46 @@ describe('vote toggle round-trip budget', () => {
     const res = await call({ cardId: 'c1' });
     expect(res.status).toBe(409);
     expect(mocks.sql).toHaveBeenCalledTimes(1);
+    expect(mocks.tx).not.toHaveBeenCalled();
+  });
+});
+
+describe('open path pin', () => {
+  it('the open toggle statements are unchanged by Step 2', async () => {
+    mocks.sql.mockResolvedValueOnce([ctxRow()]);
+    mocks.tx.mockResolvedValueOnce([[], [{ outcome: 'added', ...voteRow }]]);
+    await call({ cardId: 'c1', voteId: '00000000-0000-4000-8000-000000000001' });
+    const texts: string[] = [];
+    mocks.tx.mock.calls[0][0]((s: TemplateStringsArray) => { texts.push(s.join('?')); return {}; });
+    expect(texts).toMatchInlineSnapshot(`
+      [
+        "SELECT pg_advisory_xact_lock(hashtext(?))",
+        "
+              WITH removed AS (
+                DELETE FROM votes
+                WHERE card_id = ? AND voter_id = ? AND board_id = ?
+                RETURNING *
+              ), added AS (
+                INSERT INTO votes (id, card_id, board_id, voter_id)
+                SELECT ?, ?, ?, ?
+                WHERE NOT EXISTS (SELECT 1 FROM removed)
+                  AND (?::int IS NULL
+                       OR (SELECT COUNT(*) FROM votes WHERE board_id = ? AND voter_id = ?) < ?::int
+                       OR NOT EXISTS (SELECT 1 FROM cards WHERE id = ? AND board_id = ?))
+                RETURNING *
+              )
+              SELECT 'removed' AS outcome, r.* FROM removed r
+              UNION ALL
+              SELECT 'added' AS outcome, a.* FROM added a
+            ",
+      ]
+    `);
+  });
+  it('an open board refuses an action field with 409 and runs no transaction', async () => {
+    mocks.sql.mockResolvedValueOnce([ctxRow()]);
+    const res = await call({ cardId: 'c1', action: 'add' });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: 'This board is not in guided mode' });
     expect(mocks.tx).not.toHaveBeenCalled();
   });
 });

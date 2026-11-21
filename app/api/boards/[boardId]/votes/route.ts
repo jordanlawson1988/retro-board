@@ -4,10 +4,10 @@ import { rateLimitOr429 } from '@/lib/rate-limit';
 import { loadBoardActor, guardResponse, requireParticipantOn, BOARD_NOT_FOUND } from '@/lib/board-actor';
 import { publishVote, publishVoteTally } from '@/lib/board-publish';
 import { checkAction } from '@/lib/board-guards';
-import { readJsonObject, isPlainObject } from '@/lib/request-body';
+import { readJsonObject } from '@/lib/request-body';
 import { INVALID_BODY } from '@/lib/board-validation';
 import { isVoteAction } from '@/lib/constants/votes';
-import { GUIDED_MODE, NOT_GUIDED_ERROR } from '@/lib/constants/phases';
+import { GUIDED_MODE, NOT_GUIDED_ERROR, PHASE_CHANGED_ERROR } from '@/lib/constants/phases';
 import { OPEN_MAX_VOTES_PER_CARD } from '@/lib/constants/board-settings';
 import { DEFAULT_BOARD_SETTINGS } from '@/utils/constants';
 import {
@@ -149,31 +149,40 @@ async function guidedVote(
   if (voterId === null) return NextResponse.json({ error: 'Join the board first' }, { status: 401 });
 
   const lockKey = voteLockKey(boardId);
+  // The phase the gate above checked; the statement below must still find the board in it.
+  const phase = loaded.board.phase;
 
   if (action === 'remove') {
     const [, removedRows] = await sqlTransaction((txn) => [
       txn`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`,
       txn`
-        WITH cur AS (
+        WITH ok AS (
+          SELECT 1 FROM boards
+          WHERE id = ${boardId} AND phase = ${phase} AND archived_at IS NULL AND deleted_at IS NULL
+        ), cur AS (
           SELECT id, count FROM votes
           WHERE card_id = ${cardId} AND voter_id = ${voterId} AND board_id = ${boardId}
         ), decremented AS (
           UPDATE votes SET count = votes.count - 1 FROM cur
-          WHERE votes.id = cur.id AND cur.count > 1
+          WHERE votes.id = cur.id AND cur.count > 1 AND EXISTS (SELECT 1 FROM ok)
           RETURNING votes.id
         ), deleted AS (
           DELETE FROM votes USING cur
-          WHERE votes.id = cur.id AND cur.count = 1
+          WHERE votes.id = cur.id AND cur.count = 1 AND EXISTS (SELECT 1 FROM ok)
           RETURNING votes.id
         ), team AS (
           SELECT COALESCE(SUM(count), 0)::int AS used FROM votes WHERE board_id = ${boardId}
         )
-        SELECT cur.id AS vote_id, cur.count AS count_before, team.used AS team_used_before,
+        SELECT EXISTS (SELECT 1 FROM ok) AS board_ok,
+               cur.id AS vote_id, cur.count AS count_before, team.used AS team_used_before,
                floor(extract(epoch from clock_timestamp()) * 1000)::float8 AS tally_at
         FROM team LEFT JOIN cur ON true
       `,
     ]);
     const row = (removedRows as Record<string, unknown>[])[0];
+    if (row && row.board_ok === false) {
+      return NextResponse.json({ error: PHASE_CHANGED_ERROR }, { status: 409 });
+    }
     if (!row || row.vote_id === null) {
       return NextResponse.json({ error: NO_VOTE_TO_REMOVE_ERROR }, { status: 409 });
     }
@@ -202,7 +211,8 @@ async function guidedVote(
       ), lim AS (
         SELECT COALESCE((settings ->> 'max_votes_per_participant')::int, ${DEFAULT_BOARD_SETTINGS.max_votes_per_participant}::int) AS per_person,
                COALESCE((settings ->> 'max_votes_per_card')::int, ${OPEN_MAX_VOTES_PER_CARD}::int) AS per_card
-        FROM boards WHERE id = ${boardId}
+        FROM boards
+        WHERE id = ${boardId} AND phase = ${phase} AND archived_at IS NULL AND deleted_at IS NULL
       ), upserted AS (
         INSERT INTO votes (id, card_id, board_id, voter_id, count)
         SELECT ${newVoteId}, ${cardId}, ${boardId}, ${voterId}, 1 FROM card, mine, lim
@@ -210,14 +220,18 @@ async function guidedVote(
         ON CONFLICT (card_id, voter_id) DO UPDATE SET count = votes.count + 1
         RETURNING *
       )
-      SELECT (SELECT COUNT(*) FROM card)::int AS card_found, (SELECT merged_with FROM card) AS card_parent,
+      SELECT EXISTS (SELECT 1 FROM lim) AS board_ok,
+             (SELECT COUNT(*) FROM card)::int AS card_found, (SELECT merged_with FROM card) AS card_parent,
              mine.spent, mine.on_card, lim.per_person, lim.per_card, team.used AS team_used_before,
              floor(extract(epoch from clock_timestamp()) * 1000)::float8 AS tally_at,
              u.id, u.card_id, u.board_id, u.voter_id, u.count, u.created_at
-      FROM mine CROSS JOIN team CROSS JOIN lim LEFT JOIN upserted u ON true
+      FROM mine CROSS JOIN team LEFT JOIN lim ON true LEFT JOIN upserted u ON true
     `,
   ]);
   const row = (addedRows as Record<string, unknown>[])[0];
+  if (row && row.board_ok === false) {
+    return NextResponse.json({ error: PHASE_CHANGED_ERROR }, { status: 409 });
+  }
   if (!row || Number(row.card_found) === 0) {
     return NextResponse.json({ error: 'Card not found' }, { status: 404 });
   }

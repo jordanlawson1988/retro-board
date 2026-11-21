@@ -34,6 +34,7 @@ import { ctxRow } from './vote-test-helpers';
 import { DEFAULT_BOARD_SETTINGS } from '@/utils/constants';
 import { OPEN_MAX_VOTES_PER_CARD } from '@/lib/constants/board-settings';
 import { votesPerCardError } from '@/lib/votes';
+import { PHASE_CHANGED_ERROR } from '@/lib/constants/phases';
 
 const ctx = { params: Promise.resolve({ boardId: 'b1' }) };
 const call = (body: unknown) =>
@@ -64,7 +65,7 @@ const txTexts = () => {
 };
 const saved = { id: 'v1', card_id: 'c1', board_id: 'b1', voter_id: 'p1', count: 2, created_at: '2026-11-20T00:00:00Z' };
 const addRow = (o: Record<string, unknown> = {}) =>
-  ({ card_found: 1, card_parent: null, spent: 1, on_card: 1, per_person: 5, per_card: 3, team_used_before: 4, tally_at: 1_700_000_000_000, ...saved, ...o });
+  ({ board_ok: true, card_found: 1, card_parent: null, spent: 1, on_card: 1, per_person: 5, per_card: 3, team_used_before: 4, tally_at: 1_700_000_000_000, ...saved, ...o });
 const NO_VOTE = { id: null, card_id: null, board_id: null, voter_id: null, count: null, created_at: null };
 
 describe('guided add', () => {
@@ -82,11 +83,24 @@ describe('guided add', () => {
     expect(stmt.text).toContain('SUM(count)');
     expect(stmt.text).toContain("settings ->> 'max_votes_per_participant'");
     expect(stmt.text).toContain("settings ->> 'max_votes_per_card'");
-    expect(stmt.text).toContain('FROM boards WHERE id = ?');
+    expect(stmt.text).toContain('FROM boards\n        WHERE id = ? AND phase = ? AND archived_at IS NULL AND deleted_at IS NULL');
     expect(stmt.text).toContain('mine.spent < lim.per_person AND mine.on_card < lim.per_card');
+    expect(stmt.text).toContain('phase = ? AND archived_at IS NULL AND deleted_at IS NULL');
+    expect(stmt.text).toContain('FROM mine CROSS JOIN team LEFT JOIN lim ON true LEFT JOIN upserted u ON true');
+    expect(stmt.text).toContain('AS board_ok');
+    expect(stmt.values).toContain('vote');
     expect(stmt.values).toEqual(expect.arrayContaining([DEFAULT_BOARD_SETTINGS.max_votes_per_participant, OPEN_MAX_VOTES_PER_CARD]));
     expect(mocks.publish).not.toHaveBeenCalled();
     expect(mocks.tally).toHaveBeenCalledWith('b1', { used: 5, at: 1_700_000_000_000 });
+  });
+  it('409 when the phase moved on after the load: nothing published, checked before the card and limits', async () => {
+    mocks.sql.mockResolvedValueOnce([guidedRow()]);
+    mocks.tx.mockResolvedValueOnce([[], [addRow({ ...NO_VOTE, board_ok: false, card_found: 0, spent: 5, on_card: 3 })]]);
+    const res = await call({ cardId: 'c1', action: 'add' });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: PHASE_CHANGED_ERROR });
+    expect(mocks.tally).not.toHaveBeenCalled();
+    expect(mocks.publish).not.toHaveBeenCalled();
   });
   it('422 at the per-card limit, with the limit', async () => {
     mocks.sql.mockResolvedValueOnce([guidedRow()]);
@@ -153,7 +167,7 @@ describe('guided add', () => {
 });
 
 describe('guided remove', () => {
-  const removeRow = (o: Record<string, unknown> = {}) => ({ vote_id: 'v1', count_before: 2, team_used_before: 5, tally_at: 1_700_000_000_001, ...o });
+  const removeRow = (o: Record<string, unknown> = {}) => ({ board_ok: true, vote_id: 'v1', count_before: 2, team_used_before: 5, tally_at: 1_700_000_000_001, ...o });
   it('decrements and returns the new count and tally', async () => {
     mocks.sql.mockResolvedValueOnce([guidedRow()]);
     mocks.tx.mockResolvedValueOnce([[], [removeRow()]]);
@@ -162,6 +176,9 @@ describe('guided remove', () => {
     const [lock, stmt] = txTexts();
     expect(lock.values).toEqual(['b1:votes']);
     expect(stmt.text).toContain('decremented');
+    expect(stmt.text).toContain('phase = ? AND archived_at IS NULL AND deleted_at IS NULL');
+    expect(stmt.text).toContain('AS board_ok');
+    expect(stmt.values).toContain('vote');
     expect(mocks.tally).toHaveBeenCalledWith('b1', { used: 4, at: 1_700_000_000_001 });
     expect(mocks.publish).not.toHaveBeenCalled();
     expect(mocks.sql).toHaveBeenCalledTimes(1);
@@ -171,6 +188,15 @@ describe('guided remove', () => {
     mocks.sql.mockResolvedValueOnce([guidedRow()]);
     mocks.tx.mockResolvedValueOnce([[], [removeRow({ count_before: 1 })]]);
     expect((await (await call({ cardId: 'c1', action: 'remove' })).json()).count).toBe(0);
+  });
+  it('409 when the phase moved on after the load: nothing published', async () => {
+    mocks.sql.mockResolvedValueOnce([guidedRow()]);
+    mocks.tx.mockResolvedValueOnce([[], [removeRow({ board_ok: false })]]);
+    const res = await call({ cardId: 'c1', action: 'remove' });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: PHASE_CHANGED_ERROR });
+    expect(mocks.tally).not.toHaveBeenCalled();
+    expect(mocks.publish).not.toHaveBeenCalled();
   });
   it('409 when there is nothing to remove, nothing published', async () => {
     mocks.sql.mockResolvedValueOnce([guidedRow()]);

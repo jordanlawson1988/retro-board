@@ -1,4 +1,4 @@
-import { sql } from '@/lib/db';
+import { sql, sqlTransaction } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { rateLimitOr429 } from '@/lib/rate-limit';
 import { loadBoardActor, guardResponse, BOARD_NOT_FOUND } from '@/lib/board-actor';
@@ -22,6 +22,7 @@ import {
   type PhaseChangedPayload,
   type PhaseTarget,
 } from '@/lib/phases';
+import { voteLockKey } from '@/lib/votes';
 import type { BoardSettings } from '@/types';
 
 function isPhaseTarget(v: unknown): v is PhaseTarget {
@@ -70,15 +71,20 @@ export async function POST(
     if (from !== loaded.board.phase) return fail(PHASE_CHANGED_ERROR, 409);
     const move = resolvePhaseMove(from as PhaseId, to as PhaseTarget);
     if (!move.ok) return fail(move.error, 409);
-    // Conditional on the phase the request named, so two facilitators cannot both win.
-    [row] = await sql`
+    // Conditional on the phase the request named, so two facilitators cannot both win. Runs under
+    // the per-board vote lock, so a guided vote in flight commits before the phase moves.
+    const [, moved] = await sqlTransaction((txn) => [
+      txn`SELECT pg_advisory_xact_lock(hashtext(${voteLockKey(boardId)}))`,
+      txn`
       UPDATE boards SET phase = ${move.phase},
         settings = settings || ${JSON.stringify(phaseSettings(move.phase))}::jsonb,
         phase_config = phase_config || '{"deadline":null}'::jsonb
       WHERE id = ${boardId} AND mode = 'guided' AND phase = ${from}
         AND archived_at IS NULL AND deleted_at IS NULL
       RETURNING phase, settings, phase_config
-    `;
+    `,
+    ]);
+    [row] = moved as Record<string, unknown>[];
   } else {
     [row] = await sql`
       UPDATE boards SET phase_config = phase_config || ${JSON.stringify({ deadline })}::jsonb

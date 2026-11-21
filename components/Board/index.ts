@@ -15,3 +15,4 @@ export { BoardHistorySidebar } from './BoardHistorySidebar';
 export { AddColumnButton } from './AddColumnButton';
 export { TeamVotesLeft } from './TeamVotesLeft';
 export { VoteLimits } from './VoteLimits';
+export { ResetGrouping } from './ResetGrouping';

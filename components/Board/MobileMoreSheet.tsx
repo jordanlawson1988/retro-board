@@ -6,6 +6,7 @@ import { MobileSheet } from '@/components/common/Sheet';
 import { FacilitatorToolbar } from './FacilitatorToolbar';
 import { ParticipantList } from './ParticipantList';
 import { VoteLimits } from './VoteLimits';
+import { ResetGrouping } from './ResetGrouping';
 import { usePhaseGates } from '@/hooks/usePhaseGates';
 import type { BoardSettings, Participant } from '@/types';
 
@@ -134,6 +135,7 @@ export function MobileMoreSheet({
               }}
             />
             <VoteLimits layout="stacked" />
+            <ResetGrouping layout="stacked" />
             <button
               type="button"
               onClick={() => {

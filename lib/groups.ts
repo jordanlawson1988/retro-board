@@ -1,4 +1,5 @@
-import { GROUP_TITLE_MAX } from '@/lib/constants/groups';
+import { GROUP_TITLE_COUNTER_FROM, GROUP_TITLE_MAX } from '@/lib/constants/groups';
+import type { PhaseId } from '@/lib/constants/phases';
 import type { Card } from '@/types';
 
 type Parented = Pick<Card, 'id' | 'merged_with'>;
@@ -70,3 +71,24 @@ export function groupResetOutcome(row: { board_ok: boolean; cleared: number }): 
 
 export const SET_TITLE_FALLBACK = 'Failed to save the group title';
 export const RESET_GROUPING_FALLBACK = 'Failed to reset grouping';
+
+/** Length in code points, counted the way `validateGroupTitle` and the SQL CHECK count it. */
+export function groupTitleLength(v: string): number {
+  return [...v].length;
+}
+
+/** The first GROUP_TITLE_MAX code points; an emoji is never split. */
+export function clampGroupTitle(v: string): string {
+  const points = [...v];
+  return points.length <= GROUP_TITLE_MAX ? v : points.slice(0, GROUP_TITLE_MAX).join('');
+}
+
+/** The counter appears only on long titles. */
+export function showTitleCounter(v: string): boolean {
+  return groupTitleLength(v) > GROUP_TITLE_COUNTER_FROM;
+}
+
+/** An open title editor belongs to the phase it was opened in and to a moment when editing is allowed. */
+export function editorStillOpen(openedIn: PhaseId, current: PhaseId | null, editingAllowed: boolean): boolean {
+  return editingAllowed && openedIn === current;
+}

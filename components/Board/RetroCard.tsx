@@ -6,6 +6,7 @@ import { cn } from '@/utils/cn';
 import { CardColorPicker } from './CardColorPicker';
 import { VotePill } from './VotePill';
 import { GuidedVoteControl } from './GuidedVoteControl';
+import { GroupTitle } from './GroupTitle';
 import { IconButton } from '@/components/common/IconButton';
 import { Pill } from '@/components/common/Pill';
 import { usePhaseGates } from '@/hooks/usePhaseGates';
@@ -89,7 +90,7 @@ export function RetroCard({
   participants = [],
   isChildCard = false,
 }: RetroCardProps) {
-  const { editLocked } = usePhaseGates();
+  const { editLocked, guided } = usePhaseGates();
   // One string, and 'pill' straight away on an open board (it reads only `board`, never cards, votes or participants).
   const surface = useBoardStore((s) =>
     s.board?.mode === GUIDED_MODE
@@ -167,6 +168,8 @@ export function RetroCard({
           filter: textHidden || (isObscured && !isAuthor) ? 'blur(6px)' : 'blur(0px)',
         }}
       >
+        {/* Mounted on guided boards only, from a primitive this component already subscribes to. */}
+        {guided && <GroupTitle cardId={id} />}
         {isEditing ? (
           <div className="flex flex-col gap-2">
             <textarea

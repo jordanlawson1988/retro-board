@@ -19,7 +19,7 @@ import { Link2, Check } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { AppShell } from '@/components/Layout';
 import { Button, Modal } from '@/components/common';
-import { BoardColumn, FacilitatorToolbar, VoteStatus, TeamVotesLeft, VoteLimits, ViewToggle, SwimlaneView, ListView, TimelineView, ParticipantPopover, ConnectionStatusBanner, AddColumnButton } from '@/components/Board';
+import { BoardColumn, FacilitatorToolbar, VoteStatus, TeamVotesLeft, VoteLimits, ResetGrouping, ViewToggle, SwimlaneView, ListView, TimelineView, ParticipantPopover, ConnectionStatusBanner, AddColumnButton } from '@/components/Board';
 import { MobileBoardShell } from '@/components/Board/MobileBoardShell';
 import type { BoardView } from '@/types';
 import { useBoardStore } from '@/stores/boardStore';
@@ -452,6 +452,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
               <PhaseTips phase={board.phase} />
               <PhaseDeadline isFacilitator={isAdmin} />
               {isAdmin && <VoteLimits />}
+              {isAdmin && <ResetGrouping />}
             </div>
           )}
         </div>

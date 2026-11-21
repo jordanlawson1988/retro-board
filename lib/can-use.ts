@@ -1,8 +1,7 @@
 import { sql } from '@/lib/db';
+import type { Feature } from '@/lib/constants/features';
 
-/** Features gated by a row in feature_flags. Declared once; add new keys here. */
-export const FEATURES = ['guided_mode'] as const;
-export type Feature = (typeof FEATURES)[number];
+export { FEATURES, type Feature } from '@/lib/constants/features';
 
 /**
  * Whether a feature is enabled. Reads feature_flags; a missing row means off.

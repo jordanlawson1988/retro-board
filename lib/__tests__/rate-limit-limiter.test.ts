@@ -195,7 +195,8 @@ describe('wiring: each guarded route calls the limiter first (static assertion)'
   const root = join(__dirname, '..', '..');
   const read = (rel: string) => readFileSync(join(root, rel), 'utf8');
 
-  const routes: Array<{ file: string; name: string; limit: number; window: number }> = [
+  // `call` is the argument text when a route spells the call through a shared constant rather than literals.
+  const routes: Array<{ file: string; name: string; limit: number; window: number; call?: string }> = [
     { file: 'app/api/boards/join/route.ts', name: 'join', limit: 30, window: 60 },
     { file: 'app/api/boards/route.ts', name: 'board-create', limit: 10, window: 3600 },
     { file: 'app/api/boards/[boardId]/join/route.ts', name: 'board-join', limit: 120, window: 60 },
@@ -204,18 +205,27 @@ describe('wiring: each guarded route calls the limiter first (static assertion)'
     { file: 'app/api/boards/[boardId]/action-items/route.ts', name: 'action-item', limit: 120, window: 60 },
     { file: 'app/api/boards/[boardId]/phase/route.ts', name: 'phase', limit: 60, window: 60 },
     { file: 'app/api/boards/[boardId]/groups/route.ts', name: 'groups', limit: 120, window: 60 },
+    {
+      file: 'app/api/boards/[boardId]/comments/route.ts', name: 'comment', limit: 300, window: 60,
+      call: 'COMMENT_RATE_LIMIT.key, COMMENT_RATE_LIMIT.limit, COMMENT_RATE_LIMIT.window',
+    },
   ];
 
-  it.each(routes)('$file: POST limits "$name" at $limit / $window s, before any other work', ({ file, name, limit, window }) => {
+  it.each(routes)('$file: POST limits "$name" at $limit / $window s, before any other work', ({ file, name, limit, window, call }) => {
     const src = read(file);
     expect(src).toContain("import { rateLimitOr429 } from '@/lib/rate-limit'");
-    expect(src).toContain(`rateLimitOr429(request, '${name}', ${limit}, ${window})`);
+    expect(src).toContain(`rateLimitOr429(request, ${call ?? `'${name}', ${limit}, ${window}`})`);
     // It is the first statement of the POST handler: nothing (params, body, DB) runs before it.
     const post = src.slice(src.indexOf('export async function POST'));
     const body = post.slice(post.indexOf('{', post.indexOf(')')) );
     const firstStatement = body.slice(body.indexOf('\n') + 1).trimStart();
-    expect(firstStatement.startsWith(`const limited = await rateLimitOr429(request, '${name}'`)).toBe(true);
+    expect(firstStatement.startsWith(`const limited = await rateLimitOr429(request, ${call ? call.split(',')[0] : `'${name}'`}`)).toBe(true);
     expect(post).toMatch(/if \(limited\) return limited;/);
+  });
+
+  it('the comment route\'s shared limit is the one pinned above', async () => {
+    const { COMMENT_RATE_LIMIT } = await import('@/lib/constants/comments');
+    expect(COMMENT_RATE_LIMIT).toEqual({ key: 'comment', limit: 300, window: 60 });
   });
 
   it('every limiter name is unique, so no two routes share a bucket', () => {

@@ -4,14 +4,18 @@ import { rateLimitOr429 } from '@/lib/rate-limit';
 import { loadBoardActor, guardResponse, BOARD_NOT_FOUND } from '@/lib/board-actor';
 import { checkAction } from '@/lib/board-guards';
 import { readJsonObject } from '@/lib/request-body';
-import { INVALID_BODY } from '@/lib/board-validation';
+import { INVALID_BODY, validateClientId } from '@/lib/board-validation';
+import { TOPIC_NOT_FOUND_ERROR } from '@/lib/constants/agenda';
+import { setTopicOutcome } from '@/lib/agenda';
 import { DEFAULT_BOARD_SETTINGS } from '@/utils/constants';
 import {
+  AGENDA_PHASE,
   DEFAULT_PHASE_CONFIG,
   GUIDED_MODE,
   NOT_GUIDED_ERROR,
   PHASE_CHANGED_ERROR,
   isPhaseId,
+  isPhaseRouteAction,
   type PhaseConfig,
   type PhaseId,
 } from '@/lib/constants/phases';
@@ -31,7 +35,7 @@ function isPhaseTarget(v: unknown): v is PhaseTarget {
 
 const fail = (error: string, status: number) => NextResponse.json({ error }, { status });
 
-// Moves a guided board between phases, or sets/clears its deadline. Facilitator only.
+// Moves a guided board between phases, sets/clears its deadline, or sets the Discuss topic. Facilitator only.
 // Two statements in total: the context query (loadBoardActor) and one UPDATE ... RETURNING.
 export async function POST(
   request: Request,
@@ -44,13 +48,17 @@ export async function POST(
   const body = await readJsonObject(request);
   if (!body) return fail(INVALID_BODY, 400);
   const { action } = body;
-  if (action !== 'move' && action !== 'set-deadline') return fail(INVALID_BODY, 400);
+  if (!isPhaseRouteAction(action)) return fail(INVALID_BODY, 400);
 
   // Validate everything before touching the database.
   let from: PhaseId | null = null;
   let to: PhaseTarget | null = null;
   let deadline: string | null = null;
-  if (action === 'move') {
+  let cardId = '';
+  if (action === 'set-topic') {
+    if (!validateClientId(body.cardId).ok) return fail(INVALID_BODY, 400);
+    cardId = body.cardId as string;
+  } else if (action === 'move') {
     if (!isPhaseId(body.from) || !isPhaseTarget(body.to)) return fail('Invalid phase', 400);
     from = body.from;
     to = body.to;
@@ -62,7 +70,7 @@ export async function POST(
 
   const loaded = await loadBoardActor(request, boardId);
   if (!loaded) return BOARD_NOT_FOUND();
-  const denied = guardResponse(checkAction('board.settings', loaded.actor, loaded.state));
+  const denied = guardResponse(checkAction(action === 'set-topic' ? 'topic.set' : 'board.settings', loaded.actor, loaded.state));
   if (denied) return denied;
   if (loaded.board.mode !== GUIDED_MODE) return fail(NOT_GUIDED_ERROR, 409);
 
@@ -78,13 +86,43 @@ export async function POST(
       txn`
       UPDATE boards SET phase = ${move.phase},
         settings = settings || ${JSON.stringify(phaseSettings(move.phase))}::jsonb,
-        phase_config = phase_config || '{"deadline":null}'::jsonb
+        phase_config = phase_config || jsonb_build_object(
+          'deadline', NULL::text,
+          'topic', CASE WHEN ${move.phase}::text = ${AGENDA_PHASE} THEN (
+            SELECT c.id FROM cards c
+            WHERE c.board_id = ${boardId} AND c.merged_with IS NULL
+            ORDER BY (
+              SELECT COALESCE(SUM(v.count), 0) FROM votes v
+              WHERE v.board_id = ${boardId}
+                AND v.card_id IN (SELECT g.id FROM cards g WHERE g.board_id = ${boardId} AND (g.id = c.id OR g.merged_with = c.id))
+            ) DESC, date_trunc('milliseconds', c.created_at) ASC, c.id COLLATE "C" ASC
+            LIMIT 1
+          ) END)
       WHERE id = ${boardId} AND mode = 'guided' AND phase = ${from}
         AND archived_at IS NULL AND deleted_at IS NULL
       RETURNING phase, settings, phase_config
     `,
     ]);
     [row] = moved as Record<string, unknown>[];
+  } else if (action === 'set-topic') {
+    // One statement: the topic must be a root card of this board; the update is conditional on the
+    // phase the guard checked and serialized against a move by the row lock.
+    const [found] = await sql`
+      WITH target AS (
+        SELECT id FROM cards WHERE id = ${cardId} AND board_id = ${boardId} AND merged_with IS NULL
+      ), updated AS (
+        UPDATE boards SET phase_config = phase_config || jsonb_build_object('topic', ${cardId}::text)
+        WHERE id = ${boardId} AND mode = 'guided' AND phase = ${loaded.board.phase}
+          AND archived_at IS NULL AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM target)
+        RETURNING phase, settings, phase_config
+      )
+      SELECT EXISTS (SELECT 1 FROM target) AS topic_ok, u.phase, u.settings, u.phase_config
+      FROM (SELECT 1) one LEFT JOIN updated u ON true
+    `;
+    const outcome = setTopicOutcome(found as { topic_ok: boolean; phase: unknown } | undefined);
+    if (outcome === 'topic-missing') return fail(TOPIC_NOT_FOUND_ERROR, 404);
+    if (outcome === 'phase-changed') return fail(PHASE_CHANGED_ERROR, 409);
+    row = found;
   } else {
     [row] = await sql`
       UPDATE boards SET phase_config = phase_config || ${JSON.stringify({ deadline })}::jsonb

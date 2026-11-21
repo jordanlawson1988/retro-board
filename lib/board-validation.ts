@@ -20,6 +20,12 @@ export const TEXT_MAX = 2000;
 const DISPLAY_NAME_ERROR = `Display name must be 1–${DISPLAY_NAME_MAX} characters`;
 const CARD_TEXT_ERROR = `Card text must be 1–${TEXT_MAX} characters`;
 export const INVALID_BODY = 'Invalid request body';
+export const INVALID_ASSIGNEE = 'Invalid assignee';
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export function isUuid(v: unknown): v is string {
+  return typeof v === 'string' && UUID_PATTERN.test(v);
+}
 
 /** Longest id accepted for boards and for client-generated card/column ids. */
 export const ID_MAX_LENGTH = 64;
@@ -80,7 +86,7 @@ export function validateActionItemUpdates(u: Record<string, unknown>): Validatio
     const d = validateActionItemDescription(u.description);
     if (!d.ok) return d;
   }
-  if (u.assignee !== undefined && !isStringOrNull(u.assignee)) return bad('Invalid assignee');
+  if (u.assignee !== undefined && !isStringOrNull(u.assignee)) return bad(INVALID_ASSIGNEE);
   if (u.due_date !== undefined && !isStringOrNull(u.due_date)) return bad('Invalid due_date');
   if (
     u.status !== undefined &&

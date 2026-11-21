@@ -82,7 +82,8 @@ describe('guided limit PATCH', () => {
     expect(lock.values).toEqual(['b1:votes']);
     expect(lock.text).toContain('pg_advisory_xact_lock');
     expect(stmt.text).toContain('GROUP BY voter_id');
-    expect(stmt.text).toContain('MAX(count)');
+    expect(stmt.text).toContain('GROUP BY v.voter_id, COALESCE(c.merged_with, c.id)');
+    expect(stmt.text).toContain('MAX(per_group)');
   });
 
   it('lowering votes per card below the highest count is 409', async () => {

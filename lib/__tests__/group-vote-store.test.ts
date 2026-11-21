@@ -191,6 +191,78 @@ describe('guided votes', () => {
     expect(useBoardStore.getState().votes).toEqual([vote(1)]);
   });
 
+  it('a lead counts my child votes: add is refused locally at the per-card limit', async () => {
+    useBoardStore.setState({ cards: [cardFixture('c1'), { ...cardFixture('c2'), merged_with: 'c1' }],
+      votes: [vote(1), { ...vote(2, 'v2'), card_id: 'c2' }] });
+    routes({});
+    await useGroupVoteStore.getState().addVote('c1');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('remove on a lead with no row of its own takes the child row at once and ends with one coalesced GET', async () => {
+    useBoardStore.setState({ cards: [cardFixture('c1'), { ...cardFixture('c2'), merged_with: 'c1' }],
+      votes: [{ ...vote(2, 'v2'), card_id: 'c2' }] });
+    routes({
+      'POST /api/boards/b1/votes': () => json(200, { action: 'removed', voteId: 'v2', cardId: 'c2', count: 1, tally: { used: 1, at: 40 } }),
+      'GET /api/boards/b1': getBoardResponse(board(), { votes: [{ ...vote(1, 'v2'), card_id: 'c2' }] }),
+    });
+    const p = useGroupVoteStore.getState().removeVote('c1');
+    expect(useBoardStore.getState().votes).toEqual([expect.objectContaining({ card_id: 'c2', count: 1 })]);
+    await p;
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ cardId: 'c1', action: 'remove' });
+    expect(calls().filter((c) => c === 'GET /api/boards/b1')).toHaveLength(1);
+  });
+
+  it('a remove applied to a child row that the server answers from the lead row ends with one GET that the store matches', async () => {
+    const childRow = { ...vote(1, 'v2'), card_id: 'c2' };
+    const leadRow = { ...vote(1, 'v3'), card_id: 'c1' };
+    useBoardStore.setState({ cards: [cardFixture('c1'), { ...cardFixture('c2'), merged_with: 'c1' }], votes: [childRow] });
+    const removeAnswer = deferred<Response>(); const addAnswer = deferred<Response>();
+    const posts = [removeAnswer, addAnswer];
+    fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if ((init?.method ?? 'GET') === 'POST') return posts.shift()!.promise;
+      return json(200, baseGet(board(), { votes: [childRow] })); // the server's truth: the lead row went, the child row stayed
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const removing = useGroupVoteStore.getState().removeVote('c1'); // takes the child row on screen
+    expect(useBoardStore.getState().votes).toEqual([]);
+    const adding = useGroupVoteStore.getState().addVote('c1'); // a lead row, in flight beside it
+    expect(useBoardStore.getState().votes).toEqual([expect.objectContaining({ card_id: 'c1', count: 1 })]);
+    addAnswer.resolve(json(200, { action: 'added', vote: leadRow, tally: { used: 2, at: 50 } }));
+    await adding;
+    // The server took the lead row (the add had committed first), not the child row the click showed.
+    removeAnswer.resolve(json(200, { action: 'removed', voteId: 'v3', cardId: 'c1', count: 0, tally: { used: 1, at: 51 } }));
+    await removing;
+    expect(calls().filter((c) => c === 'GET /api/boards/b1')).toHaveLength(1);
+    expect(useBoardStore.getState().votes).toEqual([childRow]);
+  });
+
+  it('a failed remove on a child row puts the vote back on that row, not on the lead', async () => {
+    const childRow = { ...vote(2, 'v2'), card_id: 'c2' };
+    useBoardStore.setState({ cards: [cardFixture('c1'), { ...cardFixture('c2'), merged_with: 'c1' }], votes: [childRow] });
+    const refetch = deferred<Response>();
+    fetchMock = vi.fn(async (url: string, init?: RequestInit) =>
+      (init?.method ?? 'GET') === 'POST' ? json(422, { error: 'Nope' }) : refetch.promise);
+    vi.stubGlobal('fetch', fetchMock);
+    const p = useGroupVoteStore.getState().removeVote('c1');
+    p.catch(() => {});
+    expect(useBoardStore.getState().votes).toEqual([expect.objectContaining({ card_id: 'c2', count: 1 })]);
+    await vi.waitFor(() => expect(calls()).toContain('GET /api/boards/b1')); // the reversal has happened by now
+    expect(useBoardStore.getState().votes).toEqual([childRow]);
+    refetch.resolve(json(200, baseGet(board(), { votes: [childRow] })));
+    await expect(p).rejects.toThrow('Nope');
+    expect(useBoardStore.getState().votes).toEqual([childRow]);
+  });
+
+  it('toggleGuidedVote on a lead whose only vote is on a child sends remove', async () => {
+    useBoardStore.setState({ cards: [cardFixture('c1'), { ...cardFixture('c2'), merged_with: 'c1' }],
+      votes: [{ ...vote(1, 'v2'), card_id: 'c2' }] });
+    routes({ 'POST /api/boards/b1/votes': () => json(200, { action: 'removed', voteId: 'v2', cardId: 'c2', count: 0, tally: { used: 0, at: 41 } }),
+      'GET /api/boards/b1': getBoardResponse(board(), { votes: [] }) });
+    await useGroupVoteStore.getState().toggleGuidedVote('c1');
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ action: 'remove' });
+  });
+
   it('removeVote with no vote on the card sends nothing', async () => {
     routes({});
     await useGroupVoteStore.getState().removeVote('c1');

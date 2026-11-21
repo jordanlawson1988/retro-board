@@ -1,11 +1,12 @@
 import { create } from 'zustand';
 import { useBoardStore, failWrite, refetchBoardCoalesced } from '@/stores/boardStore';
+import { failAction, noAnswer } from '@/stores/failAction';
 import { NETWORK_ERROR } from '@/stores/phaseStore';
 import { GUIDED_MODE } from '@/lib/constants/phases';
 import { validateGroupTitle, ungroupAll, SET_TITLE_FALLBACK, RESET_GROUPING_FALLBACK } from '@/lib/groups';
 import {
-  ADD_VOTE_FALLBACK, REMOVE_VOTE_FALLBACK, EMPTY_VOTE_SLOT, applyVoteDelta, applyVoteTally, errorMessageOf, finishVoteClick,
-  maxVotesPerCard, myVotesOn, settleOwnVote, startVoteClick, voteControlState, voteResult, votesUsedBy,
+  ADD_VOTE_FALLBACK, REMOVE_VOTE_FALLBACK, EMPTY_VOTE_SLOT, applyVoteDelta, applyVoteTally, finishVoteClick,
+  groupRemoveTarget, maxVotesPerCard, myGroupVotesOn, settleOwnVote, startVoteClick, voteControlState, voteResult, votesUsedBy,
   type VoteSlot,
 } from '@/lib/votes';
 import { bumpTallyVersion } from '@/lib/voteTallyVersion';
@@ -33,43 +34,26 @@ function guidedBoard(): Board | null {
 
 const onBoard = (boardId: string) => useBoardStore.getState().board?.id === boardId;
 
-/**
- * The error a failed write rejects with. While the board is still the current one it goes through
- * failWrite (message, banner, 401 handling, phase refetch on 409), and a 5xx or unanswered request,
- * which the server may have saved anyway, also pulls the real state back through the coalesced
- * refetch (`refetch: false` leaves that to the caller). For a board the user has left it applies
- * NOTHING: the error only carries the server's message.
- */
-async function failAction(
-  res: Response | null,
-  fallback: string,
-  boardId: string,
-  opts: { refetch: boolean } = { refetch: true },
-): Promise<Error> {
-  if (!onBoard(boardId)) {
-    const data = res ? await res.json().catch(() => null) : null;
-    return new Error(errorMessageOf(data, fallback));
-  }
-  const err = await failWrite(res ?? noAnswer(), fallback);
-  if (opts.refetch && (!res || res.status >= 500) && onBoard(boardId)) await refetchBoardCoalesced(boardId);
-  return err;
-}
-
-const noAnswer = () => new Response(null, { status: 500 });
-
 async function castVote(cardId: string, action: 'add' | 'remove'): Promise<void> {
-  const { board, currentParticipantId: voterId, votes } = useBoardStore.getState();
+  const { board, currentParticipantId: voterId, votes, cards } = useBoardStore.getState();
   if (!board || board.mode !== GUIDED_MODE || !voterId) return;
   const boardId = board.id;
-  const mine = votes.find((v) => v.card_id === cardId && v.voter_id === voterId);
+  // The card whose row this click changes: the clicked card for an add; for a remove the row the
+  // server will take from (my row on the card, else my earliest child row).
+  const rowCardId = action === 'add' ? cardId : groupRemoveTarget(votes, cards, cardId, voterId);
+  if (rowCardId === null) return;
+  const mine = votes.find((v) => v.card_id === rowCardId && v.voter_id === voterId);
   const voteId = mine?.id ?? crypto.randomUUID();
   const delta = action === 'add' ? 1 : -1;
   const fallback = action === 'add' ? ADD_VOTE_FALLBACK : REMOVE_VOTE_FALLBACK;
   const key = `${boardId}:${cardId}`;
-  const myCount = () => myVotesOn(useBoardStore.getState().votes, cardId, voterId);
+  const myCount = () => {
+    const st = useBoardStore.getState();
+    return myGroupVotesOn(st.votes, st.cards, cardId, voterId);
+  };
 
   useBoardStore.setState((s) => ({
-    votes: applyVoteDelta(s.votes, { boardId, cardId, voterId, voteId, delta, nowIso: new Date().toISOString() }),
+    votes: applyVoteDelta(s.votes, { boardId, cardId: rowCardId, voterId, voteId, delta, nowIso: new Date().toISOString() }),
   }));
   slots.set(key, startVoteClick(slots.get(key) ?? EMPTY_VOTE_SLOT, myCount()));
 
@@ -77,7 +61,7 @@ async function castVote(cardId: string, action: 'add' | 'remove'): Promise<void>
   // burst expects; when the last click of the burst finishes the newest answer settles the row and
   // a burst with a failure pulls the server's truth. Nothing touches a board the user has left.
   // Returns whether the caller must refetch.
-  const finish = (outcome: { kind: 'ok'; at: number; vote: Vote | null } | { kind: 'failed'; refetched: boolean }): boolean => {
+  const finish = (outcome: { kind: 'ok'; at: number; vote: Vote | null; otherRow: boolean } | { kind: 'failed'; refetched: boolean }): boolean => {
     const current = onBoard(boardId);
     const done = finishVoteClick(
       slots.get(key) ?? EMPTY_VOTE_SLOT,
@@ -89,9 +73,9 @@ async function castVote(cardId: string, action: 'add' | 'remove'): Promise<void>
     useBoardStore.setState((s) => {
       let next = s.votes;
       if (done.reverse) {
-        next = applyVoteDelta(next, { boardId, cardId, voterId, voteId, delta: delta === 1 ? -1 : 1, nowIso: new Date().toISOString() });
+        next = applyVoteDelta(next, { boardId, cardId: rowCardId, voterId, voteId, delta: delta === 1 ? -1 : 1, nowIso: new Date().toISOString() });
       }
-      if (done.settle) next = settleOwnVote(next, { cardId, voterId, vote: done.settle.vote });
+      if (done.settle) next = settleOwnVote(next, { cardId: rowCardId, voterId, vote: done.settle.vote });
       return { votes: next };
     });
     return done.refetch;
@@ -118,7 +102,7 @@ async function castVote(cardId: string, action: 'add' | 'remove'): Promise<void>
 
   if (!res.ok) return fail(res, fallback);
 
-  const result = voteResult(await res.json().catch(() => null), useBoardStore.getState().votes.find((v) => v.card_id === cardId && v.voter_id === voterId), {
+  const result = voteResult(await res.json().catch(() => null), useBoardStore.getState().votes.find((v) => v.card_id === rowCardId && v.voter_id === voterId), {
     boardId, cardId, voterId, nowIso: new Date().toISOString(),
   });
   // A 200 in a shape we do not understand leaves the server's state unknown: treat it as a failure.
@@ -128,7 +112,10 @@ async function castVote(cardId: string, action: 'add' | 'remove'): Promise<void>
     bumpTallyVersion();
     useBoardStore.setState((s) => ({ voteTally: applyVoteTally(s.voteTally, result.tally) }));
   }
-  finish({ kind: 'ok', at: result.tally.at, vote: result.vote });
+  // Also true when the server took from a different row than the one changed optimistically (a race).
+  const otherRow = result.cardId !== cardId || result.cardId !== rowCardId;
+  const needsRefetch = finish({ kind: 'ok', at: result.tally.at, vote: result.vote, otherRow });
+  if (needsRefetch && onBoard(boardId)) await refetchBoardCoalesced(boardId);
 }
 
 /** A `vote-tally` event for this board: newer wins, and a GET already in flight must not undo it. */
@@ -145,7 +132,7 @@ export const useGroupVoteStore = create<GroupVoteState>((set, get) => ({
     const { board, currentParticipantId: voterId, votes, cards } = useBoardStore.getState();
     if (!board || board.mode !== GUIDED_MODE || !voterId) return;
     const control = voteControlState({
-      onCard: myVotesOn(votes, cardId, voterId),
+      onCard: myGroupVotesOn(votes, cards, cardId, voterId),
       spent: votesUsedBy(votes, voterId),
       perCard: maxVotesPerCard(board.settings),
       perPerson: board.settings.max_votes_per_participant,
@@ -156,15 +143,15 @@ export const useGroupVoteStore = create<GroupVoteState>((set, get) => ({
   },
 
   removeVote: async (cardId) => {
-    const { board, currentParticipantId: voterId, votes } = useBoardStore.getState();
+    const { board, currentParticipantId: voterId, votes, cards } = useBoardStore.getState();
     if (!board || board.mode !== GUIDED_MODE || !voterId) return;
-    if (myVotesOn(votes, cardId, voterId) <= 0) return;
+    if (groupRemoveTarget(votes, cards, cardId, voterId) === null) return;
     await castVote(cardId, 'remove');
   },
 
   toggleGuidedVote: async (cardId) => {
-    const { currentParticipantId: voterId, votes } = useBoardStore.getState();
-    if (myVotesOn(votes, cardId, voterId) > 0) await get().removeVote(cardId);
+    const { currentParticipantId: voterId, votes, cards } = useBoardStore.getState();
+    if (myGroupVotesOn(votes, cards, cardId, voterId) > 0) await get().removeVote(cardId);
     else await get().addVote(cardId);
   },
 

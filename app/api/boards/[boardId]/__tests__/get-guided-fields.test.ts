@@ -17,6 +17,7 @@ vi.mock('@/lib/participant-session', () => ({ readParticipantId: () => mocks.pid
 
 import { GET } from '@/app/api/boards/[boardId]/route';
 import { NextRequest } from 'next/server';
+import { phaseSettings } from '@/lib/phases';
 
 const ctx = { params: Promise.resolve({ boardId: 'b1' }) };
 const call = () => GET(new NextRequest('http://x/api/boards/b1'), ctx);
@@ -68,6 +69,7 @@ describe('board GET mode and phase', () => {
     expect(Object.keys(json.board).sort()).toEqual(['archived_at', 'id', 'title', 'trust_version']);
     expect(mocks.tx).not.toHaveBeenCalled();
     expect('voteTally' in json).toBe(false);
+    expect('comments' in json).toBe(false);
   });
 });
 
@@ -88,5 +90,66 @@ describe('board GET vote tally', () => {
   it('an open board GET has no voteTally', async () => {
     mocks.sql.mockResolvedValue([ctxRow({ mode: 'open', phase: null })]);
     expect('voteTally' in (await (await call()).json())).toBe(false);
+  });
+});
+
+describe('board GET comments', () => {
+  const anon = {
+    id: 'm1', board_id: 'b1', card_id: 'L', parent_id: null, author_participant_id: 'p2', author_name: 'Bo',
+    is_anonymous: true, body: 'hi', created_at: 'x', edited_at: null, deleted_at: null,
+  };
+
+  it('a guided board in Discuss reads comments in the same snapshot and shapes them for the viewer', async () => {
+    mocks.pid.mockReturnValue('p2');
+    mocks.sql.mockResolvedValue([ctxRow({ mode: 'guided', phase: 'discuss', cp_id: 'p2', settings: phaseSettings('discuss') })]);
+    mocks.tx.mockResolvedValue([[], [], [], [], [], [anon]]);
+    const json = await (await call()).json();
+    expect(json.comments).toEqual([expect.objectContaining({ id: 'm1', author_participant_id: null, author_name: null, is_mine: true })]);
+    const texts: string[] = [];
+    mocks.tx.mock.calls[0][0]((s: TemplateStringsArray) => { texts.push(s.join('?')); return {}; });
+    expect(texts).toHaveLength(6);
+    expect(texts[5]).toBe('SELECT * FROM comments WHERE board_id = ? ORDER BY created_at, id');
+  });
+
+  it('a facilitator and another participant never receive the author of an anonymous comment; only the author is_mine', async () => {
+    mocks.tx.mockResolvedValue([[], [], [], [], [], [anon]]);
+    mocks.sql.mockResolvedValue([ctxRow({ mode: 'guided', phase: 'discuss', cp_id: 'pf', cp_is_admin: true, settings: phaseSettings('discuss') })]);
+    const asFacilitator = await (await call()).json();
+    mocks.sql.mockResolvedValue([ctxRow({ mode: 'guided', phase: 'discuss', cp_id: 'p3', settings: phaseSettings('discuss') })]);
+    const asOther = await (await call()).json();
+    for (const json of [asFacilitator, asOther]) {
+      expect(json.comments).toEqual([
+        expect.objectContaining({ id: 'm1', author_participant_id: null, author_name: null, is_anonymous: true, is_mine: false }),
+      ]);
+      expect(JSON.stringify(json.comments)).not.toContain('p2');
+      expect(JSON.stringify(json.comments)).not.toContain('Bo');
+    }
+  });
+
+  it('a guided board in Done reads comments too', async () => {
+    mocks.sql.mockResolvedValue([ctxRow({ mode: 'guided', phase: 'done', archived_at: '2026-01-01', settings: phaseSettings('done') })]);
+    mocks.tx.mockResolvedValue([[], [], [], [], [], [anon]]);
+    const json = await (await call()).json();
+    expect(json.comments).toHaveLength(1);
+  });
+
+  it('a guided board before Discuss runs five statements and answers comments: []', async () => {
+    mocks.sql.mockResolvedValue([ctxRow({ mode: 'guided', phase: 'vote', settings: phaseSettings('vote') })]);
+    mocks.tx.mockResolvedValue([[], [], [], [], []]);
+    const json = await (await call()).json();
+    expect(json.comments).toEqual([]);
+    const texts: string[] = [];
+    mocks.tx.mock.calls[0][0]((s: TemplateStringsArray) => { texts.push(s.join('?')); return {}; });
+    expect(texts).toHaveLength(5);
+  });
+
+  it('an open board GET has no comments key and runs five statements', async () => {
+    mocks.sql.mockResolvedValue([ctxRow({ mode: 'open', phase: null })]);
+    mocks.tx.mockResolvedValue([[], [], [], [], []]);
+    expect('comments' in (await (await call()).json())).toBe(false);
+    const texts: string[] = [];
+    mocks.tx.mock.calls[0][0]((s: TemplateStringsArray) => { texts.push(s.join('?')); return {}; });
+    expect(texts).toHaveLength(5);
+    expect(texts.join(' ')).not.toContain('comments');
   });
 });

@@ -9,7 +9,7 @@ import { GuidedVoteControl } from './GuidedVoteControl';
 import { useBoardStore } from '@/stores/boardStore';
 import { GUIDED_MODE } from '@/lib/constants/phases';
 import { voteTotalsRevealed } from '@/lib/votePillPolicy';
-import { leadCardVotes, voteSurface, voteTotalsByCard, votesUsedBy } from '@/lib/votes';
+import { hasVotedOn, leadCardVotes, voteSurface, voteTotalsByCard, votesUsedBy } from '@/lib/votes';
 import type { Column, Card, Vote, Participant } from '@/types';
 
 interface TimelineViewProps {
@@ -116,9 +116,7 @@ export function TimelineView({
                 {group.cards.map((card) => {
                   const col = columnMap.get(card.column_id);
                   const voteCount = leadCardVotes(guided, card.id, cards, voteCountMap);
-                  const hasVoted = votes.some(
-                    (v) => v.card_id === card.id && v.voter_id === currentParticipantId
-                  );
+                  const hasVoted = hasVotedOn(guided, votes, cards, card.id, currentParticipantId);
                   const blurred = (isObscured && !isMine(card, currentParticipantId)) || !!card.text_hidden;
 
                   return (

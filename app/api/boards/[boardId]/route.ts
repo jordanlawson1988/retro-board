@@ -3,9 +3,10 @@ import { ablyServer } from '@/lib/ably-server';
 import { NextRequest, NextResponse } from 'next/server';
 import { loadBoardActor, guardResponse, BOARD_NOT_FOUND, type LoadedBoard } from '@/lib/board-actor';
 import { checkAction } from '@/lib/board-guards';
-import { shapeCard, shapeVotes, isRevealingChange, PUBLIC_VIEWER, type ViewBoard } from '@/lib/board-view';
+import { shapeCard, shapeVotes, shapeComments, isRevealingChange, PUBLIC_VIEWER, type ViewBoard } from '@/lib/board-view';
+import { commentsReadable } from '@/lib/comments';
 import { DEFAULT_BOARD_SETTINGS } from '@/utils/constants';
-import type { BoardSettings, Card, Vote } from '@/types';
+import type { BoardSettings, Card, Comment, Vote } from '@/types';
 import { readJsonObject, isPlainObject } from '@/lib/request-body';
 import { INVALID_BODY, validateSettingsPatch } from '@/lib/board-validation';
 import { patchNeedsSettingsGuard, resolveYouAre } from '@/lib/board-write-rules';
@@ -103,14 +104,19 @@ export async function GET(
     });
   }
 
+  // Comments are read only on a guided board in a phase that shows them, decided here in
+  // TypeScript so an open board's transaction never names the comments table.
+  const readComments = loadedAny.board.mode === GUIDED_MODE && commentsReadable(loadedAny.board);
+
   // One read-only snapshot transaction: a single round-trip and a consistent view.
-  const [columns, cards, votes, actionItems, participants] = await sqlTransaction(
+  const [columns, cards, votes, actionItems, participants, commentRows] = await sqlTransaction(
     (txn) => [
       txn`SELECT * FROM columns WHERE board_id = ${boardId} ORDER BY position, created_at, id`,
       txn`SELECT * FROM cards WHERE board_id = ${boardId} ORDER BY position, created_at, id`,
       txn`SELECT * FROM votes WHERE board_id = ${boardId}`,
       txn`SELECT * FROM action_items WHERE board_id = ${boardId} ORDER BY created_at`,
       txn`SELECT * FROM participants WHERE board_id = ${boardId}`,
+      ...(readComments ? [txn`SELECT * FROM comments WHERE board_id = ${boardId} ORDER BY created_at, id`] : []),
     ],
     { readOnly: true, isolationLevel: 'RepeatableRead' }
   );
@@ -149,6 +155,10 @@ export async function GET(
   return NextResponse.json({
     board: { ...board, ...modeFields },
     ...(voteTally ? { voteTally } : {}),
+    // Guided boards only: shaped for this viewer; an anonymous comment never carries its author.
+    ...(loadedAny.board.mode === GUIDED_MODE
+      ? { comments: shapeComments((commentRows ?? []) as unknown as Comment[], viewer) }
+      : {}),
     columns,
     cards: (cards as unknown as Card[]).map((c) => shapeCard(c, viewBoard, viewer)),
     votes: shapeVotes(votes as unknown as Vote[], viewBoard, viewer),
@@ -246,7 +256,12 @@ export async function PATCH(
           SELECT COALESCE(MAX(per_voter), 0)::int AS max_spent
           FROM (SELECT SUM(count) AS per_voter FROM votes WHERE board_id = ${boardId} GROUP BY voter_id) s
         ), top AS (
-          SELECT COALESCE(MAX(count), 0)::int AS max_on_card FROM votes WHERE board_id = ${boardId}
+          SELECT COALESCE(MAX(per_group), 0)::int AS max_on_card FROM (
+            SELECT SUM(v.count) AS per_group
+            FROM votes v JOIN cards c ON c.id = v.card_id AND c.board_id = v.board_id
+            WHERE v.board_id = ${boardId}
+            GROUP BY v.voter_id, COALESCE(c.merged_with, c.id)
+          ) g
         ), updated AS (
           UPDATE boards SET
             title = CASE WHEN ${hasTitle}::boolean THEN ${title}::text ELSE title END,
@@ -352,7 +367,7 @@ export async function POST(
       ? await sql`
       UPDATE boards SET archived_at = ${archivedAt}, phase = ${FINAL_PHASE},
         settings = settings || ${JSON.stringify(phaseSettings(FINAL_PHASE))}::jsonb,
-        phase_config = phase_config || '{"deadline":null}'::jsonb
+        phase_config = phase_config || '{"deadline":null,"topic":null}'::jsonb
       WHERE id = ${boardId}
       RETURNING settings
     `

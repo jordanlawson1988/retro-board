@@ -65,7 +65,7 @@ const txTexts = () => {
 };
 const saved = { id: 'v1', card_id: 'c1', board_id: 'b1', voter_id: 'p1', count: 2, created_at: '2026-11-20T00:00:00Z' };
 const addRow = (o: Record<string, unknown> = {}) =>
-  ({ board_ok: true, card_found: 1, card_parent: null, spent: 1, on_card: 1, per_person: 5, per_card: 3, team_used_before: 4, tally_at: 1_700_000_000_000, ...saved, ...o });
+  ({ board_ok: true, card_found: 1, card_parent: null, spent: 1, on_group: 1, per_person: 5, per_card: 3, team_used_before: 4, tally_at: 1_700_000_000_000, ...saved, ...o });
 const NO_VOTE = { id: null, card_id: null, board_id: null, voter_id: null, count: null, created_at: null };
 
 describe('guided add', () => {
@@ -84,7 +84,7 @@ describe('guided add', () => {
     expect(stmt.text).toContain("settings ->> 'max_votes_per_participant'");
     expect(stmt.text).toContain("settings ->> 'max_votes_per_card'");
     expect(stmt.text).toContain('FROM boards\n        WHERE id = ? AND phase = ? AND archived_at IS NULL AND deleted_at IS NULL');
-    expect(stmt.text).toContain('mine.spent < lim.per_person AND mine.on_card < lim.per_card');
+    expect(stmt.text).toContain('mine.spent < lim.per_person AND mine.on_group < lim.per_card');
     expect(stmt.text).toContain('phase = ? AND archived_at IS NULL AND deleted_at IS NULL');
     expect(stmt.text).toContain('FROM mine CROSS JOIN team LEFT JOIN lim ON true LEFT JOIN upserted u ON true');
     expect(stmt.text).toContain('AS board_ok');
@@ -95,16 +95,34 @@ describe('guided add', () => {
   });
   it('409 when the phase moved on after the load: nothing published, checked before the card and limits', async () => {
     mocks.sql.mockResolvedValueOnce([guidedRow()]);
-    mocks.tx.mockResolvedValueOnce([[], [addRow({ ...NO_VOTE, board_ok: false, card_found: 0, spent: 5, on_card: 3 })]]);
+    mocks.tx.mockResolvedValueOnce([[], [addRow({ ...NO_VOTE, board_ok: false, card_found: 0, spent: 5, on_group: 3 })]]);
     const res = await call({ cardId: 'c1', action: 'add' });
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ error: PHASE_CHANGED_ERROR });
     expect(mocks.tally).not.toHaveBeenCalled();
     expect(mocks.publish).not.toHaveBeenCalled();
   });
+  it('the add counts my votes on the whole group against the per-card limit', async () => {
+    mocks.sql.mockResolvedValueOnce([guidedRow()]);
+    mocks.tx.mockResolvedValueOnce([[], [addRow()]]);
+    await call({ cardId: 'c1', action: 'add' });
+    const [, stmt] = txTexts();
+    expect(stmt.text).toContain('grp AS (');
+    expect(stmt.text).toContain('(id = ? OR merged_with = ?)');
+    expect(stmt.text).toContain('FILTER (WHERE card_id IN (SELECT id FROM grp))');
+    expect(stmt.text).toContain('mine.on_group < lim.per_card');
+    expect(stmt.text).toMatch(/deleted_at IS NULL\s+FOR SHARE\s+\), upserted AS/);
+  });
+  it('422 per card when the group already holds my limit, even with nothing on the lead itself', async () => {
+    mocks.sql.mockResolvedValueOnce([guidedRow()]);
+    mocks.tx.mockResolvedValueOnce([[], [addRow({ ...NO_VOTE, spent: 3, on_group: 3 })]]);
+    const res = await call({ cardId: 'c1', action: 'add' });
+    expect(res.status).toBe(422);
+    expect(await res.json()).toEqual({ error: 'You can put at most 3 votes on one card', maxVotesPerCard: 3 });
+  });
   it('422 at the per-card limit, with the limit', async () => {
     mocks.sql.mockResolvedValueOnce([guidedRow()]);
-    mocks.tx.mockResolvedValueOnce([[], [addRow({ ...NO_VOTE, spent: 3, on_card: 3 })]]);
+    mocks.tx.mockResolvedValueOnce([[], [addRow({ ...NO_VOTE, spent: 3, on_group: 3 })]]);
     const res = await call({ cardId: 'c1', action: 'add' });
     expect(res.status).toBe(422);
     expect(await res.json()).toEqual({ error: 'You can put at most 3 votes on one card', maxVotesPerCard: 3 });
@@ -113,13 +131,13 @@ describe('guided add', () => {
   });
   it('422 at the per-person limit takes precedence', async () => {
     mocks.sql.mockResolvedValueOnce([guidedRow()]);
-    mocks.tx.mockResolvedValueOnce([[], [addRow({ ...NO_VOTE, spent: 5, on_card: 3 })]]);
+    mocks.tx.mockResolvedValueOnce([[], [addRow({ ...NO_VOTE, spent: 5, on_group: 3 })]]);
     expect(await (await call({ cardId: 'c1', action: 'add' })).json()).toEqual({ error: 'Vote limit reached', maxVotes: 5 });
     expect(mocks.tally).not.toHaveBeenCalled();
   });
   it('the limits the statement returns decide a per-person refusal, not the earlier load', async () => {
     mocks.sql.mockResolvedValueOnce([guidedRow({ max_votes_per_participant: 5 })]);
-    mocks.tx.mockResolvedValueOnce([[], [addRow({ ...NO_VOTE, spent: 3, on_card: 0, per_person: 3 })]]);
+    mocks.tx.mockResolvedValueOnce([[], [addRow({ ...NO_VOTE, spent: 3, on_group: 0, per_person: 3 })]]);
     const res = await call({ cardId: 'c1', action: 'add' });
     expect(res.status).toBe(422);
     expect(await res.json()).toEqual({ error: 'Vote limit reached', maxVotes: 3 });
@@ -127,7 +145,7 @@ describe('guided add', () => {
   });
   it('the limits the statement returns decide a per-card refusal, not the earlier load', async () => {
     mocks.sql.mockResolvedValueOnce([guidedRow({ max_votes_per_card: 3 })]);
-    mocks.tx.mockResolvedValueOnce([[], [addRow({ ...NO_VOTE, spent: 1, on_card: 1, per_card: 1 })]]);
+    mocks.tx.mockResolvedValueOnce([[], [addRow({ ...NO_VOTE, spent: 1, on_group: 1, per_card: 1 })]]);
     const res = await call({ cardId: 'c1', action: 'add' });
     expect(res.status).toBe(422);
     expect(await res.json()).toEqual({ error: votesPerCardError(1), maxVotesPerCard: 1 });
@@ -146,7 +164,7 @@ describe('guided add', () => {
   });
   it('a guided board without max_votes_per_card allows 1 per card', async () => {
     mocks.sql.mockResolvedValueOnce([guidedRow({ max_votes_per_card: undefined })]);
-    mocks.tx.mockResolvedValueOnce([[], [addRow({ ...NO_VOTE, on_card: 1, per_card: 1 })]]);
+    mocks.tx.mockResolvedValueOnce([[], [addRow({ ...NO_VOTE, on_group: 1, per_card: 1 })]]);
     expect(await (await call({ cardId: 'c1', action: 'add' })).json()).toEqual({ error: 'You can put at most 1 vote on one card', maxVotesPerCard: 1 });
   });
   it('passes the identity from the cookie, never the body, and a generated id when voteId is absent', async () => {
@@ -167,12 +185,12 @@ describe('guided add', () => {
 });
 
 describe('guided remove', () => {
-  const removeRow = (o: Record<string, unknown> = {}) => ({ board_ok: true, vote_id: 'v1', count_before: 2, team_used_before: 5, tally_at: 1_700_000_000_001, ...o });
+  const removeRow = (o: Record<string, unknown> = {}) => ({ board_ok: true, vote_id: 'v1', vote_card_id: 'c1', count_before: 2, team_used_before: 5, tally_at: 1_700_000_000_001, ...o });
   it('decrements and returns the new count and tally', async () => {
     mocks.sql.mockResolvedValueOnce([guidedRow()]);
     mocks.tx.mockResolvedValueOnce([[], [removeRow()]]);
     expect(await (await call({ cardId: 'c1', action: 'remove' })).json())
-      .toEqual({ action: 'removed', voteId: 'v1', count: 1, tally: { used: 4, at: 1_700_000_000_001 } });
+      .toEqual({ action: 'removed', voteId: 'v1', cardId: 'c1', count: 1, tally: { used: 4, at: 1_700_000_000_001 } });
     const [lock, stmt] = txTexts();
     expect(lock.values).toEqual(['b1:votes']);
     expect(stmt.text).toContain('decremented');
@@ -183,6 +201,17 @@ describe('guided remove', () => {
     expect(mocks.publish).not.toHaveBeenCalled();
     expect(mocks.sql).toHaveBeenCalledTimes(1);
     expect(mocks.tx).toHaveBeenCalledTimes(1);
+  });
+  it('a remove on a lead with no row of its own answers with the child row it took from', async () => {
+    mocks.sql.mockResolvedValueOnce([guidedRow()]);
+    mocks.tx.mockResolvedValueOnce([[], [{ board_ok: true, vote_id: 'v2', vote_card_id: 'c2', count_before: 2, team_used_before: 4, tally_at: 9 }]]);
+    expect(await (await call({ cardId: 'c1', action: 'remove' })).json())
+      .toEqual({ action: 'removed', voteId: 'v2', cardId: 'c2', count: 1, tally: { used: 3, at: 9 } });
+    const [, stmt] = txTexts();
+    expect(stmt.text).toContain('ORDER BY (v.card_id = ?::text) DESC');
+    expect(stmt.text).toContain(`date_trunc('milliseconds', c.created_at) ASC, c.id COLLATE "C" ASC`);
+    expect(stmt.text).toContain('LIMIT 1');
+    expect(stmt.text).toMatch(/deleted_at IS NULL\s+FOR SHARE\s+\), target AS/);
   });
   it('removing the last vote reports count 0', async () => {
     mocks.sql.mockResolvedValueOnce([guidedRow()]);

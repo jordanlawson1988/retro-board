@@ -17,6 +17,11 @@ interface ActionItemsPanelProps {
   onExportMarkdown: () => void;
   onExportCsv: () => void;
   readOnly?: boolean;
+  /** Guided boards: pick the owner by participant. Absent on an open board, which renders as before. */
+  assigneeMode?: 'name' | 'participant';
+  onAssign?: (itemId: string, participantId: string | null) => void;
+  /** Guided boards: the topic heading of the card an item is linked to, or null. */
+  topicLabelFor?: (cardId: string) => string | null;
 }
 
 export function ActionItemsPanel({
@@ -30,6 +35,9 @@ export function ActionItemsPanel({
   onExportMarkdown,
   onExportCsv,
   readOnly,
+  assigneeMode,
+  onAssign,
+  topicLabelFor,
 }: ActionItemsPanelProps) {
   const [newDescription, setNewDescription] = useState('');
 
@@ -130,6 +138,9 @@ export function ActionItemsPanel({
                 onUpdate={onUpdateItem}
                 onDelete={onDeleteItem}
                 readOnly={readOnly}
+                assigneeMode={assigneeMode}
+                onAssign={onAssign}
+                topicLabel={item.card_id && topicLabelFor ? topicLabelFor(item.card_id) : undefined}
               />
             ))}
             {doneItems.length > 0 && (
@@ -144,6 +155,9 @@ export function ActionItemsPanel({
                     participants={participants}
                     onUpdate={onUpdateItem}
                     onDelete={onDeleteItem}
+                    assigneeMode={assigneeMode}
+                    onAssign={onAssign}
+                    topicLabel={item.card_id && topicLabelFor ? topicLabelFor(item.card_id) : undefined}
                   />
                 ))}
               </>

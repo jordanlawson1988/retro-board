@@ -327,3 +327,102 @@ export async function voteRowsDirect(
     WHERE board_id = ${boardId} ORDER BY voter_id, card_id`;
   return rows.map((r) => ({ voter_id: r.voter_id as string, card_id: r.card_id as string, count: Number(r.count) }));
 }
+
+// ---- guided discuss helpers -------------------------------------------------
+
+/** Add a column through the columns route. Returns the raw response. */
+export function apiAddColumn(
+  request: APIRequestContext,
+  boardId: string,
+  column: { id: string; title: string; position: number }
+) {
+  return request.post(`/api/boards/${boardId}/columns`, {
+    data: { ...column, description: null, color: '#cccccc' },
+  });
+}
+
+/** Make `cardId` the current topic (facilitator only, Discuss only). Returns the raw response. */
+export function apiSetTopic(request: APIRequestContext, boardId: string, cardId: string) {
+  return request.post(`/api/boards/${boardId}/phase`, { data: { action: 'set-topic', cardId } });
+}
+
+/** Post a comment or reply. `body` is `{ cardId, body, anonymous?, parentId? }`. Returns the raw response. */
+export function apiComment(request: APIRequestContext, boardId: string, body: Record<string, unknown>) {
+  return request.post(`/api/boards/${boardId}/comments`, { data: body });
+}
+
+export function apiEditComment(request: APIRequestContext, boardId: string, commentId: string, body: string) {
+  return request.patch(`/api/boards/${boardId}/comments`, { data: { commentId, body } });
+}
+
+export function apiDeleteComment(request: APIRequestContext, boardId: string, commentId: string) {
+  return request.delete(`/api/boards/${boardId}/comments`, { data: { commentId } });
+}
+
+/** Create an action item. `body` is `{ description, cardId?, assigneeParticipantId?, ... }`. Returns the raw response. */
+export function apiActionItem(request: APIRequestContext, boardId: string, body: Record<string, unknown>) {
+  return request.post(`/api/boards/${boardId}/action-items`, { data: body });
+}
+
+export function apiPatchActionItem(
+  request: APIRequestContext,
+  boardId: string,
+  itemId: string,
+  updates: Record<string, unknown>
+) {
+  return request.patch(`/api/boards/${boardId}/action-items`, { data: { itemId, updates } });
+}
+
+/** Every comment row of ONE board, straight from the dev database. Read-only (a SELECT), same dev-only guards. */
+export async function commentRowsDirect(boardId: string): Promise<
+  {
+    id: string;
+    card_id: string;
+    parent_id: string | null;
+    author_participant_id: string | null;
+    is_anonymous: boolean;
+    body: string;
+    deleted_at: string | null;
+  }[]
+> {
+  const url = process.env.DATABASE_URL ?? '';
+  if (process.env.NEON_BRANCH !== 'dev') throw new Error('commentRowsDirect refuses to run unless NEON_BRANCH=dev');
+  if (url.includes('ep-delicate-star')) throw new Error('commentRowsDirect refuses to run against the production host');
+  const db = neon(url);
+  const rows = await db`
+    SELECT id, card_id, parent_id, author_participant_id, is_anonymous, body, deleted_at
+    FROM comments WHERE board_id = ${boardId} ORDER BY created_at, id`;
+  return rows.map((r) => ({
+    id: r.id as string,
+    card_id: r.card_id as string,
+    parent_id: (r.parent_id as string | null) ?? null,
+    author_participant_id: (r.author_participant_id as string | null) ?? null,
+    is_anonymous: r.is_anonymous as boolean,
+    body: r.body as string,
+    deleted_at: r.deleted_at === null ? null : new Date(r.deleted_at as string).toISOString(),
+  }));
+}
+
+/** Every action item row of ONE board, straight from the dev database. Read-only (a SELECT), same dev-only guards. */
+export async function actionRowsDirect(boardId: string): Promise<
+  {
+    id: string;
+    card_id: string | null;
+    assignee_participant_id: string | null;
+    assignee: string | null;
+  }[]
+> {
+  const url = process.env.DATABASE_URL ?? '';
+  if (process.env.NEON_BRANCH !== 'dev') throw new Error('actionRowsDirect refuses to run unless NEON_BRANCH=dev');
+  if (url.includes('ep-delicate-star')) throw new Error('actionRowsDirect refuses to run against the production host');
+  const db = neon(url);
+  const rows = await db`
+    SELECT id, card_id, assignee_participant_id, assignee
+    FROM action_items WHERE board_id = ${boardId} ORDER BY created_at`;
+  return rows.map((r) => ({
+    id: r.id as string,
+    card_id: (r.card_id as string | null) ?? null,
+    assignee_participant_id: (r.assignee_participant_id as string | null) ?? null,
+    assignee: (r.assignee as string | null) ?? null,
+  }));
+}

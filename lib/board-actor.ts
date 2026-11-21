@@ -1,3 +1,4 @@
+import { JOIN_FIRST_ERROR } from '@/lib/constants/board-access';
 import { NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { getSessionOrNull, resolveBoardAuthority, type BoardAuthority } from '@/lib/auth-helpers';
@@ -190,7 +191,7 @@ export function guardResponse(result: GuardResult | null): NextResponse | null {
 export const BOARD_NOT_FOUND = () =>
   NextResponse.json({ error: 'Board not found' }, { status: 404 });
 
-export const JOIN_FIRST_ERROR = 'Join the board first';
+export { JOIN_FIRST_ERROR };
 
 /** v2 writes that must be attributed need a participant, even for a signed-in facilitator. */
 export function requireParticipantOn(loaded: LoadedBoard): NextResponse | null {

@@ -73,6 +73,7 @@ describe('phaseDenial', () => {
     ['card.create', 'group'], ['card.edit', 'vote'], ['card.delete', 'discuss'],
     ['card.move', 'reflect'], ['card.move', 'vote'], ['vote.toggle', 'reflect'], ['vote.toggle', 'discuss'],
     ['group.title', 'reflect'], ['group.title', 'vote'], ['group.reset', 'discuss'],
+    ['comment.create', 'reflect'], ['comment.edit', 'group'], ['comment.delete', 'vote'], ['topic.set', 'vote'], ['action-item.link', 'reflect'],
   ] as const)('%s is denied in %s', (action, phase) => {
     expect(phaseDenial(action, phase)).toBe(`Not available during ${PHASES[phase].label}`);
   });
@@ -80,6 +81,7 @@ describe('phaseDenial', () => {
     ['card.create', 'reflect'], ['card.edit', 'group'], ['card.move', 'group'], ['vote.toggle', 'vote'],
     ['group.title', 'group'], ['group.reset', 'group'],
     ['card.react', 'vote'], ['action-item.write', 'reflect'], ['board.settings', 'vote'], ['participant.leave', 'done'],
+    ['comment.create', 'discuss'], ['topic.set', 'discuss'], ['action-item.link', 'discuss'],
   ] as const)('%s is allowed in %s', (action, phase) => {
     expect(phaseDenial(action, phase)).toBeNull();
   });
@@ -201,8 +203,15 @@ describe('guidedModeEnabled', () => {
 describe('phaseConfigAfterClose', () => {
   const cfg = { deadline: '2026-12-01T00:00:00.000Z' };
   it('clears the deadline when the event carries a phase (guided board)', () => {
-    expect(phaseConfigAfterClose(cfg, { phase: 'done' })).toEqual({ deadline: null });
-    expect(phaseConfigAfterClose(cfg, { phase: 'discuss' })).toEqual({ deadline: null });
+    expect(phaseConfigAfterClose(cfg, { phase: 'done' })).toEqual({ deadline: null, topic: null });
+    expect(phaseConfigAfterClose(cfg, { phase: 'discuss' })).toEqual({ deadline: null, topic: null });
+  });
+  it('clears the topic too', () => {
+    expect(phaseConfigAfterClose({ deadline: 'x', topic: 'c1' }, { phase: 'done' })).toEqual({ deadline: null, topic: null });
+  });
+  it('returns the same object for a payload that only asks for a refetch', () => {
+    const c = { deadline: null };
+    expect(phaseConfigAfterClose(c, { refetch: true })).toBe(c);
   });
   it('leaves the config alone for an open board (phase null or missing) or garbage', () => {
     expect(phaseConfigAfterClose(cfg, { phase: null })).toBe(cfg);
@@ -227,6 +236,11 @@ describe('phaseDenial full table', () => {
     'participant.manage': PHASE_IDS,
     'participant.leave': PHASE_IDS,
     'action-item.write': PHASE_IDS,
+    'action-item.link': ['discuss'],
+    'topic.set': ['discuss'],
+    'comment.create': ['discuss'],
+    'comment.edit': ['discuss'],
+    'comment.delete': ['discuss'],
     'board.settings': PHASE_IDS,
   };
   it('covers every action', () => {

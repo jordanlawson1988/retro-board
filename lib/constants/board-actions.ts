@@ -8,10 +8,15 @@ export const BOARD_ACTIONS = [
   'group.reset',
   'card.react',
   'vote.toggle',
+  'topic.set',
+  'comment.create',
+  'comment.edit',
+  'comment.delete',
   'column.write',
   'participant.manage',
   'participant.leave',
   'action-item.write',
+  'action-item.link',
   'board.settings',
 ] as const;
 

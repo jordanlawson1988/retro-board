@@ -36,6 +36,9 @@ import { exportMarkdown, exportCsv } from '@/utils/export';
 import { useCardText } from '@/hooks/useCardText';
 import { GUIDED_MODE } from '@/lib/constants/phases';
 import { votesUsedBy } from '@/lib/votes';
+import { useDiscussStore } from '@/stores/discussStore';
+import { buildAgenda, discussViewShown, topicHeading, topicLabelOf, topicLabelsByCard } from '@/lib/agenda';
+import { DiscussView } from '@/components/Discuss';
 
 /** A drag distance no pointer reaches: used to switch dragging off. */
 const DRAG_NEVER_PX = 100_000;
@@ -138,6 +141,24 @@ export function BoardPage({ boardId }: { boardId: string }) {
   const liveEventsEnabled = useFeatureFlagStore((s) => s.isEnabled('live_events'));
 
   const guidedBoard = useBoardStore((s) => s.board?.mode === GUIDED_MODE);
+
+  // Guided boards only: the board-level action list picks an owner by participant and names each
+  // item's topic. An open board computes nothing here and passes the panel nothing extra.
+  const topicLabels = useMemo(() => {
+    if (!guidedBoard) return null;
+    const agenda = buildAgenda(cards, votes);
+    const texts = cards.map((c) => ({ id: c.id, text: cardText(c) }));
+    const headings = new Map(agenda.map((item) => [item.cardId, topicHeading(item, texts)]));
+    return topicLabelsByCard(agenda, headings);
+  }, [guidedBoard, cards, votes, cardText]);
+  const topicLabelFor = useCallback(
+    (cardId: string) => (topicLabels ? topicLabelOf(topicLabels, cardId) : null),
+    [topicLabels]
+  );
+  const onAssign = useCallback((itemId: string, participantId: string | null) => {
+    // A rejection is already on the connection banner and the store reversed the change.
+    useDiscussStore.getState().assignActionItem(itemId, participantId).catch(() => {});
+  }, []);
   const openTimer = useTimer({
     boardId: boardId || '',
     liveSync: liveEventsEnabled && !!currentParticipantId && !guidedBoard,
@@ -312,6 +333,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
   const isJoined = !!currentParticipantId;
   const isObscured = board.settings.card_visibility === 'hidden';
   const isCompleted = !!board.archived_at;
+  const discussShown = discussViewShown(board);
   const currentParticipant = participants.find((p) => p.id === currentParticipantId);
   // Authenticated board owners (and system admins) always get facilitator
   // controls, even if their participant record isn't flagged as admin —
@@ -462,7 +484,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
       <ConnectionStatusBanner />
 
       {/* View toggle + column filter */}
-      {isJoined && columns.length > 0 && (
+      {!discussShown && isJoined && columns.length > 0 && (
         <div className="mx-auto max-w-[1400px] px-4 pt-4 sm:px-6">
           <div className="flex flex-wrap items-center gap-3">
             <ViewToggle currentView={currentView} onChangeView={handleChangeView} />
@@ -504,7 +526,9 @@ export function BoardPage({ boardId }: { boardId: string }) {
       )}
 
       {/* Board content */}
-      {isJoined ? (
+      {discussShown && isJoined ? (
+        <DiscussView isFacilitator={isAdmin} />
+      ) : isJoined ? (
         columns.length > 0 ? (
           <>
             {currentView === 'grid' && (
@@ -708,6 +732,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
           onExportMarkdown={handleExportMarkdown}
           onExportCsv={handleExportCsv}
           readOnly={isCompleted}
+          {...(guidedBoard ? { assigneeMode: 'participant' as const, onAssign, topicLabelFor } : {})}
         />
       )}
     </>

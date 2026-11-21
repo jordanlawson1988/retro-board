@@ -4,6 +4,8 @@ import { useEffect, useMemo } from 'react';
 import { useAbly, useChannel } from 'ably/react';
 import { useBoardStore, refetchBoardCoalesced } from '@/stores/boardStore';
 import { applyVoteTallyEvent } from '@/stores/groupVoteStore';
+import { applyCommentUpsertEvent, applyCommentDeletedEvent } from '@/stores/discussStore';
+import { COMMENT_CREATED, COMMENT_UPDATED, COMMENT_DELETED } from '@/lib/constants/comments';
 import { mergeIncomingCard } from '@/lib/mergeIncomingCard';
 import { applyPhaseChanged, phaseConfigAfterClose, refetchRouteFor } from '@/lib/phases';
 import { isPhaseId } from '@/lib/constants/phases';
@@ -97,6 +99,15 @@ export function useBoardChannel(boardId: string) {
         break;
       case 'grouping-reset':
         refetchCompletionEvent(data);
+        break;
+
+      // Guided Discuss comments: each ignores the event unless the current board is guided
+      case COMMENT_CREATED:
+      case COMMENT_UPDATED:
+        applyCommentUpsertEvent(boardId, data);
+        break;
+      case COMMENT_DELETED:
+        applyCommentDeletedEvent(boardId, data);
         break;
 
       // Participants

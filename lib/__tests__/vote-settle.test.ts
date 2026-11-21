@@ -38,7 +38,7 @@ describe('tally version counter', () => {
 });
 
 describe('vote click slot', () => {
-  const ok = (at: number, vote: Vote | null) => ({ kind: 'ok' as const, at, vote });
+  const ok = (at: number, vote: Vote | null) => ({ kind: 'ok' as const, at, vote, otherRow: false });
   const failed = (over: Partial<{ refetched: boolean; delta: 1 | -1; currentCount: number }> = {}) =>
     ({ kind: 'failed' as const, refetched: false, delta: 1 as const, currentCount: -1, ...over });
   const two = () => startVoteClick(startVoteClick(EMPTY_VOTE_SLOT, 1), 2);
@@ -114,15 +114,15 @@ describe('errorMessageOf', () => {
 describe('voteResult', () => {
   it('reads an add answer', () => {
     expect(voteResult({ action: 'added', vote: row(2), tally: { used: 3, at: 7 } }, undefined, ctx))
-      .toEqual({ tally: { used: 3, at: 7 }, vote: row(2) });
+      .toEqual({ tally: { used: 3, at: 7 }, cardId: 'c1', vote: row(2) });
   });
   it('reads a remove answer as the local row with the server count', () => {
     expect(voteResult({ action: 'removed', voteId: 'v1', count: 1, tally: { used: 1, at: 8 } }, row(3), ctx))
-      .toEqual({ tally: { used: 1, at: 8 }, vote: row(1) });
+      .toEqual({ tally: { used: 1, at: 8 }, cardId: 'c1', vote: row(1) });
   });
   it('count 0 means no row', () => {
     expect(voteResult({ action: 'removed', voteId: 'v1', count: 0, tally: { used: 0, at: 8 } }, row(1), ctx))
-      .toEqual({ tally: { used: 0, at: 8 }, vote: null });
+      .toEqual({ tally: { used: 0, at: 8 }, cardId: 'c1', vote: null });
   });
   it('builds a row when the answer says votes remain but none is held locally', () => {
     const r = voteResult({ action: 'removed', voteId: 'v9', count: 2, tally: { used: 2, at: 8 } }, undefined, ctx);

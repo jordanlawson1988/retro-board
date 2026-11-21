@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   isLeadCard,
+  isRootCard,
+  compareByCreated,
   visibleGroupTitle,
   validateGroupTitle,
   ungroupAll,
@@ -99,5 +101,21 @@ describe('titleSaveDecision', () => {
   });
   it('sends nothing when the typed text already is the stored title', () => {
     expect(titleSaveDecision('Old', 'New', 'New')).toEqual({ send: false });
+  });
+});
+
+describe('roots and creation order', () => {
+  const cards = [{ id: 'L', merged_with: null }, { id: 'c', merged_with: 'L' }, { id: 'o', merged_with: 'gone' }];
+  it('a root has no parent or a parent that is not on the board', () => {
+    expect(isRootCard('L', cards)).toBe(true);
+    expect(isRootCard('c', cards)).toBe(false);
+    expect(isRootCard('o', cards)).toBe(true);
+    expect(isRootCard('zz', cards)).toBe(false);
+  });
+  it('orders by creation to the millisecond, then by id in code-unit order', () => {
+    const at = (ms: number) => new Date(Date.UTC(2026, 10, 20, 10, 0, 0, ms)).toISOString();
+    expect(compareByCreated({ created_at: at(1), id: 'z' }, { created_at: at(2), id: 'a' })).toBeLessThan(0);
+    expect(compareByCreated({ created_at: at(5), id: 'B' }, { created_at: at(5), id: 'a' })).toBeLessThan(0);
+    expect(compareByCreated({ created_at: at(5), id: 'a' }, { created_at: at(5), id: 'a' })).toBe(0);
   });
 });

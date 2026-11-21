@@ -137,6 +137,24 @@ export interface ActionItem {
   due_date: string | null;
   status: ActionItemStatus;
   created_at: string;
+  card_id?: string | null;                 // the Discuss topic's card; absent before migration 017
+  assignee_participant_id?: string | null; // absent before migration 017
+}
+
+// Comment types (guided Discuss)
+export interface Comment {
+  id: string;
+  board_id: string;
+  card_id: string;
+  parent_id: string | null;
+  author_participant_id: string | null; // null when anonymous, deleted, or the author left the board
+  author_name: string | null;           // null when anonymous or deleted
+  is_anonymous: boolean;
+  body: string;                         // '' on a deleted comment kept for its replies
+  created_at: string;
+  edited_at: string | null;
+  deleted_at: string | null;
+  is_mine?: boolean;                    // set by the shaper (lib/board-view.ts)
 }
 
 // Participant types

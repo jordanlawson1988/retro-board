@@ -6,7 +6,7 @@ import { publishVote, publishVoteTally } from '@/lib/board-publish';
 import { checkAction } from '@/lib/board-guards';
 import { readJsonObject } from '@/lib/request-body';
 import { INVALID_BODY } from '@/lib/board-validation';
-import { isVoteAction } from '@/lib/constants/votes';
+import { CARD_NOT_FOUND_ERROR, VOTE_LIMIT_REACHED_ERROR, isVoteAction } from '@/lib/constants/votes';
 import { GUIDED_MODE, NOT_GUIDED_ERROR, PHASE_CHANGED_ERROR } from '@/lib/constants/phases';
 import { OPEN_MAX_VOTES_PER_CARD } from '@/lib/constants/board-settings';
 import { DEFAULT_BOARD_SETTINGS } from '@/utils/constants';
@@ -100,14 +100,14 @@ export async function POST(
     rows = toggled as Record<string, unknown>[];
   } catch (err) {
     if (dbErrorCode(err) === '23503') {
-      return NextResponse.json({ error: 'Card not found' }, { status: 404 });
+      return NextResponse.json({ error: CARD_NOT_FOUND_ERROR }, { status: 404 });
     }
     throw err;
   }
 
   const [result] = rows;
   if (!result) {
-    return NextResponse.json({ error: 'Vote limit reached', maxVotes }, { status: 422 });
+    return NextResponse.json({ error: VOTE_LIMIT_REACHED_ERROR, maxVotes }, { status: 422 });
   }
   const { outcome, ...vote } = result;
 
@@ -145,8 +145,9 @@ async function guidedVote(
   }
   const needsJoin = requireParticipantOn(loaded);
   if (needsJoin) return needsJoin;
-  const voterId = loaded.actor.participantId;
-  if (voterId === null) return NextResponse.json({ error: 'Join the board first' }, { status: 401 });
+  // Guided boards are always trust_version 2, so requireParticipantOn above already answered 401
+  // when there is no participant.
+  const voterId = loaded.actor.participantId as string;
 
   const lockKey = voteLockKey(boardId);
   // The phase the gate above checked; the statement below must still find the board in it.
@@ -233,7 +234,7 @@ async function guidedVote(
     return NextResponse.json({ error: PHASE_CHANGED_ERROR }, { status: 409 });
   }
   if (!row || Number(row.card_found) === 0) {
-    return NextResponse.json({ error: 'Card not found' }, { status: 404 });
+    return NextResponse.json({ error: CARD_NOT_FOUND_ERROR }, { status: 404 });
   }
   if (row.id === null) {
     if (row.card_parent) return NextResponse.json({ error: GROUP_VOTE_ERROR }, { status: 409 });
@@ -241,7 +242,7 @@ async function guidedVote(
     const perPerson = Number(row.per_person);
     const perCard = Number(row.per_card);
     if (Number(row.spent) >= perPerson) {
-      return NextResponse.json({ error: 'Vote limit reached', maxVotes: perPerson }, { status: 422 });
+      return NextResponse.json({ error: VOTE_LIMIT_REACHED_ERROR, maxVotes: perPerson }, { status: 422 });
     }
     return NextResponse.json({ error: votesPerCardError(perCard), maxVotesPerCard: perCard }, { status: 422 });
   }

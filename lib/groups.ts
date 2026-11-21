@@ -46,7 +46,7 @@ export function hasGrouping(cards: readonly Pick<Card, 'merged_with' | 'group_ti
 }
 
 export const NOT_A_GROUP_ERROR = 'Only a group can have a title';
-export const CARD_NOT_FOUND_ERROR = 'Card not found';
+export { CARD_NOT_FOUND_ERROR } from '@/lib/constants/votes';
 
 export type GroupTitleOutcome = 'ok' | 'card-missing' | 'not-a-group' | 'phase-changed';
 

@@ -122,10 +122,11 @@ describe('dispatchSummaryEmail', () => {
     const claim = mocks.sql.mock.calls[0];
     const t = text(claim);
     for (const part of [
-      'UNION', 'FROM board_members m', 'p.user_id IS NOT NULL', 'LEFT JOIN email_preferences ep',
+      'UNION', 'SELECT owner_id AS user_id FROM board', 'FROM board_members m', 'LEFT JOIN email_preferences ep',
       'COALESCE(ep.summary_email, true)', 'u."emailVerified" = true', 'LIMIT ?',
       'ON CONFLICT (board_id, completed_at, user_id) DO NOTHING',
     ]) expect(t).toContain(part);
+    expect(t).not.toContain('FROM participants');
     expect(values(claim)).toEqual(expect.arrayContaining(['b1', COMPLETED, 100, 'pending']));
     expect(mocks.send).not.toHaveBeenCalled();
   });

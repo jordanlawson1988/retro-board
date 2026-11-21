@@ -9,8 +9,12 @@ import { dispatchSummaryEmail, type DispatchInput } from '@/lib/summary-email/di
 export function scheduleSummaryEmail(input: DispatchInput): void {
   try {
     after(async () => {
-      const outcome = await dispatchSummaryEmail(input);
-      console.info('[summary-email] board ' + input.boardId + ': ' + outcome);
+      try {
+        const outcome = await dispatchSummaryEmail(input);
+        console.info('[summary-email] board ' + input.boardId + ': ' + outcome);
+      } catch {
+        console.error('[summary-email] board ' + input.boardId + ': error');
+      }
     });
   } catch {
     // No request scope (a unit test, a script): nothing to schedule.

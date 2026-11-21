@@ -1,10 +1,10 @@
 import { sql } from '@/lib/db';
-import { OUTBOX_DISABLED_ERROR, OUTBOX_TRANSPORT } from '@/lib/constants/email';
+import { OUTBOX_DISABLED_ERROR, OUTBOX_TRANSPORT, PRODUCTION_ENV } from '@/lib/constants/email';
 import type { MailBatch, MailEnv, MailSendResult } from './transport';
 
 /** Record a batch in email_outbox instead of sending it. Refuses in production, before any query. */
 export async function recordToOutbox(batch: MailBatch, env: MailEnv): Promise<MailSendResult> {
-  if (env.VERCEL_ENV === 'production') {
+  if (env.VERCEL_ENV === PRODUCTION_ENV) {
     return { ok: false, transport: OUTBOX_TRANSPORT, error: OUTBOX_DISABLED_ERROR };
   }
   const rows = batch.messages.map((m) => ({

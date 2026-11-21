@@ -113,8 +113,6 @@ export async function dispatchSummaryEmail(
         SELECT owner_id AS user_id FROM board WHERE owner_id IS NOT NULL
         UNION
         SELECT m.user_id FROM board_members m JOIN board ON m.board_id = board.id
-        UNION
-        SELECT p.user_id FROM participants p JOIN board ON p.board_id = board.id WHERE p.user_id IS NOT NULL
       ), eligible AS (
         SELECT u.id AS user_id, u.email
         FROM people JOIN "user" u ON u.id = people.user_id

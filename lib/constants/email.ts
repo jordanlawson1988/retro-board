@@ -23,6 +23,8 @@ export const SEND_ERROR_MAX = 500;
 export const SUMMARY_EMAIL_HEADING_MAX = 120;
 
 export const OUTBOX_DISABLED_ERROR = 'The outbox transport does not run in production';
+export const RESEND_PRODUCTION_ONLY_ERROR = 'Real sending is only allowed on the production deployment';
+export const PRODUCTION_ENV = 'production';
 export const RESEND_KEY_MISSING_ERROR = 'RESEND_API_KEY is not set';
 export const BASE_URL_MISSING_ERROR = 'No base URL is configured';
 export const SUMMARY_EMAIL_BUILD_FAILED = 'build failed';

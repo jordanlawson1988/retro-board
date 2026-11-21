@@ -294,3 +294,19 @@ describe('control characters in user text', () => {
     expect(render(build({ assignee: `${NUL}\u0001` })).text).toContain('(Owner: No owner; Due: November 30, 2026)');
   });
 });
+
+describe('bidi and format control characters', () => {
+  const BIDI = ['‎', '‏', '‪', '‫', '‬', '‭', '‮', '⁦', '⁧', '⁨', '⁩', '﻿'];
+  it('a title with a right-to-left override comes out without it in the subject, text and html', () => {
+    const m = render(build({ title: 'Sprint‮12' }));
+    expect(m.subject).toBe('Retro summary: Sprint12');
+    expect(m.text).not.toContain('‮');
+    expect(m.html).not.toContain('‮');
+  });
+  it('every listed control character is removed', () => {
+    for (const c of BIDI) expect(cleanText(`a${c}b`), c.codePointAt(0)!.toString(16)).toBe('ab');
+  });
+  it('ordinary Arabic and Hebrew letters are untouched', () => {
+    expect(cleanText('مرحبا שלום')).toBe('مرحبا שלום');
+  });
+});

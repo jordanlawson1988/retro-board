@@ -66,6 +66,8 @@ export function cleanText(s: string): string {
     .replace(/[\t\n\u000b\u000c\r\u0085\u2028\u2029]+/g, ' ')
     // eslint-disable-next-line no-control-regex -- control characters are the point of this function
     .replace(/[\u0000-\u001f\u007f-\u009f]/g, '')
+    // Bidi controls and the byte order mark can reorder or hide text in a subject line.
+    .replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, '')
     .trim();
 }
 

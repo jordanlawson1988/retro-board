@@ -128,6 +128,7 @@ describe('labels', () => {
     expect(summaryAvailable({ mode: 'guided', archived_at: null })).toBe(false);
     expect(summaryAvailable({ mode: 'open', archived_at: at(1) })).toBe(false);
     expect(summaryAvailable(null)).toBe(false);
+    expect(summaryAvailable({ mode: 'guided', archived_at: undefined } as never)).toBe(false);
   });
 });
 

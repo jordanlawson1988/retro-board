@@ -214,7 +214,7 @@ export function allActionItems(s: RetroSummary): ActionItem[] {
 }
 
 export function summaryAvailable(board: Pick<Board, 'mode' | 'archived_at'> | null): boolean {
-  return board?.mode === GUIDED_MODE && board.archived_at !== null;
+  return board?.mode === GUIDED_MODE && board.archived_at != null;
 }
 
 export function summaryPath(boardId: string): string {

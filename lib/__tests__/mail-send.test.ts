@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join, relative } from 'node:path';
 
 const mocks = vi.hoisted(() => ({ sql: vi.fn(), ctor: vi.fn(), batchSend: vi.fn() }));
 
@@ -71,7 +72,7 @@ describe('sendMail', () => {
   });
 
   it('sends through Resend only when explicitly chosen', async () => {
-    const r = await sendMail(batch(), { SUMMARY_EMAIL_TRANSPORT: 'resend', RESEND_API_KEY: 'k' });
+    const r = await sendMail(batch(), { SUMMARY_EMAIL_TRANSPORT: 'resend', RESEND_API_KEY: 'k', VERCEL_ENV: 'production' });
     expect(mocks.ctor).toHaveBeenCalledTimes(1);
     expect(mocks.ctor).toHaveBeenCalledWith('k');
     expect(mocks.batchSend).toHaveBeenCalledTimes(1);
@@ -87,35 +88,104 @@ describe('sendMail', () => {
   });
 
   it('reports a missing key without constructing a client', async () => {
-    const r = await sendMail(batch(), { SUMMARY_EMAIL_TRANSPORT: 'resend' });
+    const r = await sendMail(batch(), { SUMMARY_EMAIL_TRANSPORT: 'resend', VERCEL_ENV: 'production' });
     expect(mocks.ctor).not.toHaveBeenCalled();
     expect(r).toEqual({ ok: false, transport: 'resend', error: 'RESEND_API_KEY is not set' });
   });
 
-  it('turns a Resend error into a failed result', async () => {
+  it('turns a Resend error into a failed result carrying only its name and status, never its message', async () => {
+    mocks.batchSend.mockResolvedValue({
+      data: null,
+      error: { name: 'validation_error', statusCode: 403, message: 'You can only send to owner@acct-secret.example with key re_SECRETKEY123' },
+    });
+    const r = await sendMail(batch(), { SUMMARY_EMAIL_TRANSPORT: 'resend', RESEND_API_KEY: 'k', VERCEL_ENV: 'production' });
+    expect(r).toEqual({ ok: false, transport: 'resend', error: 'validation_error 403' });
+    if (!r.ok) {
+      expect(r.error).not.toContain('acct-secret');
+      expect(r.error).not.toContain('re_SECRETKEY123');
+    }
     mocks.batchSend.mockResolvedValue({ data: null, error: { message: 'boom' } });
-    const r = await sendMail(batch(), { SUMMARY_EMAIL_TRANSPORT: 'resend', RESEND_API_KEY: 'k' });
-    expect(r).toEqual({ ok: false, transport: 'resend', error: 'boom' });
+    const r2 = await sendMail(batch(), { SUMMARY_EMAIL_TRANSPORT: 'resend', RESEND_API_KEY: 'k', VERCEL_ENV: 'production' });
+    expect(r2).toEqual({ ok: false, transport: 'resend', error: 'Unknown error' });
   });
 
-  it('never throws and cuts the error to 500 code points', async () => {
-    mocks.sql.mockRejectedValue(new Error('x'.repeat(600)));
+  it('a thrown error is reported by name and status only, cut to 500 code points', async () => {
+    const e = Object.assign(new Error('row for a@b.example'), { name: 'NeonDbError', statusCode: 500 });
+    mocks.sql.mockRejectedValue(e);
     const r = await sendMail(batch(), {});
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.transport).toBe('outbox');
-      expect(Array.from(r.error)).toHaveLength(500);
-    }
+    expect(r).toEqual({ ok: false, transport: 'outbox', error: 'NeonDbError 500' });
+    mocks.sql.mockRejectedValue(Object.assign(new Error('m'), { name: 'x'.repeat(600) }));
+    const r2 = await sendMail(batch(), {});
+    expect(r2.ok).toBe(false);
+    if (!r2.ok) expect(Array.from(r2.error)).toHaveLength(500);
   });
 
   it('does nothing for an empty batch', async () => {
-    const r = await sendMail(batch({ messages: [] }), { SUMMARY_EMAIL_TRANSPORT: 'resend', RESEND_API_KEY: 'k' });
+    const r = await sendMail(batch({ messages: [] }), { SUMMARY_EMAIL_TRANSPORT: 'resend', RESEND_API_KEY: 'k', VERCEL_ENV: 'production' });
     expect(mocks.sql).not.toHaveBeenCalled();
     expect(mocks.ctor).not.toHaveBeenCalled();
     expect(mocks.batchSend).not.toHaveBeenCalled();
     expect(r).toEqual({ ok: true, transport: 'resend' });
     const r2 = await sendMail(batch({ messages: [] }), {});
     expect(r2).toEqual({ ok: true, transport: 'outbox' });
+  });
+});
+
+describe('real sending only on the production deployment', () => {
+  const REFUSAL = 'Real sending is only allowed on the production deployment';
+  for (const venv of ['preview', 'development', '', undefined]) {
+    it(`resend with VERCEL_ENV ${JSON.stringify(venv)} refuses, builds no client, records nothing`, async () => {
+      const r = await sendMail(batch(), { SUMMARY_EMAIL_TRANSPORT: 'resend', RESEND_API_KEY: 'k', VERCEL_ENV: venv });
+      expect(r).toEqual({ ok: false, transport: 'resend', error: REFUSAL });
+      expect(mocks.ctor).not.toHaveBeenCalled();
+      expect(mocks.batchSend).not.toHaveBeenCalled();
+      expect(mocks.sql).not.toHaveBeenCalled();
+    });
+  }
+  it('resend with production runs the Resend path', async () => {
+    const r = await sendMail(batch(), { SUMMARY_EMAIL_TRANSPORT: 'resend', RESEND_API_KEY: 'k', VERCEL_ENV: 'production' });
+    expect(r).toEqual({ ok: true, transport: 'resend' });
+    expect(mocks.batchSend).toHaveBeenCalledTimes(1);
+  });
+  for (const value of ['resend\n', ' resend', 'RESEND']) {
+    it(`${JSON.stringify(value)} with production is not Resend: the outbox refuses in production`, async () => {
+      const r = await sendMail(batch(), { SUMMARY_EMAIL_TRANSPORT: value, RESEND_API_KEY: 'k', VERCEL_ENV: 'production' });
+      expect(r).toEqual({ ok: false, transport: 'outbox', error: 'The outbox transport does not run in production' });
+      expect(mocks.ctor).not.toHaveBeenCalled();
+      expect(mocks.sql).not.toHaveBeenCalled();
+    });
+  }
+  it('the variable absent with preview records to the outbox', async () => {
+    const r = await sendMail(batch(), { VERCEL_ENV: 'preview' });
+    expect(r).toEqual({ ok: true, transport: 'outbox' });
+    expect(mocks.sql).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('who may import resend', () => {
+  const ROOTS = ['app', 'lib', 'components', 'stores', 'hooks', 'scripts'];
+  const walk = (dir: string, out: string[] = []): string[] => {
+    let names: string[] = [];
+    try { names = readdirSync(dir); } catch { return out; }
+    for (const n of names) {
+      if (n === 'node_modules' || n === '.next' || n === '__tests__') continue;
+      const full = join(dir, n);
+      if (statSync(full).isDirectory()) walk(full, out);
+      else if (/\.(ts|tsx|js|mjs|cjs)$/.test(n) && !/\.test\.(ts|tsx)$/.test(n)) out.push(relative('.', full));
+    }
+    return out;
+  };
+  const files = ROOTS.flatMap((r) => walk(r));
+  const RESEND_IMPORT = /from\s+['"]resend['"]|require\(\s*['"]resend['"]\s*\)|import\(\s*['"]resend['"]\s*\)/;
+  const TRANSPORT_IMPORT = /import\(\s*['"](\.\/|@\/lib\/mail\/)resend-transport['"]\s*\)/;
+  it('only lib/email.ts and the Resend transport import resend', () => {
+    expect(files.length).toBeGreaterThan(50);
+    const hits = files.filter((f) => RESEND_IMPORT.test(readFileSync(f, 'utf8'))).sort();
+    expect(hits).toEqual(['lib/email.ts', 'lib/mail/resend-transport.ts']);
+  });
+  it('only lib/mail/send.ts dynamically imports the Resend transport', () => {
+    const hits = files.filter((f) => TRANSPORT_IMPORT.test(readFileSync(f, 'utf8')));
+    expect(hits).toEqual(['lib/mail/send.ts']);
   });
 });
 

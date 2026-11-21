@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Check, Circle, Clock, Trash2 } from 'lucide-react';
 import { cn } from '@/utils/cn';
-import { ownerChoice, ownerSelectModel } from '@/lib/agenda';
+import { ownerChoice, ownerSelectModel, topicLineText } from '@/lib/agenda';
 import { OWNER_LABEL, UNASSIGNED_LABEL } from '@/lib/constants/agenda';
 import type { ActionItem, ActionItemStatus, Participant } from '@/types';
 
@@ -97,8 +97,8 @@ export function ActionItemRow({ item, participants, onUpdate, onDelete, readOnly
         )}
 
         {topicLabel && (
-          <p title={`Topic: ${topicLabel}`} className="mt-0.5 truncate text-xs text-[var(--ink-3)]">
-            {`Topic: ${topicLabel}`}
+          <p title={topicLineText(topicLabel)} className="mt-0.5 truncate text-xs text-[var(--ink-3)]">
+            {topicLineText(topicLabel)}
           </p>
         )}
 
@@ -136,7 +136,7 @@ export function ActionItemRow({ item, participants, onUpdate, onDelete, readOnly
               readOnly ? 'cursor-default' : 'cursor-pointer hover:text-[var(--ink-2)]'
             )}
           >
-            <option value="">Unassigned</option>
+            <option value="">{UNASSIGNED_LABEL}</option>
             {participants.map((p) => (
               <option key={p.id} value={p.display_name}>
                 {p.display_name}

@@ -4,6 +4,7 @@ import {
   agendaVotesLabel, agendaCardsLabel, topicHeading, discussViewShown, topicFollowable, actionItemsForTopic,
   phaseTopic, topicActionOutcome, assignOutcome, setTopicOutcome,
   discussTopics, selectTopicAction, topicControls, ownerSelectModel, ownerChoice, topicLabelsByCard, topicLabelOf,
+  topicActionsEditable, topicLineText,
 } from '@/lib/agenda';
 import { TEXT_OWNER_VALUE } from '@/lib/constants/agenda';
 
@@ -252,5 +253,32 @@ describe('topicLabelsByCard', () => {
     expect(topicLabelOf(labels, undefined)).toBeNull();
     expect(topicLabelOf(labels, 'unknown')).toBeNull();
     expect(topicLabelOf(labels, 'r3')).toBeNull();
+  });
+});
+
+describe('topicActionsEditable', () => {
+  const b = (mode: 'open' | 'guided', phase: string | null, archived_at: string | null) => ({ mode, phase, archived_at }) as never;
+  it('is editable in Discuss for a person who joined', () => {
+    expect(topicActionsEditable(b('guided', 'discuss', null), true)).toBe(true);
+  });
+  it('is read-only for a viewer who has not joined', () => {
+    expect(topicActionsEditable(b('guided', 'discuss', null), false)).toBe(false);
+  });
+  it('is read-only in Done', () => {
+    expect(topicActionsEditable(b('guided', 'done', '2026-11-20T10:00:00Z'), true)).toBe(false);
+    expect(topicActionsEditable(b('guided', 'done', null), true)).toBe(false);
+  });
+  it('is read-only on a completed board whose phase data still says Discuss', () => {
+    expect(topicActionsEditable(b('guided', 'discuss', '2026-11-20T10:00:00Z'), true)).toBe(false);
+  });
+  it('is read-only on an open board and with no board', () => {
+    expect(topicActionsEditable(b('open', null, null), true)).toBe(false);
+    expect(topicActionsEditable(null, true)).toBe(false);
+  });
+});
+
+describe('topicLineText', () => {
+  it('prefixes the heading', () => {
+    expect(topicLineText('Deploys are slow')).toBe('Topic: Deploys are slow');
   });
 });

@@ -5,7 +5,7 @@ import { ActionItemRow } from '@/components/ActionItems/ActionItemRow';
 import { cn } from '@/utils/cn';
 import { useBoardStore } from '@/stores/boardStore';
 import { useDiscussStore } from '@/stores/discussStore';
-import { actionItemsForTopic, ownerChoice } from '@/lib/agenda';
+import { actionItemsForTopic, ownerChoice, topicActionsEditable } from '@/lib/agenda';
 import { commentEnterPosts, commentsWritable } from '@/lib/comments';
 import {
   ACTION_ITEMS_HEADING, ADD_ACTION_TEXT, NEW_ACTION_LABEL, NEW_ACTION_PLACEHOLDER, NO_OWNER_LABEL, OWNER_LABEL,
@@ -27,21 +27,60 @@ interface TopicActionsProps {
 }
 
 /**
- * The action items of one topic, and, while the board is in Discuss, a form to add one with an
- * owner picked from the board's people. Items are derived from the store on every render, never
- * copied, so another person's new item or owner change shows without a reload. Blur saves
- * nothing; Enter or the button creates.
+ * The action items of one topic, and, while they can be changed, a form to add one with an owner
+ * picked from the board's people. Items are derived from the store on every render, never copied,
+ * so another person's new item or owner change shows without a reload. Rows and form follow one
+ * rule (`topicActionsEditable`): Discuss, not completed, and the viewer has joined.
  */
 export function TopicActions({ rootId, cardIds }: TopicActionsProps) {
   const headingId = useId();
-  const uid = useId();
-  const problemId = `${uid}-problem`;
   const board = useBoardStore((s) => s.board);
   const actionItems = useBoardStore((s) => s.actionItems);
   const participants = useBoardStore((s) => s.participants);
   const joined = useBoardStore((s) => s.currentParticipantId) !== null;
   const updateActionItem = useBoardStore((s) => s.updateActionItem);
   const deleteActionItem = useBoardStore((s) => s.deleteActionItem);
+
+  const idsKey = cardIds.join('|');
+  const items: ActionItem[] = useMemo(() => actionItemsForTopic(actionItems, idsKey.split('|')), [actionItems, idsKey]);
+
+  if (!board) return null;
+  const editable = topicActionsEditable(board, joined);
+
+  return (
+    <section data-testid="topic-actions" aria-labelledby={headingId} className="mt-6 min-w-0 border-t border-[var(--line)] pt-4">
+      <h4 id={headingId} className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--ink-3)]">
+        {ACTION_ITEMS_HEADING}
+      </h4>
+      {/* Keyed on the phase: every phase change starts a fresh form (empty text, No owner, no message). */}
+      {editable && <TopicActionForm key={`${rootId}:${board.phase}`} rootId={rootId} />}
+      {items.length === 0 ? (
+        <p className="text-sm text-[var(--ink-3)]">{TOPIC_ACTIONS_EMPTY}</p>
+      ) : (
+        <div className="flex flex-col gap-2 [&_div.mt-1]:flex-wrap [&_p]:[overflow-wrap:anywhere]">
+          {items.map((item) => (
+            <ActionItemRow
+              key={item.id}
+              item={item}
+              participants={participants}
+              onUpdate={(id, updates) => { updateActionItem(id, updates).catch(() => {}); }}
+              onDelete={(id) => { deleteActionItem(id).catch(() => {}); }}
+              readOnly={!editable}
+              assigneeMode="participant"
+              onAssign={(id, participantId) => { useDiscussStore.getState().assignActionItem(id, participantId).catch(() => {}); }}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** The add form. It belongs to the phase it was mounted in; blur saves nothing, Enter or the button creates. */
+function TopicActionForm({ rootId }: { rootId: string }) {
+  const uid = useId();
+  const problemId = `${uid}-problem`;
+  const participants = useBoardStore((s) => s.participants);
   const clearWriteError = useBoardStore((s) => s.clearWriteError);
   const [openedIn] = useState(() => useBoardStore.getState().board?.phase ?? null);
   const [text, setText] = useState('');
@@ -50,14 +89,6 @@ export function TopicActions({ rootId, cardIds }: TopicActionsProps) {
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  const idsKey = cardIds.join('|');
-  const items: ActionItem[] = useMemo(() => actionItemsForTopic(actionItems, idsKey.split('|')), [actionItems, idsKey]);
-
-  if (!board) return null;
-  const writable = commentsWritable(board);
-  // The same rule the board-level panel uses: a completed board is read-only.
-  const readOnly = !!board.archived_at;
   const empty = text.trim() === '';
 
   const submit = () => {
@@ -94,72 +125,47 @@ export function TopicActions({ rootId, cardIds }: TopicActionsProps) {
   };
 
   return (
-    <section data-testid="topic-actions" aria-labelledby={headingId} className="mt-6 min-w-0 border-t border-[var(--line)] pt-4">
-      <h4 id={headingId} className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--ink-3)]">
-        {ACTION_ITEMS_HEADING}
-      </h4>
-      {writable && joined && (
-        <div className="mb-3 flex flex-col gap-2">
-          <input
-            ref={inputRef}
-            aria-label={NEW_ACTION_LABEL}
-            placeholder={NEW_ACTION_PLACEHOLDER}
-            value={text}
-            enterKeyHint="send"
-            aria-invalid={problem ? true : undefined}
-            aria-describedby={problem ? problemId : undefined}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (commentEnterPosts(e.key, false, e.nativeEvent.isComposing || e.keyCode === 229)) {
-                e.preventDefault();
-                submit();
-              }
-            }}
-            className={cn(FIELD, 'w-full placeholder:text-[var(--ink-4)]', problem && 'border-[var(--danger)]')}
-          />
-          <div className="flex gap-2">
-            <select
-              aria-label={OWNER_LABEL}
-              value={owner}
-              onChange={(e) => setOwner(e.target.value)}
-              className={cn(FIELD, 'min-w-0 flex-1 truncate')}
-            >
-              <option value="">{NO_OWNER_LABEL}</option>
-              {participants.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.display_name}
-                </option>
-              ))}
-            </select>
-            <button type="button" onClick={submit} disabled={empty || busy} aria-busy={busy || undefined} className={ADD_BUTTON}>
-              {ADD_ACTION_TEXT}
-            </button>
-          </div>
-          {problem && (
-            <p id={problemId} role="alert" className="text-sm text-[var(--danger)]">
-              {problem}
-            </p>
-          )}
-        </div>
-      )}
-      {items.length === 0 ? (
-        <p className="text-sm text-[var(--ink-3)]">{TOPIC_ACTIONS_EMPTY}</p>
-      ) : (
-        <div className="flex flex-col gap-2 [&_p]:[overflow-wrap:anywhere]">
-          {items.map((item) => (
-            <ActionItemRow
-              key={item.id}
-              item={item}
-              participants={participants}
-              onUpdate={(id, updates) => { updateActionItem(id, updates).catch(() => {}); }}
-              onDelete={(id) => { deleteActionItem(id).catch(() => {}); }}
-              readOnly={readOnly}
-              assigneeMode="participant"
-              onAssign={(id, participantId) => { useDiscussStore.getState().assignActionItem(id, participantId).catch(() => {}); }}
-            />
+    <div className="mb-3 flex flex-col gap-2">
+      <input
+        ref={inputRef}
+        aria-label={NEW_ACTION_LABEL}
+        placeholder={NEW_ACTION_PLACEHOLDER}
+        value={text}
+        enterKeyHint="send"
+        aria-invalid={problem ? true : undefined}
+        aria-describedby={problem ? problemId : undefined}
+        onChange={(e) => { setText(e.target.value); setProblem(null); }}
+        onKeyDown={(e) => {
+          if (commentEnterPosts(e.key, false, e.nativeEvent.isComposing || e.keyCode === 229)) {
+            e.preventDefault();
+            submit();
+          }
+        }}
+        className={cn(FIELD, 'w-full placeholder:text-[var(--ink-4)]', problem && 'border-[var(--danger)]')}
+      />
+      <div className="flex gap-2">
+        <select
+          aria-label={OWNER_LABEL}
+          value={owner}
+          onChange={(e) => { setOwner(e.target.value); setProblem(null); }}
+          className={cn(FIELD, 'min-w-0 flex-1 truncate')}
+        >
+          <option value="">{NO_OWNER_LABEL}</option>
+          {participants.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.display_name}
+            </option>
           ))}
-        </div>
+        </select>
+        <button type="button" onClick={submit} disabled={empty || busy} aria-busy={busy || undefined} className={ADD_BUTTON}>
+          {ADD_ACTION_TEXT}
+        </button>
+      </div>
+      {problem && (
+        <p id={problemId} role="alert" className="text-sm text-[var(--danger)]">
+          {problem}
+        </p>
       )}
-    </section>
+    </div>
   );
 }

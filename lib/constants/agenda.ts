@@ -34,3 +34,4 @@ export const ADD_ACTION_TEXT = 'Add';
 export const UNASSIGNED_LABEL = 'Unassigned';
 /** The value of the extra option that shows a free-text owner. It is never an owner a person can pick. */
 export const TEXT_OWNER_VALUE = '__text__';
+export const TOPIC_LINE_PREFIX = 'Topic: ';

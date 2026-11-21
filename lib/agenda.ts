@@ -1,7 +1,8 @@
 import { AGENDA_PHASE, FINAL_PHASE, GUIDED_MODE, type PhaseConfig, type PhaseId } from '@/lib/constants/phases';
 import { compareByCreated, isRootCard, visibleGroupTitle } from '@/lib/groups';
 import { groupScore, voteTotalsByCard } from '@/lib/votes';
-import { TEXT_OWNER_VALUE } from '@/lib/constants/agenda';
+import { TEXT_OWNER_VALUE, TOPIC_LINE_PREFIX } from '@/lib/constants/agenda';
+import { commentsWritable } from '@/lib/comments';
 import type { ActionItem, Board, Card, Participant, Vote } from '@/types';
 
 export interface AgendaItem {
@@ -264,4 +265,20 @@ export function topicLabelsByCard(
 /** The label of an action item's card, or null for an unlinked item or a card that is gone. */
 export function topicLabelOf(labels: ReadonlyMap<string, string>, cardId: string | null | undefined): string | null {
   return cardId == null ? null : labels.get(cardId) ?? null;
+}
+
+/**
+ * Whether the action items inside a topic can be changed: the board is writable for Discuss and
+ * the viewer has joined. It decides both the add form's visibility and the rows' `readOnly`.
+ */
+export function topicActionsEditable(
+  board: Pick<Board, 'mode' | 'phase' | 'archived_at'> | null,
+  joined: boolean,
+): boolean {
+  return joined && commentsWritable(board);
+}
+
+/** The line under an action item that names its topic. */
+export function topicLineText(label: string): string {
+  return `${TOPIC_LINE_PREFIX}${label}`;
 }

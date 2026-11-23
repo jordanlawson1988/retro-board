@@ -1,0 +1,562 @@
+<title>RetroBoard Against the Field</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    color-scheme: light;
+    --bg: oklch(0.985 0.004 80);
+    --surface: oklch(1 0 0);
+    --surface-muted: oklch(0.965 0.005 80);
+    --ink: oklch(0.18 0.015 260);
+    --ink-2: oklch(0.32 0.012 260);
+    --ink-3: oklch(0.50 0.012 260);
+    --line: oklch(0.90 0.008 80);
+    --line-strong: oklch(0.80 0.010 260);
+    --accent: #4a3aa7;
+    --accent-soft: oklch(0.95 0.04 280);
+    --bar-muted: #898781;
+    --have: #006300;
+    --have-soft: oklch(0.95 0.05 145);
+    --partial: #8a5a00;
+    --partial-soft: oklch(0.96 0.06 80);
+    --missing: #a33636;
+    --missing-soft: oklch(0.96 0.04 25);
+    --grid: #e1e0d9;
+    --shadow: 0 1px 2px oklch(0 0 0 / 0.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: oklch(0.155 0.012 260);
+      --surface: oklch(0.20 0.012 260);
+      --surface-muted: oklch(0.18 0.012 260);
+      --ink: oklch(0.97 0.005 80);
+      --ink-2: oklch(0.88 0.008 80);
+      --ink-3: oklch(0.72 0.008 260);
+      --line: oklch(0.28 0.012 260);
+      --line-strong: oklch(0.42 0.012 260);
+      --accent: #9085e9;
+      --accent-soft: oklch(0.30 0.08 280);
+      --bar-muted: #898781;
+      --have: #4fc34f;
+      --have-soft: oklch(0.28 0.06 145);
+      --partial: #e0a83a;
+      --partial-soft: oklch(0.30 0.06 80);
+      --missing: #e66767;
+      --missing-soft: oklch(0.30 0.06 25);
+      --grid: #2c2c2a;
+      --shadow: none;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: oklch(0.155 0.012 260);
+    --surface: oklch(0.20 0.012 260);
+    --surface-muted: oklch(0.18 0.012 260);
+    --ink: oklch(0.97 0.005 80);
+    --ink-2: oklch(0.88 0.008 80);
+    --ink-3: oklch(0.72 0.008 260);
+    --line: oklch(0.28 0.012 260);
+    --line-strong: oklch(0.42 0.012 260);
+    --accent: #9085e9;
+    --accent-soft: oklch(0.30 0.08 280);
+    --bar-muted: #898781;
+    --have: #4fc34f;
+    --have-soft: oklch(0.28 0.06 145);
+    --partial: #e0a83a;
+    --partial-soft: oklch(0.30 0.06 80);
+    --missing: #e66767;
+    --missing-soft: oklch(0.30 0.06 25);
+    --grid: #2c2c2a;
+    --shadow: none;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 16px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+  .prose { max-width: 72ch; }
+  header.masthead { padding: 56px 0 28px; border-bottom: 1px solid var(--line); }
+  .kicker { font-family: "Geist Mono", ui-monospace, monospace; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 14px; }
+  h1 { font-size: clamp(34px, 5vw, 52px); line-height: 1.05; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 16px; text-wrap: balance; }
+  .lede { font-size: 19px; line-height: 1.5; color: var(--ink-2); max-width: 64ch; margin: 0; }
+  .meta { margin-top: 22px; display: flex; flex-wrap: wrap; gap: 8px 28px; font-size: 14px; color: var(--ink-3); }
+  .meta span b { color: var(--ink-2); font-weight: 500; }
+
+  nav.toc { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); }
+  nav.toc .wrap { display: flex; gap: 4px 22px; overflow-x: auto; padding-top: 10px; padding-bottom: 10px; scrollbar-width: none; }
+  nav.toc a { white-space: nowrap; font-size: 14px; color: var(--ink-2); text-decoration: none; padding: 4px 0; border-bottom: 2px solid transparent; }
+  nav.toc a:hover { color: var(--ink); border-bottom-color: var(--line-strong); }
+
+  section { padding: 44px 0 8px; }
+  section + section { border-top: 1px solid var(--line); margin-top: 36px; }
+  h2 { font-size: 28px; line-height: 1.15; letter-spacing: -0.015em; font-weight: 650; margin: 0 0 18px; text-wrap: balance; }
+  h3 { font-size: 18px; font-weight: 600; margin: 30px 0 10px; }
+  p { margin: 0 0 14px; }
+  ul, ol { padding-left: 22px; margin: 0 0 16px; }
+  li { margin: 0 0 6px; }
+  li::marker { color: var(--ink-3); }
+  strong { font-weight: 600; }
+  .note { font-size: 14px; color: var(--ink-3); }
+
+  .callout { background: var(--accent-soft); border-left: 3px solid var(--accent); padding: 16px 20px; border-radius: 0 6px 6px 0; margin: 20px 0 24px; max-width: 72ch; }
+  .callout p { margin: 0; }
+  .callout p + p { margin-top: 10px; }
+
+  .three { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin: 18px 0 8px; }
+  .col h4 { margin: 0 0 8px; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .col ul { margin: 0; padding-left: 18px; font-size: 15px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .dot.have { background: var(--have); } .dot.partial { background: var(--partial); } .dot.missing { background: var(--missing); }
+
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+  th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+  th { font-weight: 600; color: var(--ink-2); font-size: 13px; letter-spacing: 0.02em; background: var(--surface-muted); position: sticky; top: 45px; }
+  tbody tr:hover td { background: var(--surface-muted); }
+  .tablewrap { overflow-x: auto; margin: 14px 0 20px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow); }
+  .tablewrap table th:first-child, .tablewrap table td:first-child { padding-left: 16px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12.5px; font-weight: 500; white-space: nowrap; }
+  .tag.have { background: var(--have-soft); color: var(--have); }
+  .tag.partial { background: var(--partial-soft); color: var(--partial); }
+  .tag.missing { background: var(--missing-soft); color: var(--missing); }
+  .tag.rare { background: var(--accent-soft); color: var(--accent); }
+  .conf { font-family: "Geist Mono", ui-monospace, monospace; font-size: 12px; color: var(--ink-3); }
+
+  figure.chart { margin: 18px 0 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 18px 18px 10px; box-shadow: var(--shadow); }
+  figure.chart figcaption { font-size: 14px; color: var(--ink-2); margin: 0 0 6px; }
+  figure.chart figcaption b { font-weight: 600; color: var(--ink); }
+  .chart-scroll { overflow-x: auto; }
+  svg.bars { display: block; width: 100%; min-width: 560px; height: auto; font-family: "Geist", system-ui, sans-serif; }
+  svg.bars text { fill: var(--ink-2); font-size: 13px; }
+  svg.bars text.val { fill: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+  svg.bars text.tick { fill: var(--ink-3); font-size: 12px; }
+  svg.bars line.grid { stroke: var(--grid); stroke-width: 1; }
+  svg.bars line.base { stroke: var(--line-strong); stroke-width: 1; }
+  svg.bars rect.bar { fill: var(--bar-muted); }
+  svg.bars rect.bar.me { fill: var(--accent); }
+  svg.bars g.row:hover rect.bar, svg.bars g.row:focus rect.bar { opacity: 0.8; }
+  svg.bars g.row { cursor: default; outline: none; }
+  svg.bars g.row:focus-visible rect.hit { stroke: var(--accent); stroke-width: 2; }
+  .tip { position: fixed; pointer-events: none; background: var(--ink); color: var(--bg); padding: 8px 10px; border-radius: 6px; font-size: 13px; line-height: 1.35; max-width: 260px; opacity: 0; transform: translateY(4px); transition: opacity 120ms; z-index: 20; }
+  .tip.show { opacity: 1; }
+  .tip b { display: block; font-size: 15px; font-weight: 600; }
+  @media (prefers-reduced-motion: reduce) { .tip { transition: none; } }
+  details.tv { margin: 8px 0 0; font-size: 14px; }
+  details.tv summary { cursor: pointer; color: var(--accent); }
+
+  .waves { display: grid; gap: 18px; margin: 12px 0 8px; }
+  .wave { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow); }
+  .wave header { padding: 14px 18px; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 16px; }
+  .wave header h3 { margin: 0; font-size: 17px; }
+  .wave header span { font-size: 13.5px; color: var(--ink-3); }
+  .wave table { font-size: 14px; }
+  .wave th { position: static; }
+  .wave td:last-child, .wave th:last-child { white-space: nowrap; }
+
+  ol.steps { counter-reset: s; list-style: none; padding: 0; margin: 12px 0 8px; max-width: 72ch; }
+  ol.steps li { counter-increment: s; display: grid; grid-template-columns: 34px 1fr; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--line); margin: 0; }
+  ol.steps li::before { content: counter(s); font-family: "Geist Mono", ui-monospace, monospace; font-size: 13px; color: var(--ink-3); padding-top: 2px; }
+  ol.steps li b { font-weight: 600; }
+
+  footer { padding: 36px 0 60px; color: var(--ink-3); font-size: 14px; border-top: 1px solid var(--line); margin-top: 40px; }
+  @media (max-width: 640px) {
+    header.masthead { padding-top: 36px; }
+    th, td { padding: 8px 8px; }
+    th { top: 0; }
+  }
+</style>
+
+<header class="masthead">
+  <div class="wrap">
+    <p class="kicker">Competitive gap analysis, September 4, 2026</p>
+    <h1>RetroBoard Against the Field</h1>
+    <p class="lede">What the leading retrospective tools ship in 2026, what buyers actually choose on, where RetroBoard falls short, and what to build so that $4.99 flat is the obvious pick.</p>
+    <div class="meta">
+      <span><b>30</b> tools profiled</span>
+      <span><b>4</b> research passes, roughly 140 page reads</span>
+      <span><b>60</b> capability rows compared</span>
+      <span>Prepared for Jordan Lawson</span>
+    </div>
+  </div>
+</header>
+
+<nav class="toc"><div class="wrap">
+  <a href="#bottom">Bottom line</a>
+  <a href="#standing">Where you stand</a>
+  <a href="#price">Price</a>
+  <a href="#buyers">What buyers choose on</a>
+  <a href="#gaps">The gaps</a>
+  <a href="#nobrainer">What "no-brainer" requires</a>
+  <a href="#plan">Build plan</a>
+  <a href="#next">Next steps</a>
+  <a href="#confidence">Confidence</a>
+</div></nav>
+
+<main class="wrap">
+
+<section id="bottom">
+  <div class="prose">
+  <h2>Bottom line</h2>
+  <p>RetroBoard is already the cheapest dedicated retro tool for a small team by a wide margin, and it has the in-meeting mechanics reviewers praise most: joining by link with no account, anonymous cards, hidden-until-reveal, secret voting, a synced timer. What it lacks is the second half of the category checklist. Everything that happens <em>after</em> the meeting (action follow-through, history, Jira, Slack), AI synthesis, and depth of templates and facilitation are all missing. Those are exactly the things people cite when they leave a tool, and in 2026 they show up in $10 tools and in some free tiers.</p>
+  <div class="callout">
+    <p><strong>"Everything" is the wrong target.</strong> The evidence points at about ten capabilities that decide selection for small teams. Ship those and the pitch writes itself: every table-stakes feature, no per-seat math, participants never sign up, boards never expire, $4.99 a month.</p>
+    <p>The enterprise rows (SSO, SCIM, audit logs, SOC 2) and the long tail (public API, whiteboard canvas, planning poker, native apps) can wait until a customer asks with a purchase order.</p>
+  </div>
+  <p>Sequence matters. Nothing in the gap list is required to start charging, so the paywall ships first. Wave 1 of the build plan follows in the same month and turns "cheap" into "obvious."</p>
+  </div>
+</section>
+
+<section id="standing">
+  <div class="prose">
+  <h2>Where RetroBoard stands today</h2>
+  <p>Checked against the <span class="mono">develop</span> branch on September 4, not the May feature tracker. Reviewers' favorite in-meeting mechanics are all present. The gaps cluster around what happens between meetings.</p>
+  </div>
+  <div class="three">
+    <div class="col">
+      <h4><span class="dot have"></span> Have</h4>
+      <ul>
+        <li>Join by link, no account, unlimited participants</li>
+        <li>Anonymous-card mode and secret voting</li>
+        <li>Cards hidden until the facilitator reveals</li>
+        <li>Dot voting with per-person limits, live vote sorting</li>
+        <li>Synced timer, board lock, card merge, emoji reactions</li>
+        <li>Four board views (grid, swimlane, list, timeline)</li>
+        <li>Action items with assignee, due date, status</li>
+        <li>Real-time presence, dark mode, mobile web</li>
+        <li>Personal dashboard, board roles, Markdown and CSV export</li>
+        <li>Boards never expire</li>
+      </ul>
+    </div>
+    <div class="col">
+      <h4><span class="dot partial"></span> Partial</h4>
+      <ul>
+        <li>Guided facilitation: the toggles exist, there is no one-click stage flow</li>
+        <li>History: boards persist per user, with no team view or trends</li>
+        <li>Async input: boards stay open, with no open window, reminders, or auto-reveal</li>
+        <li>Templates: four plus custom columns, and no way to save one</li>
+        <li>Share link: the join link doubles as the read-only link</li>
+      </ul>
+    </div>
+    <div class="col">
+      <h4><span class="dot missing"></span> Missing</h4>
+      <ul>
+        <li>AI summary, auto-grouping, suggested actions</li>
+        <li>Action-item carry-over across retros</li>
+        <li>Jira, Linear, GitHub, Azure DevOps push</li>
+        <li>Slack and Microsoft Teams</li>
+        <li>Icebreakers, check-ins, mood pulse, health check</li>
+        <li>Comments and mentions on cards, images on cards</li>
+        <li>PDF export, email summary</li>
+        <li>Google or Microsoft sign-in</li>
+        <li>Any language other than English</li>
+        <li>SSO, SCIM, audit logs, public API</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="price">
+  <div class="prose">
+  <h2>The price gap is real, and it is not a moat</h2>
+  <p>Monthly cost for an eight-person team on each tool's cheapest paid plan. Every dedicated tool with verified pricing lands between two and thirteen times RetroBoard's $4.99.</p>
+  </div>
+  <figure class="chart">
+    <figcaption><b>Eight-person team, cheapest paid plan, per month.</b> Hover or tab to a bar for the plan detail.</figcaption>
+    <div class="chart-scroll"><svg class="bars" id="priceChart" role="img" aria-label="Bar chart of monthly cost for an eight-person team across thirteen retrospective tools, RetroBoard lowest at $4.99 and Parabol highest at $64"></svg></div>
+    <details class="tv"><summary>Table view</summary>
+      <div class="tablewrap"><table id="priceTable"><thead><tr><th>Tool</th><th class="num">$/month</th><th>Plan and note</th></tr></thead><tbody></tbody></table></div>
+    </details>
+  </figure>
+  <div class="prose">
+  <p>Two readings of this chart matter more than the gap itself.</p>
+  <p><strong>The real competition below $10 is free.</strong> RetroTool's free plan already includes unlimited participants, secret voting, a timer, action items, and Markdown export. Mural's free plan includes voting, a timer, and private mode. Parabol gives two teams ten meetings a month for nothing, and Reetro meters out free AI summaries. What those free tiers withhold is history (7 to 30 days, or 12 months at RetroTool), facilitation depth, and integrations. That is the list RetroBoard has to win on, because price alone does not beat free.</p>
+  <p><strong>The benchmark above $10 is TeamRetro, not the famous names.</strong> At $20.83 it ships AI grouping and summaries, an AI assistant, Jira two-way sync, Slack and Teams publishing, health checks, eight UI languages, SOC 2, and it released something nearly every month of 2025 and 2026. EasyRetro ships small quality-of-life updates; Retrium and GoRetro show no product movement at all since 2023. The category is splitting into fast movers and stalled tools, and TeamRetro is the one to watch.</p>
+  </div>
+  <h3>Whiteboards a team may already pay for</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Incumbent</th><th class="num">8-person cost for voting, timer, private mode</th><th>Where it falls short for a retro</th></tr></thead>
+    <tbody>
+      <tr><td>Mural</td><td class="num">$0</td><td>All three are free. AI clustering needs Team+ at $9.99 a seat. No action tracking across sessions, no health trends.</td></tr>
+      <tr><td>FigJam</td><td class="num">$0</td><td>Timer and blind voting are free, but card authorship is never hidden at any price. AI sort needs a paid seat.</td></tr>
+      <tr><td>Miro</td><td class="num">$8 to $64</td><td>Starter includes timer, voting, private mode. One paid host plus free visitors, or eight named seats.</td></tr>
+      <tr><td>Lucidspark</td><td class="num">about $72</td><td>Persistent anonymity is Enterprise only. Guest editing model unconfirmed.</td></tr>
+      <tr><td>Jira and Confluence</td><td class="num">$0 plus a Marketplace app</td><td>The Confluence template is a static document. No native voting, timer, or private mode.</td></tr>
+      <tr><td>Azure DevOps extension</td><td class="num">about $18</td><td>Free Microsoft extension with voting and action roll-up, no timer or templates.</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note">None of the four whiteboards track action items across sessions, aggregate mood over time, or enforce facilitation phases. That is the wedge against "we just use Miro."</p>
+</section>
+
+<section id="buyers">
+  <div class="prose">
+  <h2>What buyers actually choose on</h2>
+  <p>Vendor checklists lie by omission. Capterra reviews, vendor changelogs, and independent guides tell a different story about what wins a team and what loses one. Reddit, G2, and TrustRadius blocked automated reads, so community sentiment is under-sampled here.</p>
+  </div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Selection driver</th><th>Evidence</th><th>RetroBoard today</th></tr></thead>
+    <tbody>
+      <tr><td>Ease of use, first retro in minutes</td><td><span class="conf">high</span> Most repeated theme across every vendor's reviews</td><td><span class="tag have">Have</span></td></tr>
+      <tr><td>Participants never sign up</td><td><span class="conf">high</span> as a market pattern; five vendors build their pitch on it</td><td><span class="tag have">Have</span></td></tr>
+      <tr><td>Fair, flat, per-team price</td><td><span class="conf">moderate-high</span> Cited verbatim in TeamRetro reviews; three vendors market against per-seat</td><td><span class="tag have">Have, best in class</span></td></tr>
+      <tr><td>Anonymous input, psychological safety</td><td><span class="conf">moderate-high</span> Independent mentions across three tools' reviews</td><td><span class="tag have">Have</span></td></tr>
+      <tr><td>History and action-item persistence</td><td><span class="conf">moderate</span> The sharpest churn complaint found ("we have to wipe the board clean")</td><td><span class="tag partial">Partial</span></td></tr>
+      <tr><td>Jira, Linear, GitHub integration depth</td><td><span class="conf">moderate</span> Loved when it works, a stated reason to leave when missing</td><td><span class="tag missing">Missing</span></td></tr>
+      <tr><td>Template variety and guided facilitation</td><td><span class="conf">moderate</span> Praised at EasyRetro, Retrium, TeamRetro</td><td><span class="tag partial">Partial</span></td></tr>
+      <tr><td>Responsive support</td><td><span class="conf">moderate</span> Emotionally strong praise for small vendors</td><td><span class="tag partial">Unstated</span></td></tr>
+      <tr><td>AI summaries and grouping</td><td><span class="conf">low-moderate</span> as a buyer reason, <span class="conf">high</span> as a vendor bet. Comparison pages score it; reviewers rarely cite it</td><td><span class="tag missing">Missing</span></td></tr>
+      <tr><td>Async-native workflow</td><td><span class="conf">low-moderate, rising</span> Clear unmet need in guides; TeamRetro building it now</td><td><span class="tag partial">Partial</span></td></tr>
+      <tr><td>Enterprise security (SSO, SOC 2)</td><td><span class="conf">low</span> for small teams. No reviewer cited it. A deal gate for large orgs only</td><td><span class="tag missing">Missing, defer</span></td></tr>
+    </tbody>
+  </table></div>
+  <div class="prose">
+  <p>Why teams leave, in order of how often it came up: no history, missing or broken integrations, price too high for the use case, action items tracked by hand outside the tool, clunky grouping, a free plan being removed, and limits on customizing columns.</p>
+  <p>The AI finding deserves a plain statement. Vendors are shipping AI as fast as they can, and it now appears in free tiers, so it has to be on the checklist. But almost nobody says they picked a tool because of it. One good summary plus suggested groups and suggested actions covers the checklist. Do not bet the product on an AI facilitator.</p>
+  </div>
+</section>
+
+<section id="gaps">
+  <div class="prose">
+  <h2>The gaps, row by row</h2>
+  <p>How common each capability is across the six leading dedicated tools (EasyRetro, Parabol, Retrium, TeamRetro, Neatro, Spreo) and the twelve smaller or newer ones, against what RetroBoard ships. "Field" counts confirmed presence only; unverified rows were not counted.</p>
+  </div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Capability</th><th>Field</th><th>RetroBoard</th><th>Read</th></tr></thead>
+    <tbody>
+      <tr><td>Participants join without an account</td><td>Universal</td><td><span class="tag have">Have</span></td><td>Keep as a headline, alongside price.</td></tr>
+      <tr><td>Anonymous cards, secret voting</td><td>5 of 6 leaders</td><td><span class="tag have">Have</span></td><td>Table stakes, covered.</td></tr>
+      <tr><td>Hide until reveal, timer, board lock</td><td>Common</td><td><span class="tag have">Have</span></td><td>Covered.</td></tr>
+      <tr><td>Dot voting with limits</td><td>4 of 6 leaders</td><td><span class="tag have">Have</span></td><td>Covered, with live sorting as a bonus.</td></tr>
+      <tr><td>Card grouping or merge</td><td>5 of 6 leaders, AI-assisted in 4</td><td><span class="tag have">Have, manual</span></td><td>Add AI-suggested groups.</td></tr>
+      <tr><td>Emoji reactions</td><td>About half</td><td><span class="tag have">Have</span></td><td>Covered.</td></tr>
+      <tr><td>Four board views</td><td>None</td><td><span class="tag rare">Rare, have</span></td><td>Demo it. Nobody else has it.</td></tr>
+      <tr><td>Dark mode</td><td>None verified</td><td><span class="tag rare">Rare, have</span></td><td>Market it.</td></tr>
+      <tr><td>Boards never expire</td><td>Free tiers expire in 7 to 30 days</td><td><span class="tag rare">Rare, have</span></td><td>A selling point against every free tier.</td></tr>
+      <tr><td>Action items with assignee, due, status</td><td>5 of 6 leaders</td><td><span class="tag have">Have</span></td><td>Covered.</td></tr>
+      <tr><td>Action-item carry-over across retros</td><td>Rare, but the top "retros go nowhere" complaint</td><td><span class="tag missing">Missing</span></td><td>Build. Primitives exist. Retro Rabbit built a company on this.</td></tr>
+      <tr><td>Push actions to Jira</td><td>6 of 6 leaders</td><td><span class="tag missing">Missing</span></td><td>Build. The universal filter checkbox.</td></tr>
+      <tr><td>Linear, GitHub, Azure DevOps push</td><td>Common in fast movers</td><td><span class="tag missing">Missing</span></td><td>Follow Jira through the same abstraction.</td></tr>
+      <tr><td>Slack and Teams</td><td>9 of 12 smaller tools</td><td><span class="tag missing">Missing</span></td><td>Build the cheap version: share summary and actions to a channel.</td></tr>
+      <tr><td>AI summary, grouping, suggested actions</td><td>5 of 6 leaders, 8 of 12 others, some free tiers</td><td><span class="tag missing">Missing</span></td><td>Build once, well, and stop.</td></tr>
+      <tr><td>Template library</td><td>20 to 275+</td><td><span class="tag partial">4 plus custom</span></td><td>Curate 25 to 30. Data only.</td></tr>
+      <tr><td>Save a board as a template</td><td>4 of 6 leaders</td><td><span class="tag missing">Missing</span></td><td>Neutralizes the template-count war.</td></tr>
+      <tr><td>Guided phases</td><td>4 of 6 leaders, most smaller tools</td><td><span class="tag partial">Toggles only</span></td><td>Compose existing primitives into one-click stages.</td></tr>
+      <tr><td>Icebreakers, check-ins</td><td>4 of 6 leaders</td><td><span class="tag missing">Missing</span></td><td>A question bank is a data file.</td></tr>
+      <tr><td>Mood pulse, health check</td><td>4 of 6 leaders</td><td><span class="tag missing">Missing</span></td><td>One 1-to-5 pulse per retro, trended on the dashboard.</td></tr>
+      <tr><td>Team spaces, history, trends</td><td>6 of 6 have teams, 5 have history</td><td><span class="tag partial">Per user only</span></td><td>Needed for history to become a durable advantage.</td></tr>
+      <tr><td>Async mode (open window, reminders)</td><td>Rising; native in the 2025 entrants</td><td><span class="tag partial">Partial</span></td><td>Wave 2.</td></tr>
+      <tr><td>Comments and mentions on cards</td><td>About half</td><td><span class="tag missing">Missing</span></td><td>Wave 2.</td></tr>
+      <tr><td>Images or GIFs on cards</td><td>Some, often paid</td><td><span class="tag missing">Missing</span></td><td>Wave 2, low effort.</td></tr>
+      <tr><td>PDF export</td><td>Common</td><td><span class="tag missing">Missing</span></td><td>Managers do not open the tool. One day of work.</td></tr>
+      <tr><td>Email summary to participants</td><td>2 of 6 leaders</td><td><span class="tag missing">Missing</span></td><td>Wave 2, Resend is already wired.</td></tr>
+      <tr><td>Google or Microsoft sign-in</td><td>Standard SaaS, unverified here</td><td><span class="tag missing">Missing</span></td><td>Half a day. Matters more now that creators must sign up.</td></tr>
+      <tr><td>UI languages</td><td>TeamRetro has 8; most have 1</td><td><span class="tag missing">English only</span></td><td>Your organic users are in Argentina, Germany, Spain, Russia. A differentiated bet with your own data behind it.</td></tr>
+      <tr><td>SSO, SCIM, audit logs, SOC 2</td><td>All leaders, top tier only</td><td><span class="tag missing">Missing</span></td><td>Defer until a buyer asks.</td></tr>
+      <tr><td>Public API, webhooks, Zapier</td><td>Rare (Kollabe, TeamRetro)</td><td><span class="tag missing">Missing</span></td><td>Defer.</td></tr>
+      <tr><td>Native mobile apps</td><td>None confirmed anywhere</td><td><span class="tag partial">Mobile web</span></td><td>Not a gap.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="nobrainer">
+  <div class="prose">
+  <h2>What "no-brainer" actually requires</h2>
+  <p>A team choosing a retro tool in late 2026 is comparing against a free whiteboard, a free tier that expires, or TeamRetro at $21. RetroBoard becomes the obvious answer when a facilitator can say all of the following without a caveat:</p>
+  <div class="callout">
+    <p>Participants never sign up. Anonymous cards and secret voting. AI summary and suggested groups. Actions go to Jira, and open ones roll into the next retro. Summary posts to Slack. 25 templates or build your own. PDF for the manager. History never expires. One flat $4.99 a month, however many people show up.</p>
+  </div>
+  <p>That sentence needs ten capabilities, not sixty. Here they are, in the order the evidence supports:</p>
+  <ol>
+    <li>AI retro summary, suggested groupings, suggested action items</li>
+    <li>Open-action carry-over into the next retro, plus an action tracker on the dashboard</li>
+    <li>Push action items to Jira, then Linear and GitHub through the same code path</li>
+    <li>Share summary and actions to Slack and Microsoft Teams</li>
+    <li>A curated library of 25 to 30 templates, and save-as-template</li>
+    <li>PDF export</li>
+    <li>Guided facilitation: one-click Write, Group, Vote, Discuss, Actions</li>
+    <li>Icebreaker question bank and a one-question mood pulse, trended over time</li>
+    <li>Team spaces with team history and recurring themes</li>
+    <li>Async mode: an open window, reminders, auto-reveal at meeting time</li>
+  </ol>
+  <p>Three conversion items cost almost nothing and belong in the same window: Google and Microsoft sign-in (creators now have to sign up before their first board), comparison pages and a trust page (every competitor runs "X alternative" pages; you have none), and a visible support promise. Support responsiveness is a stated reason people love small tools, and a one-person company can win it outright.</p>
+  <p>Localization is the one bet the field does not point to but your own database does. Four of your six real signups run retros in Spanish, German, or Russian. Only TeamRetro ships more than one language. Spanish and Portuguese first would be a differentiated move at low cost once the strings are extracted.</p>
+  <h3>Do not build these yet</h3>
+  <ul>
+    <li>SSO, SAML, SCIM, audit logs, SOC 2, data residency. Enterprise procurement gates, not small-team selection drivers. Revisit when a real buyer asks.</li>
+    <li>A public API, webhooks, Zapier. Rare even among the smaller tools.</li>
+    <li>A whiteboard canvas, planning poker, or standups. That is Spreo's and Kollabe's bundle fight, not yours.</li>
+    <li>Native mobile apps. Nobody has them; the mobile web overhaul is enough.</li>
+    <li>An AI that runs the meeting. Async Retro is pre-launch on that pitch, and no reviewer asked for it.</li>
+  </ul>
+  </div>
+</section>
+
+<section id="plan">
+  <div class="prose">
+  <h2>Build plan</h2>
+  <p>Effort is in focused developer days, subagent-driven, on top of the existing Next.js and Neon stack. Wave 1 fits in about three weeks of evenings and lands the month the paywall flips.</p>
+  </div>
+  <div class="waves">
+    <div class="wave">
+      <header><h3>Wave 1. Make it credible</h3><span>About 13 developer days. Ships the month the paywall goes live.</span></header>
+      <div class="tablewrap" style="border:0;border-radius:0;box-shadow:none;margin:0"><table>
+        <thead><tr><th>Item</th><th>Shape</th><th>Effort</th></tr></thead>
+        <tbody>
+          <tr><td>AI summary, suggested groups, suggested actions</td><td>Facilitator-triggered, one endpoint on the Claude API, results editable before they land on the board</td><td>3 days</td></tr>
+          <tr><td>Action carry-over and tracker</td><td>"Open from your last retro" panel at creation and in-board; dashboard list with completion rate</td><td>2 days</td></tr>
+          <tr><td>Jira Cloud push</td><td>OAuth connect, create issue from an action item, link back. Provider abstraction for Linear and GitHub next</td><td>3 days</td></tr>
+          <tr><td>Slack and Teams share</td><td>Incoming webhook per board or team: summary and actions on completion</td><td>1 day</td></tr>
+          <tr><td>Template library and save-as-template</td><td>25 to 30 curated formats as data; "Save this board as a template" for owners</td><td>2 days</td></tr>
+          <tr><td>PDF export</td><td>Server-rendered from the existing export data</td><td>1 day</td></tr>
+          <tr><td>Google and Microsoft sign-in</td><td>Better Auth social providers, kept alongside email</td><td>Half a day</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+    <div class="wave">
+      <header><h3>Wave 2. Make it the obvious choice</h3><span>About 20 developer days over the following six weeks.</span></header>
+      <div class="tablewrap" style="border:0;border-radius:0;box-shadow:none;margin:0"><table>
+        <thead><tr><th>Item</th><th>Shape</th><th>Effort</th></tr></thead>
+        <tbody>
+          <tr><td>Guided facilitation mode</td><td>One-click stages composed from hide, reveal, voting, timer, lock. Readiness check per stage</td><td>3 days</td></tr>
+          <tr><td>Icebreakers and mood pulse</td><td>Question bank, optional 1-to-5 pulse at open, trend on the team page</td><td>2 days</td></tr>
+          <tr><td>Team spaces, history, recurring themes</td><td>Group boards under a team; team page with past retros, open actions, pulse trend, recurring card themes</td><td>5 days</td></tr>
+          <tr><td>Async mode</td><td>Open window with a close time, Resend and Slack reminders, auto-reveal at meeting time</td><td>3 days</td></tr>
+          <tr><td>Comments, mentions, images on cards</td><td>Threaded comments, @name, image and GIF attachments</td><td>3 days</td></tr>
+          <tr><td>Email summary after completion</td><td>Optional participant emails, one Resend template</td><td>1 day</td></tr>
+          <tr><td>Localization, first languages</td><td>String extraction, then Spanish and Portuguese, then German and Russian</td><td>4 days</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+    <div class="wave">
+      <header><h3>Later, on demand</h3><span>Only when a customer asks, ideally with a purchase order.</span></header>
+      <div class="tablewrap" style="border:0;border-radius:0;box-shadow:none;margin:0"><table>
+        <tbody>
+          <tr><td>SSO and SAML, SCIM, audit logs, data residency, SOC 2</td><td>Enterprise gate, priced as its own plan</td><td>Weeks</td></tr>
+          <tr><td>Public API, webhooks, Zapier</td><td>After team spaces exist to scope keys</td><td>Days</td></tr>
+          <tr><td>Confluence and Notion export, annual plan, planning poker</td><td>Fast follows if usage data asks for them</td><td>Days each</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<section id="next">
+  <div class="prose">
+  <h2>Next steps</h2>
+  <p>The go-paid checklist from September 3 is unchanged. The price is now confirmed at $4.99 flat, unlimited boards and members. What this analysis adds is the build order that follows the flip.</p>
+  <ol class="steps">
+    <li><span><b>Confirm the two open paywall decisions.</b> Free tier: one active board (built) or one lifetime board (your August ask, recommended, half a day). Existing owners: comp all four into the allowlist or not (recommended not).</span></li>
+    <li><span><b>Start Paddle today.</b> Sandbox is instant. Submit the live account for verification the same day; it is the long pole, and the terms, privacy, and refund pages it needs are already live.</span></li>
+    <li><span><b>Resume the billing branch.</b> Rebase onto develop, then Tasks 5 through 13: Paddle client and webhook, entitlement endpoint, upgrade modal, pricing section, allowlist admin, email verification, sandbox end-to-end, banner, ship. About three developer days. Update the $3.99 copy in the terms and refund pages.</span></li>
+    <li><span><b>Brainstorm and plan Wave 1 item one in parallel.</b> The AI summary does not depend on billing, so its design and plan can run while Paddle verification is pending. Same for the Jira push.</span></li>
+    <li><span><b>Write the pricing and comparison copy from the eight-person math.</b> "$4.99 flat versus $21 to $64" and "participants never sign up" are the two lines every competitor's reviews say matter. Add a support promise and a trust page.</span></li>
+    <li><span><b>Flip when Paddle approves.</b> Seed the allowlist, merge to main, smoke on prod, buy Pro with a real card, refund yourself. Then ship Wave 1 in the same month.</span></li>
+  </ol>
+  </div>
+</section>
+
+<section id="confidence">
+  <div class="prose">
+  <h2>Confidence and sources</h2>
+  <p><strong>High confidence:</strong> pricing and features for TeamRetro, Neatro, Parabol, GoRetro, Kollabe, RetroTool, Mural, Miro, and FigJam, all read from primary pricing pages on September 4. The buyer-sentiment findings anchored on Capterra reviews and vendor changelogs (selection drivers, churn drivers, pricing psychology, the 2025 to 2026 launch list).</p>
+  <p><strong>Medium confidence:</strong> EasyRetro and Retrium, whose pricing pages block automated reads, so figures come from dated secondary sources. Reetro, where a dated source says $10 a month and an undated aggregator says $39. Retrium's AI features, which appear only in third-party listings and not on its own site.</p>
+  <p><strong>Low confidence:</strong> Spreo's dollar pricing (the page renders no numbers), Retros.work (site timed out), RetroBox pricing (inside Slack only), Async Retro (pre-launch). Neatro's SOC 2 status is contradicted between two sources. Community sentiment is under-sampled: Reddit, G2's pros-and-cons pages, and TrustRadius refused automated reads, so the "what people recommend" picture leans on dev.to posts and vendor comparison pages.</p>
+  <p><strong>Not verified for most tools:</strong> native mobile apps, dark mode, accessibility statements, keyboard shortcuts, social login. Treat "none verified" in those rows as unknown, not absent.</p>
+  <p class="note">Method: four parallel research passes (six leading dedicated tools; twelve smaller, chat-native, and new tools; whiteboards and suites; buyer sentiment and changelogs), about 140 page reads, a fixed 60-row capability taxonomy so results merge, then synthesis against the RetroBoard codebase. The full per-tool profiles, matrices, contradictions, and every source URL are in the four research files saved with this session.</p>
+  </div>
+</section>
+
+</main>
+
+<footer><div class="wrap">RetroBoard competitive gap analysis. Research date September 4, 2026. Prices are monthly, for an eight-person team, on each tool's cheapest paid plan, as published on that date.</div></footer>
+
+<div class="tip" id="tip" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  var data = [
+    { name: "RetroBoard", v: 4.99, note: "Flat. Unlimited boards and members, participants never sign up.", me: true },
+    { name: "RetroTool", v: 10, note: "Individual plan, per team. The free plan already covers eight people." },
+    { name: "Reetro", v: 10, note: "Pro, per team (dated source). An undated aggregator says $39." },
+    { name: "TeamRetro", v: 20.83, note: "Single Team, billed annually at $250. Monthly rate not published." },
+    { name: "Neatro", v: 23.20, note: "Premium, per team. Likely the annual rate." },
+    { name: "GoRetro", v: 29, note: "Premium, per team, annual billing." },
+    { name: "Kollabe", v: 29, note: "Premium, per space." },
+    { name: "Team O'clock", v: 30, note: "$3 per active member with a 10-member minimum." },
+    { name: "Retro Rabbit", v: 30, note: "Starter, flat. $40 with the AI tier." },
+    { name: "EasyRetro", v: 38, note: "Team, flat. Five boards a month." },
+    { name: "Retrium", v: 39, note: "Team, per Team Room. No free tier." },
+    { name: "Parabol", v: 64, note: "$8 per active user, the only true per-seat leader." }
+  ];
+  var svg = document.getElementById("priceChart");
+  var W = 900, rowH = 34, padL = 118, padR = 70, padT = 10, padB = 34;
+  var H = padT + data.length * rowH + padB;
+  var max = 70;
+  var plotW = W - padL - padR;
+  svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+  var ns = "http://www.w3.org/2000/svg";
+  function el(tag, attrs, text) {
+    var e = document.createElementNS(ns, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  var ticks = [0, 10, 20, 30, 40, 50, 60, 70];
+  ticks.forEach(function (t) {
+    var x = padL + (t / max) * plotW;
+    svg.appendChild(el("line", { "class": t === 0 ? "base" : "grid", x1: x, x2: x, y1: padT, y2: padT + data.length * rowH }));
+    svg.appendChild(el("text", { "class": "tick", x: x, y: H - 12, "text-anchor": "middle" }, "$" + t));
+  });
+  var tip = document.getElementById("tip");
+  function show(d, x, y) {
+    tip.textContent = "";
+    var b = document.createElement("b"); b.textContent = "$" + d.v.toFixed(2) + " a month";
+    var s = document.createElement("span"); s.textContent = d.name + ". " + d.note;
+    tip.appendChild(b); tip.appendChild(s);
+    tip.classList.add("show");
+    move(x, y);
+  }
+  function move(x, y) {
+    var r = tip.getBoundingClientRect();
+    var left = Math.min(x + 14, window.innerWidth - r.width - 8);
+    var top = Math.min(y + 14, window.innerHeight - r.height - 8);
+    tip.style.left = left + "px"; tip.style.top = top + "px";
+  }
+  function hide() { tip.classList.remove("show"); }
+  data.forEach(function (d, i) {
+    var y = padT + i * rowH;
+    var barH = 22, by = y + (rowH - barH) / 2;
+    var w = (d.v / max) * plotW;
+    var g = el("g", { "class": "row", tabindex: "0", role: "img", "aria-label": d.name + ", $" + d.v.toFixed(2) + " per month. " + d.note });
+    g.appendChild(el("rect", { "class": "hit", x: 0, y: y, width: W, height: rowH, fill: "transparent" }));
+    g.appendChild(el("text", { x: padL - 10, y: y + rowH / 2 + 4.5, "text-anchor": "end" }, d.name));
+    var path = "M" + padL + " " + by + " H" + (padL + w - 4) + " a4 4 0 0 1 4 4 V" + (by + barH - 4) + " a4 4 0 0 1 -4 4 H" + padL + " Z";
+    g.appendChild(el("path", { "class": "bar" + (d.me ? " me" : ""), d: path }));
+    g.appendChild(el("text", { "class": "val", x: padL + w + 8, y: y + rowH / 2 + 4.5 }, "$" + (d.v % 1 === 0 ? d.v.toFixed(0) : d.v.toFixed(2))));
+    g.addEventListener("pointerenter", function (e) { show(d, e.clientX, e.clientY); });
+    g.addEventListener("pointermove", function (e) { move(e.clientX, e.clientY); });
+    g.addEventListener("pointerleave", hide);
+    g.addEventListener("focus", function () { var r = g.getBoundingClientRect(); show(d, r.left + padL, r.top); });
+    g.addEventListener("blur", hide);
+    svg.appendChild(g);
+  });
+  var tb = document.querySelector("#priceTable tbody");
+  data.forEach(function (d) {
+    var tr = document.createElement("tr");
+    var t1 = document.createElement("td"); t1.textContent = d.name;
+    var t2 = document.createElement("td"); t2.className = "num"; t2.textContent = "$" + d.v.toFixed(2);
+    var t3 = document.createElement("td"); t3.textContent = d.note;
+    tr.appendChild(t1); tr.appendChild(t2); tr.appendChild(t3); tb.appendChild(tr);
+  });
+})();
+</script>

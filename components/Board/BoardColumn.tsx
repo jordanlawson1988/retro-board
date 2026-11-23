@@ -6,7 +6,7 @@ import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { ThumbsUp, Trash2, Palette, Unlink, Merge, MoreHorizontal } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { isMine } from '@/utils/isMine';
-import { displayCardText } from '@/utils/cardText';
+import { useCardText } from '@/hooks/useCardText';
 import { COLUMN_COLORS } from '@/utils/constants';
 import { RetroCard } from './RetroCard';
 import { SortableCard } from './SortableCard';
@@ -15,6 +15,9 @@ import { ColumnSortMenu } from './ColumnSortMenu';
 import { IconButton } from '@/components/common/IconButton';
 import { sortCards, effectiveCardSort } from '@/utils/sortCards';
 import { voteTotalsRevealed } from '@/lib/votePillPolicy';
+import { hasVotedOn, voteTotalsByCard, votesUsedBy } from '@/lib/votes';
+import { useBoardStore } from '@/stores/boardStore';
+import { GUIDED_MODE } from '@/lib/constants/phases';
 import type { Column, Card, Vote, Participant } from '@/types';
 
 interface BoardColumnProps {
@@ -118,6 +121,9 @@ export function BoardColumn({
   canDeleteColumn,
   participants = [],
 }: BoardColumnProps) {
+  // One primitive for the whole view (not per card): an open board answers false.
+  const guided = useBoardStore((s) => s.board?.mode === GUIDED_MODE);
+  const cardText = useCardText();
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -237,13 +243,7 @@ export function BoardColumn({
   );
 
   // Vote counts per card
-  const voteCountByCard = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const v of votes) {
-      map.set(v.card_id, (map.get(v.card_id) || 0) + 1);
-    }
-    return map;
-  }, [votes]);
+  const voteCountByCard = useMemo(() => voteTotalsByCard(votes), [votes]);
 
   // While vote sorting is suppressed (secret voting pending), nothing may
   // reorder on incoming votes — children included.
@@ -288,14 +288,13 @@ export function BoardColumn({
   const cardIds = useMemo(() => sortedCards.map((c) => c.id), [sortedCards]);
 
   const columnVoteCount = useMemo(
-    () => votes.filter((v) => cards.some((c) => c.id === v.card_id)).length,
-    [votes, cards]
+    () => cards.reduce((sum, c) => sum + (voteCountByCard.get(c.id) ?? 0), 0),
+    [voteCountByCard, cards]
   );
 
   const voteLimitReached = useMemo(() => {
     if (!currentParticipantId) return false;
-    const myVoteCount = votes.filter((v) => v.voter_id === currentParticipantId).length;
-    return myVoteCount >= maxVotesPerParticipant;
+    return votesUsedBy(votes, currentParticipantId) >= maxVotesPerParticipant;
   }, [votes, currentParticipantId, maxVotesPerParticipant]);
 
   const canMerge = !isCompleted && !boardLocked;
@@ -506,11 +505,10 @@ export function BoardColumn({
         <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
           {sortedCards.map((card) => {
             const children = childrenByParent.get(card.id) || [];
-            const cardVotes = votes.filter((v) => v.card_id === card.id);
             const childVotes = children.reduce(
               (sum, c) => sum + (voteCountByCard.get(c.id) || 0), 0
             );
-            const hasVoted = cardVotes.some((v) => v.voter_id === currentParticipantId);
+            const hasVoted = hasVotedOn(guided, votes, cards, card.id, currentParticipantId);
             const isExpanded = expandedCards.has(card.id);
             const showCombineZone = isDragActive && activeDragRootId !== card.id && canMerge
               && (activeDragId?.startsWith('child:') ? `child:${card.id}` !== activeDragId : true);
@@ -522,12 +520,12 @@ export function BoardColumn({
                   <div className="relative">
                     <RetroCard
                       id={card.id}
-                      text={displayCardText(card)}
+                      text={cardText(card)}
                       textHidden={card.text_hidden}
                       authorName={card.author_name}
                       authorId={card.author_id}
                       color={card.color}
-                      voteCount={cardVotes.length + childVotes}
+                      voteCount={(voteCountByCard.get(card.id) ?? 0) + childVotes}
                       hasVoted={hasVoted}
                       isAuthor={isMine(card, currentParticipantId)}
                       isObscured={isObscured}
@@ -587,7 +585,7 @@ export function BoardColumn({
                           <div className="[&_>_div]:p-2 [&_>_div]:text-xs [&_p]:text-xs">
                             <RetroCard
                               id={child.id}
-                              text={displayCardText(child)}
+                              text={cardText(child)}
                               textHidden={child.text_hidden}
                               authorName={child.author_name}
                               authorId={child.author_id}
@@ -605,6 +603,7 @@ export function BoardColumn({
                               isCompleted={isCompleted}
                               canMerge={false}
                               participants={participants}
+                              isChildCard
                             />
                           </div>
                         </div>

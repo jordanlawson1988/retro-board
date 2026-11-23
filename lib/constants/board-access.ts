@@ -6,3 +6,6 @@ export const BOARD_COMPLETED_ERROR = 'Board is completed';
 
 export const COMPLETED_CLOSED_MESSAGE =
   'This retro has been completed. It is no longer open to new participants.';
+
+/** The 401 text for a caller who has not joined the board. Shared by the server helpers and the client-safe guards. */
+export const JOIN_FIRST_ERROR = 'Join the board first';

@@ -13,9 +13,14 @@ export interface Board {
   archived_at: string | null;
   deleted_at: string | null;     // null = live; set when soft-deleted (in Trash)
   trust_version: 1 | 2;          // 1 = legacy client-trusted identity; 2 = signed participant sessions
+  mode: BoardMode;               // 'open' = classic board; 'guided' = phase-driven
+  phase: PhaseId | null;         // null on open boards
+  phase_config: PhaseConfig;
 }
 
 export type { BoardAccess } from '@/lib/constants/board-access';
+export type { BoardMode, PhaseId, PhaseConfig } from '@/lib/constants/phases';
+import type { BoardMode, PhaseId, PhaseConfig } from '@/lib/constants/phases';
 import type { CardVisibility, TimerStatus } from '@/lib/constants/board-settings';
 
 /** What the board GET returns as `board` to someone locked out of a completed board. */
@@ -57,6 +62,8 @@ export interface BoardSettings {
   anonymous_cards: boolean;
   timer: TimerState;
   highlighted_card_id: string | null;
+  /** Guided boards only; absent on open boards, read as 1. */
+  max_votes_per_card?: number;
 }
 
 export interface TimerState {
@@ -98,6 +105,7 @@ export interface Card {
   color: string | null;
   position: number;
   merged_with: string | null;
+  group_title?: string | null;   // guided boards only; shown on a lead card
   reactions: CardReactions;
   created_at: string;
   updated_at: string;
@@ -113,6 +121,7 @@ export interface Vote {
   card_id: string;
   board_id: string;
   voter_id: string;
+  count?: number;                // absent before migration 016; a row without it weighs 1
   created_at: string;
 }
 
@@ -128,6 +137,24 @@ export interface ActionItem {
   due_date: string | null;
   status: ActionItemStatus;
   created_at: string;
+  card_id?: string | null;                 // the Discuss topic's card; absent before migration 017
+  assignee_participant_id?: string | null; // absent before migration 017
+}
+
+// Comment types (guided Discuss)
+export interface Comment {
+  id: string;
+  board_id: string;
+  card_id: string;
+  parent_id: string | null;
+  author_participant_id: string | null; // null when anonymous, deleted, or the author left the board
+  author_name: string | null;           // null when anonymous or deleted
+  is_anonymous: boolean;
+  body: string;                         // '' on a deleted comment kept for its replies
+  created_at: string;
+  edited_at: string | null;
+  deleted_at: string | null;
+  is_mine?: boolean;                    // set by the shaper (lib/board-view.ts)
 }
 
 // Participant types

@@ -57,4 +57,9 @@ describe('validateSettingsPatch', () => {
     expect(err({ timer: 'idle' })).not.toBeNull();
     expect(err({ timer: null })).not.toBeNull();
   });
+
+  it('max_votes_per_card is a whole number from 1 to 12', () => {
+    for (const ok of [1, 3, 12]) expect(validateSettingsPatch({ max_votes_per_card: ok }).ok).toBe(true);
+    for (const bad of [0, 13, 2.5, '3', null]) expect(validateSettingsPatch({ max_votes_per_card: bad }).ok).toBe(false);
+  });
 });

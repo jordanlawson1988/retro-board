@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { isMine } from '@/utils/isMine';
-import { exportCardText, displayCardText, HIDDEN_CARD_PLACEHOLDER } from '@/utils/cardText';
+import { exportCardText, displayCardText, HIDDEN_CARD_PLACEHOLDER, hiddenCardPlaceholder } from '@/utils/cardText';
+import { BOARD_MODES, FIRST_PHASE, GUIDED_MODE, OPEN_MODE, PHASES } from '@/lib/constants/phases';
 import type { Card } from '@/types';
 
 const base: Card = {
@@ -41,5 +42,29 @@ describe('displayCardText', () => {
   });
   it('passes visible text through', () => {
     expect(displayCardText(base)).toBe('hello');
+  });
+});
+
+describe('hidden card wording by board mode', () => {
+  const hidden = { ...base, text: '', text_hidden: true };
+
+  it('a guided board says the text is hidden until the first phase ends, using the phase label', () => {
+    expect(hiddenCardPlaceholder(GUIDED_MODE)).toBe('Hidden until Reflect ends');
+    expect(hiddenCardPlaceholder(GUIDED_MODE)).toBe(`Hidden until ${PHASES[FIRST_PHASE].label} ends`);
+    expect(displayCardText(hidden, GUIDED_MODE)).toBe('Hidden until Reflect ends');
+  });
+  it('an open board keeps the original wording', () => {
+    expect(hiddenCardPlaceholder(OPEN_MODE)).toBe('Hidden until the facilitator reveals cards');
+    expect(displayCardText(hidden, OPEN_MODE)).toBe('Hidden until the facilitator reveals cards');
+  });
+  it('an unknown mode reads as open: omitted, undefined, null', () => {
+    expect(displayCardText(hidden)).toBe(HIDDEN_CARD_PLACEHOLDER);
+    expect(displayCardText(hidden, undefined)).toBe(HIDDEN_CARD_PLACEHOLDER);
+    expect(displayCardText(hidden, null)).toBe(HIDDEN_CARD_PLACEHOLDER);
+  });
+  it('a card whose text is not hidden returns its own text in every mode', () => {
+    for (const mode of BOARD_MODES) expect(displayCardText(base, mode)).toBe('hello');
+    expect(displayCardText(base)).toBe('hello');
+    expect(displayCardText(base, null)).toBe('hello');
   });
 });

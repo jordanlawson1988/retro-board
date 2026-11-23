@@ -18,6 +18,8 @@ import { MobileColumnTabs } from './MobileColumnTabs';
 import { MobileVoteTracker } from './MobileVoteTracker';
 import { MobileFAB } from './MobileFAB';
 import { MobileBottomNav } from './MobileBottomNav';
+import { PhaseStepper } from '@/components/Phase/PhaseStepper';
+import { usePhaseGates } from '@/hooks/usePhaseGates';
 import { computeMobileNavActive } from '@/lib/mobileNav';
 import { MobileCardComposerSheet } from './MobileCardComposerSheet';
 import { MobileMoreSheet } from './MobileMoreSheet';
@@ -26,7 +28,12 @@ import { RetroCard } from './RetroCard';
 import { ColumnSortMenu } from './ColumnSortMenu';
 import { sortCards, effectiveCardSort } from '@/utils/sortCards';
 import { isMine } from '@/utils/isMine';
-import { displayCardText } from '@/utils/cardText';
+import { hasVotedOn, leadCardVotes, voteSortKey, voteTotalsByCard, votesUsedBy } from '@/lib/votes';
+import { useCardText } from '@/hooks/useCardText';
+import { discussViewShown } from '@/lib/agenda';
+import { GUIDED_MODE, OPEN_MODE } from '@/lib/constants/phases';
+import { MobileDiscuss } from '@/components/Discuss';
+import { useTeamVotesLeft } from '@/hooks/useTeamVotesLeft';
 import type { Column, Card, Vote, ActionItem, CardReactions, Participant, CardSort, BoardSettings } from '@/types';
 
 interface MobileBoardShellProps {
@@ -107,6 +114,7 @@ export function MobileBoardShell({
   onCloseActionItems,
   onCompleteRetro,
 }: MobileBoardShellProps) {
+  const cardText = useCardText();
   const sortedColumns = useMemo(
     () => [...columns].sort((a, b) => a.position - b.position),
     [columns]
@@ -115,8 +123,15 @@ export function MobileBoardShell({
   const [activeColumnId, setActiveColumnId] = useState<string>(
     () => sortedColumns[0]?.id ?? ''
   );
+  const { guided, phase } = usePhaseGates();
+  const teamLeft = useTeamVotesLeft();
+  const stepperShown = guided && !!phase;
+  const discussShown = discussViewShown({ mode: guided ? GUIDED_MODE : OPEN_MODE, phase });
   const [moreOpen, setMoreOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
+  // A stable function: the sheet re-registers its Escape and Back handling whenever this changes,
+  // and a re-render while the sheet is open (a saved setting, a joiner) would then close it.
+  const closeMore = useCallback(() => setMoreOpen(false), []);
 
   // Keep activeColumnId valid when columns change (e.g., real-time add/delete)
   const safeActiveColumnId = useMemo(() => {
@@ -129,15 +144,12 @@ export function MobileBoardShell({
     [sortedColumns, safeActiveColumnId]
   );
 
-  const voteCountByCard = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const v of votes) map.set(v.card_id, (map.get(v.card_id) || 0) + 1);
-    return map;
-  }, [votes]);
+  const voteCountByCard = useMemo(() => voteTotalsByCard(votes), [votes]);
 
-  const voteCountFor = useCallback(
-    (id: string) => voteCountByCard.get(id) || 0,
-    [voteCountByCard]
+  // Sorted by the number each card shows: a guided lead's group score, an open card's own total.
+  const voteCountFor = useMemo(
+    () => voteSortKey(guided, cards, voteCountByCard),
+    [guided, cards, voteCountByCard]
   );
 
   // Root cards for the active column (no merged-children in top-level list).
@@ -156,9 +168,7 @@ export function MobileBoardShell({
 
   // Votes used by the current participant (derived from store votes array)
   const votesUsed = useMemo(
-    () => (currentParticipantId
-      ? votes.filter((v) => v.voter_id === currentParticipantId).length
-      : 0),
+    () => votesUsedBy(votes, currentParticipantId),
     [votes, currentParticipantId]
   );
 
@@ -184,9 +194,10 @@ export function MobileBoardShell({
 
       {/* Vote tracker row — only shown when voting is enabled and user has joined */}
       {votingEnabled && !!currentParticipantId && (
-        <MobileVoteTracker used={votesUsed} total={maxVotesPerParticipant} />
+        <MobileVoteTracker used={votesUsed} total={maxVotesPerParticipant} teamLeft={teamLeft} />
       )}
 
+      {discussShown ? <MobileDiscuss isFacilitator={isAdmin} /> : (<>
       {/* Column tab strip */}
       {sortedColumns.length > 0 && (
         <MobileColumnTabs
@@ -230,19 +241,18 @@ export function MobileBoardShell({
       <div className="flex-1 min-h-0 px-4 pt-3 pb-[calc(84px+var(--safe-bottom))] flex flex-col gap-2 overflow-y-auto overscroll-contain">
         {rootCards.length > 0 ? (
           rootCards.map((card) => {
-            const cardVotes = votes.filter((v) => v.card_id === card.id);
-            const hasVoted = cardVotes.some((v) => v.voter_id === currentParticipantId);
+            const hasVoted = hasVotedOn(guided, votes, cards, card.id, currentParticipantId);
 
             return (
               <RetroCard
                 key={card.id}
                 id={card.id}
-                text={displayCardText(card)}
+                text={cardText(card)}
                 textHidden={card.text_hidden}
                 authorName={card.author_name}
                 authorId={card.author_id}
                 color={card.color}
-                voteCount={cardVotes.length}
+                voteCount={leadCardVotes(guided, card.id, cards, voteCountByCard)}
                 votes={votes}
                 hasVoted={hasVoted}
                 isAuthor={isMine(card, currentParticipantId)}
@@ -286,10 +296,15 @@ export function MobileBoardShell({
         )}
       </div>
 
+      </>)}
+
       {/* FAB — only when card creation is allowed */}
       {fabVisible && (
         <MobileFAB onClick={() => setComposerOpen(true)} />
       )}
+
+      {/* Phase stepper — guided boards only, directly above the bottom nav */}
+      {stepperShown && <PhaseStepper isFacilitator={isAdmin} onCompleteRetro={onCompleteRetro} />}
 
       {/* Bottom nav — honest toolbar: active reflects which sheet is open */}
       <MobileBottomNav
@@ -308,7 +323,7 @@ export function MobileBoardShell({
       {/* More sheet */}
       <MobileMoreSheet
         open={moreOpen}
-        onClose={() => setMoreOpen(false)}
+        onClose={closeMore}
         boardTitle={boardTitle}
         joinCode={joinCode}
         participants={participants}

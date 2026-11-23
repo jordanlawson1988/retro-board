@@ -74,6 +74,26 @@ describe('board PATCH round-trip budget: 2 statements (context + one UPDATE)', (
     expect(mocks.publish.mock.calls[0][1]).not.toHaveProperty('refetch');
   });
 
+  it('open board settings patch: the statement text is pinned', async () => {
+    mocks.sql
+      .mockResolvedValueOnce([ctxRow()])
+      .mockResolvedValueOnce([{ title: 'T', description: null, settings: DEFAULT_BOARD_SETTINGS }]);
+    const res = await boardPatch(req('', { settings: { max_votes_per_participant: 4 } }), ctx);
+    expect(res.status).toBe(200);
+    expect((mocks.sql.mock.calls[1][0] as string[]).join('?')).toMatchInlineSnapshot(`
+      "
+          UPDATE boards SET
+            title = CASE WHEN ?::boolean THEN ?::text ELSE title END,
+            description = CASE WHEN ?::boolean THEN ?::text ELSE description END,
+            settings = CASE WHEN ?::boolean
+              THEN settings || ?::jsonb ELSE settings END
+          WHERE id = ?
+            AND (NOT ?::boolean OR (archived_at IS NULL AND deleted_at IS NULL))
+          RETURNING title, description, settings
+        "
+    `);
+  });
+
   it('invalid settings: 400 with zero queries', async () => {
     const res = await boardPatch(req('', { settings: { card_visibility: 'nope' } }), ctx);
     expect(res.status).toBe(400);

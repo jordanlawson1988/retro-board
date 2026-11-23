@@ -254,3 +254,49 @@ describe('boardAccessFrom mirrors decideBoardAccess for every truth-table row', 
     expect(boardAccessFrom((await loadBoardActor(req, 'b1', null, { claimedParticipantId: 'c' }))!).access).toBe('completed-closed');
   });
 });
+
+describe('loadBoardActor phase', () => {
+  it('guided board in group: state and board carry the phase', async () => {
+    mocks.sql.mockResolvedValue([ctxRow({ mode: 'guided', phase: 'group', phase_config: {} })]);
+    const l = await loadBoardActor(req, 'b1');
+    expect(mocks.sql).toHaveBeenCalledTimes(1);
+    expect(l?.state.phase).toBe('group');
+    expect(l?.board.mode).toBe('guided');
+    expect(l?.board.phase).toBe('group');
+  });
+  it('open board: state.phase is null', async () => {
+    mocks.sql.mockResolvedValue([ctxRow({ mode: 'open', phase: null, phase_config: {} })]);
+    const l = await loadBoardActor(req, 'b1');
+    expect(l?.state.phase).toBeNull();
+    expect(l?.board.mode).toBe('open');
+  });
+  it('open board ignores a stray phase value', async () => {
+    mocks.sql.mockResolvedValue([ctxRow({ mode: 'open', phase: 'vote' })]);
+    expect((await loadBoardActor(req, 'b1'))?.state.phase).toBeNull();
+  });
+  it('guided board with an invalid phase throws', async () => {
+    mocks.sql.mockResolvedValue([ctxRow({ mode: 'guided', phase: 'party' })]);
+    await expect(loadBoardActor(req, 'b1')).rejects.toThrow('Invalid phase for board');
+  });
+  it('guided board with a null phase throws', async () => {
+    mocks.sql.mockResolvedValue([ctxRow({ mode: 'guided', phase: null })]);
+    await expect(loadBoardActor(req, 'b1')).rejects.toThrow('Invalid phase for board');
+  });
+  it('unknown mode throws', async () => {
+    mocks.sql.mockResolvedValue([ctxRow({ mode: 'weird', phase: null })]);
+    await expect(loadBoardActor(req, 'b1')).rejects.toThrow('Invalid mode for board');
+  });
+  it('a row with no mode key (pre-015) is an open board', async () => {
+    mocks.sql.mockResolvedValue([ctxRow()]);
+    const l = await loadBoardActor(req, 'b1');
+    expect(l?.board.mode).toBe('open');
+    expect(l?.state.phase).toBeNull();
+    expect(l?.board.phase_config).toEqual({ deadline: null });
+  });
+  it('a row with no phase_config yields the default; a partial config merges over it', async () => {
+    mocks.sql.mockResolvedValue([ctxRow({ mode: 'guided', phase: 'reflect' })]);
+    expect((await loadBoardActor(req, 'b1'))?.board.phase_config).toEqual({ deadline: null });
+    mocks.sql.mockResolvedValue([ctxRow({ mode: 'guided', phase: 'reflect', phase_config: { deadline: '2026-12-01T00:00:00.000Z' } })]);
+    expect((await loadBoardActor(req, 'b1'))?.board.phase_config).toEqual({ deadline: '2026-12-01T00:00:00.000Z' });
+  });
+});

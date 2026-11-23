@@ -6,7 +6,11 @@ import { withJoinCodeRetry } from '@/lib/join-code-retry';
 import { rateLimitOr429 } from '@/lib/rate-limit';
 import { setParticipantCookie } from '@/lib/participant-session';
 import { readJsonObject } from '@/lib/request-body';
-import { validateNewBoard, INVALID_BODY } from '@/lib/board-validation';
+import { validateNewBoard, validateSettingsPatch, INVALID_BODY } from '@/lib/board-validation';
+import { canUse } from '@/lib/can-use';
+import { FIRST_PHASE, DEFAULT_PHASE_CONFIG, GUIDED_MODE } from '@/lib/constants/phases';
+import { phaseSettings } from '@/lib/phases';
+import { guidedVoteDefaults } from '@/lib/votes';
 
 export async function POST(request: Request) {
   const limited = await rateLimitOr429(request, 'board-create', 10, 3600);
@@ -16,11 +20,24 @@ export async function POST(request: Request) {
     if (!body) return NextResponse.json({ error: INVALID_BODY }, { status: 400 });
     const parsed = validateNewBoard(body);
     if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
-    const { id, title, description, template, settings, columns, participant } = parsed.value;
+    const { id, title, description, template, settings, columns, participant, mode } = parsed.value;
+
+    // A guided board derives its per-card limit from the per-person value, so the settings must be
+    // valid before anything else runs. Open creates keep storing the body as sent.
+    if (mode === GUIDED_MODE) {
+      const valid = validateSettingsPatch(settings);
+      if (!valid.ok) return NextResponse.json({ error: valid.error }, { status: 400 });
+    }
 
     // Get authenticated user if available (board creation works for both auth'd and anon users)
     const session = await getSessionOrNull();
     const ownerId = session?.user?.id ?? null;
+
+    // Guided mode is gated by a feature flag. A failed lookup throws into the catch below, so no
+    // board is created. Open boards never read feature_flags.
+    if (mode === GUIDED_MODE && !(await canUse('guided_mode', ownerId))) {
+      return NextResponse.json({ error: 'Guided mode is not available' }, { status: 403 });
+    }
 
     // The server owns the creator's participant id; the client's suggestion is ignored.
     const creatorId = nanoid();
@@ -32,7 +49,14 @@ export async function POST(request: Request) {
     // The creator is always the facilitator; any isAdmin hint in the body is ignored.
     const joinCode = await withJoinCodeRetry((joinCode) =>
       sqlTransaction((txn) => [
-        txn`
+        // Only the guided insert names the migration-015 columns, so an open create is unchanged
+        // and keeps working on a database that does not have them yet.
+        mode === GUIDED_MODE
+          ? txn`
+        INSERT INTO boards (id, title, description, template, created_by, owner_id, join_code, settings, trust_version, mode, phase, phase_config)
+        VALUES (${id}, ${title}, ${description}, ${template}, ${creatorId}, ${ownerId}, ${joinCode}, ${JSON.stringify({ ...settings, ...phaseSettings(FIRST_PHASE), ...guidedVoteDefaults(settings) })}, 2, ${mode}, ${FIRST_PHASE}, ${JSON.stringify(DEFAULT_PHASE_CONFIG)}::jsonb)
+      `
+          : txn`
         INSERT INTO boards (id, title, description, template, created_by, owner_id, join_code, settings, trust_version)
         VALUES (${id}, ${title}, ${description}, ${template}, ${creatorId}, ${ownerId}, ${joinCode}, ${JSON.stringify(settings)}, 2)
       `,

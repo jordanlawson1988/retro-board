@@ -2,12 +2,14 @@ import { describe, it, expect } from 'vitest';
 import {
   PUBLIC_VIEWER,
   shapeCard,
+  shapeComment,
+  shapeComments,
   shapeVotes,
   votesAreSecret,
   isRevealingChange,
   type ViewBoard,
 } from '@/lib/board-view';
-import type { BoardSettings, Card, Vote } from '@/types';
+import type { BoardSettings, Card, Comment, Vote } from '@/types';
 
 const baseSettings: BoardSettings = {
   card_visibility: 'visible',
@@ -261,5 +263,75 @@ describe('isRevealingChange', () => {
   });
   it('no change does not reveal', () => {
     expect(isRevealingChange(s({}), s({}))).toBe(false);
+  });
+});
+
+describe('group title shaping and secret vote counts', () => {
+  it('a withheld text also withholds the group title; a visible card or my own keeps it', () => {
+    const hidden = board({ settings: { card_visibility: 'hidden' } });
+    const c = card({ author_id: 'someone', group_title: 'Release pain' });
+    expect(shapeCard(c, hidden, { participantId: 'p1' }).group_title).toBeNull();
+    expect(shapeCard(c, board(), { participantId: 'p1' }).group_title).toBe('Release pain');
+    expect(shapeCard({ ...c, author_id: 'p1' }, hidden, { participantId: 'p1' }).group_title).toBe('Release pain');
+    expect('group_title' in shapeCard(card({ author_id: 'someone' }), hidden, { participantId: 'p1' })).toBe(false);
+  });
+  it('secret voting keeps my vote with its count and drops everyone else', () => {
+    const secret = board({ settings: { secret_voting: true } });
+    const votes = [
+      { id: 'v1', card_id: 'c1', board_id: 'b1', voter_id: 'p1', count: 2, created_at: 'x' },
+      { id: 'v2', card_id: 'c1', board_id: 'b1', voter_id: 'p2', count: 3, created_at: 'x' },
+    ];
+    expect(shapeVotes(votes, secret, { participantId: 'p1' })).toEqual([votes[0]]);
+  });
+});
+
+const comment = (over: Partial<Comment> = {}): Comment => ({ id: 'm1', board_id: 'b1', card_id: 'L', parent_id: null,
+  author_participant_id: 'p2', author_name: 'Bo', is_anonymous: false, body: 'hi', created_at: 'x', edited_at: null, deleted_at: null, ...over });
+
+describe('shapeComment', () => {
+  it('an anonymous comment carries no author to anyone, the facilitator included; its author sees is_mine', () => {
+    const anon = comment({ is_anonymous: true });
+    expect(shapeComment(anon, { participantId: 'p1' })).toMatchObject({ author_participant_id: null, author_name: null, is_mine: false });
+    expect(shapeComment(anon, { participantId: 'p2' })).toMatchObject({ author_participant_id: null, author_name: null, is_mine: true });
+    expect(shapeComment(anon, PUBLIC_VIEWER)).toMatchObject({ author_participant_id: null, author_name: null, is_mine: false });
+  });
+  it('a named comment keeps its author; a deleted one keeps nothing', () => {
+    expect(shapeComment(comment(), { participantId: 'p1' })).toMatchObject({ author_participant_id: 'p2', author_name: 'Bo', is_mine: false });
+    expect(shapeComment(comment(), { participantId: 'p2' })).toMatchObject({ author_participant_id: 'p2', author_name: 'Bo', is_mine: true });
+    expect(shapeComment(comment({ deleted_at: 'y', body: '' }), { participantId: 'p2' }))
+      .toMatchObject({ body: '', author_participant_id: null, author_name: null, is_mine: false });
+  });
+  it('a deleted comment is blanked whatever the row still holds', () => {
+    const gone = comment({ deleted_at: 'y', body: 'still here', is_anonymous: true });
+    expect(shapeComment(gone, { participantId: 'p2' })).toMatchObject({ body: '', author_participant_id: null, author_name: null, is_mine: false });
+  });
+  it('a comment whose author left has no author and is nobody\'s', () => {
+    const left = comment({ author_participant_id: null });
+    expect(shapeComment(left, { participantId: 'p2' })).toMatchObject({ author_participant_id: null, is_mine: false });
+    expect(shapeComment(left, PUBLIC_VIEWER).is_mine).toBe(false);
+  });
+  it('fails closed when is_anonymous is not exactly false', () => {
+    for (const bad of [undefined, null, 'false', 0, 'true']) {
+      const out = shapeComment(comment({ is_anonymous: bad as never }), { participantId: 'p1' });
+      expect(out).toMatchObject({ author_participant_id: null, author_name: null, is_anonymous: true });
+    }
+    expect(shapeComment(comment({ is_anonymous: undefined as never }), { participantId: 'p2' }).is_mine).toBe(true);
+    expect(shapeComment(comment({ is_anonymous: false }), PUBLIC_VIEWER).is_anonymous).toBe(false);
+  });
+  it('unknown keys never pass through', () => {
+    expect('secret' in shapeComment({ ...comment(), secret: 1 } as never, PUBLIC_VIEWER)).toBe(false);
+  });
+  it('returns exactly the Comment keys, and does not mutate its input', () => {
+    const input = comment({ is_anonymous: true });
+    const before = JSON.stringify(input);
+    expect(Object.keys(shapeComment(input, PUBLIC_VIEWER)).sort()).toEqual([
+      'author_name', 'author_participant_id', 'board_id', 'body', 'card_id', 'created_at', 'deleted_at',
+      'edited_at', 'id', 'is_anonymous', 'is_mine', 'parent_id',
+    ]);
+    expect(JSON.stringify(input)).toBe(before);
+  });
+  it('shapeComments shapes every item for the viewer', () => {
+    const out = shapeComments([comment({ is_anonymous: true }), comment({ id: 'm2' })], { participantId: 'p2' });
+    expect(out.map((c) => [c.id, c.is_mine, c.author_name])).toEqual([['m1', true, null], ['m2', true, 'Bo']]);
   });
 });

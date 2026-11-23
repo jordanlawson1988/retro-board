@@ -1,5 +1,6 @@
 // Lazy init, same pattern as lib/db.ts — never crash the build without env.
 import { Resend } from 'resend';
+import { EMAIL_FROM } from '@/lib/constants/email';
 
 let _resend: Resend | null = null;
 
@@ -15,7 +16,7 @@ function getResend(): Resend {
 
 export async function sendPasswordResetEmail(to: string, url: string) {
   await getResend().emails.send({
-    from: 'RetroBoard <noreply@retroboard.live>',
+    from: EMAIL_FROM,
     to,
     subject: 'Reset your RetroBoard password',
     text: [

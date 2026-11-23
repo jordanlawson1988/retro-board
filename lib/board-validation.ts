@@ -1,10 +1,12 @@
 import { ACTION_ITEM_STATUSES } from '@/types';
 import type { BoardSettings } from '@/types';
 import { isPlainObject } from '@/lib/request-body';
+import { isBoardMode, OPEN_MODE, type BoardMode } from '@/lib/constants/phases';
 import {
   CARD_VISIBILITIES,
   TIMER_STATUSES,
   MAX_VOTES_PER_PARTICIPANT_RANGE,
+  MAX_VOTES_PER_CARD_RANGE,
   TIMER_MAX_SECONDS,
   HIGHLIGHTED_ID_MAX,
 } from '@/lib/constants/board-settings';
@@ -18,6 +20,12 @@ export const TEXT_MAX = 2000;
 const DISPLAY_NAME_ERROR = `Display name must be 1–${DISPLAY_NAME_MAX} characters`;
 const CARD_TEXT_ERROR = `Card text must be 1–${TEXT_MAX} characters`;
 export const INVALID_BODY = 'Invalid request body';
+export const INVALID_ASSIGNEE = 'Invalid assignee';
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export function isUuid(v: unknown): v is string {
+  return typeof v === 'string' && UUID_PATTERN.test(v);
+}
 
 /** Longest id accepted for boards and for client-generated card/column ids. */
 export const ID_MAX_LENGTH = 64;
@@ -78,7 +86,7 @@ export function validateActionItemUpdates(u: Record<string, unknown>): Validatio
     const d = validateActionItemDescription(u.description);
     if (!d.ok) return d;
   }
-  if (u.assignee !== undefined && !isStringOrNull(u.assignee)) return bad('Invalid assignee');
+  if (u.assignee !== undefined && !isStringOrNull(u.assignee)) return bad(INVALID_ASSIGNEE);
   if (u.due_date !== undefined && !isStringOrNull(u.due_date)) return bad('Invalid due_date');
   if (
     u.status !== undefined &&
@@ -117,13 +125,17 @@ function validTimer(v: unknown): boolean {
  * One checker per key of BoardSettings. Typing the table by the interface means a new setting
  * fails to compile until it is listed here; the unit test then proves every default passes.
  */
-const SETTING_CHECKS: { [K in keyof BoardSettings]: (v: unknown) => boolean } = {
+const SETTING_CHECKS: { [K in keyof BoardSettings]-?: (v: unknown) => boolean } = {
   card_visibility: (v) => (CARD_VISIBILITIES as readonly unknown[]).includes(v),
   voting_enabled: isBool,
   max_votes_per_participant: (v) =>
     Number.isInteger(v) &&
     (v as number) >= MAX_VOTES_PER_PARTICIPANT_RANGE.min &&
     (v as number) <= MAX_VOTES_PER_PARTICIPANT_RANGE.max,
+  max_votes_per_card: (v) =>
+    Number.isInteger(v) &&
+    (v as number) >= MAX_VOTES_PER_CARD_RANGE.min &&
+    (v as number) <= MAX_VOTES_PER_CARD_RANGE.max,
   secret_voting: isBool,
   board_locked: isBool,
   card_creation_disabled: isBool,
@@ -151,6 +163,7 @@ export interface NewBoardInput {
   settings: Record<string, unknown>;
   columns: { id: string; title: string; description: string | null; color: string; position: number }[];
   participant: { displayName: string } | null;
+  mode: BoardMode;
 }
 
 const MAX_COLUMNS = 20;
@@ -165,6 +178,8 @@ export function validateNewBoard(
   if (!isString(b.template)) return { ok: false, error: 'Invalid template' };
   if (!isPlainObject(b.settings)) return { ok: false, error: 'Invalid settings' };
   if (!Array.isArray(b.columns) || b.columns.length > MAX_COLUMNS) return { ok: false, error: 'Invalid columns' };
+  if (b.mode !== undefined && !isBoardMode(b.mode)) return { ok: false, error: 'Invalid mode' };
+  const mode: BoardMode = b.mode === undefined ? OPEN_MODE : (b.mode as BoardMode);
 
   const columns: NewBoardInput['columns'] = [];
   for (const c of b.columns as unknown[]) {
@@ -206,6 +221,7 @@ export function validateNewBoard(
       settings: b.settings,
       columns,
       participant,
+      mode,
     },
   };
 }

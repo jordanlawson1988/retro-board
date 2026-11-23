@@ -3,14 +3,28 @@ import { ablyServer } from '@/lib/ably-server';
 import { NextRequest, NextResponse } from 'next/server';
 import { loadBoardActor, guardResponse, BOARD_NOT_FOUND, type LoadedBoard } from '@/lib/board-actor';
 import { checkAction } from '@/lib/board-guards';
-import { shapeCard, shapeVotes, isRevealingChange, PUBLIC_VIEWER, type ViewBoard } from '@/lib/board-view';
+import { shapeCard, shapeVotes, shapeComments, isRevealingChange, PUBLIC_VIEWER, type ViewBoard } from '@/lib/board-view';
+import { commentsReadable } from '@/lib/comments';
 import { DEFAULT_BOARD_SETTINGS } from '@/utils/constants';
-import type { BoardSettings, Card, Vote } from '@/types';
+import type { BoardSettings, Card, Comment, Vote } from '@/types';
 import { readJsonObject, isPlainObject } from '@/lib/request-body';
 import { INVALID_BODY, validateSettingsPatch } from '@/lib/board-validation';
 import { patchNeedsSettingsGuard, resolveYouAre } from '@/lib/board-write-rules';
 import { boardAccessFrom } from '@/lib/board-access-loader';
-import { BOARD_ACCESS } from '@/lib/constants/board-access';
+import { BOARD_ACCESS, BOARD_COMPLETED_ERROR } from '@/lib/constants/board-access';
+import { scheduleSummaryEmail } from '@/lib/summary-email/schedule';
+import { REOPEN_PHASE, FINAL_PHASE, GUIDED_MODE, type PhaseId } from '@/lib/constants/phases';
+import { phaseSettings, phaseOwnedKeysIn } from '@/lib/phases';
+import { OPEN_MAX_VOTES_PER_CARD } from '@/lib/constants/board-settings';
+import {
+  CARD_LIMIT_OPEN_ERROR,
+  hasLimitKey,
+  limitRefusal,
+  sumVoteCounts,
+  voteLimitProblem,
+  voteLockKey,
+  type VoteTally,
+} from '@/lib/votes';
 import {
   getSessionOrNull,
   assertCanFacilitate,
@@ -57,6 +71,14 @@ export async function GET(
     archived_at: loadedAny.board.archived_at,
   };
 
+  // Mode and phase come from the normalised actor load, so a row from before migration 015
+  // reads as an open board.
+  const modeFields = {
+    mode: loadedAny.board.mode,
+    phase: loadedAny.board.phase,
+    phase_config: loadedAny.board.phase_config,
+  };
+
   // Who may see this board's content and action items (Rules A and B). One shared decision,
   // computed from the row already loaded (no extra query).
   // v1 limitation: identity is the claimed `pid` query value, so on legacy boards anyone who
@@ -83,14 +105,19 @@ export async function GET(
     });
   }
 
+  // Comments are read only on a guided board in a phase that shows them, decided here in
+  // TypeScript so an open board's transaction never names the comments table.
+  const readComments = loadedAny.board.mode === GUIDED_MODE && commentsReadable(loadedAny.board);
+
   // One read-only snapshot transaction: a single round-trip and a consistent view.
-  const [columns, cards, votes, actionItems, participants] = await sqlTransaction(
+  const [columns, cards, votes, actionItems, participants, commentRows] = await sqlTransaction(
     (txn) => [
       txn`SELECT * FROM columns WHERE board_id = ${boardId} ORDER BY position, created_at, id`,
       txn`SELECT * FROM cards WHERE board_id = ${boardId} ORDER BY position, created_at, id`,
       txn`SELECT * FROM votes WHERE board_id = ${boardId}`,
       txn`SELECT * FROM action_items WHERE board_id = ${boardId} ORDER BY created_at`,
       txn`SELECT * FROM participants WHERE board_id = ${boardId}`,
+      ...(readComments ? [txn`SELECT * FROM comments WHERE board_id = ${boardId} ORDER BY created_at, id`] : []),
     ],
     { readOnly: true, isolationLevel: 'RepeatableRead' }
   );
@@ -120,8 +147,19 @@ export async function GET(
         : PUBLIC_VIEWER
       : { participantId: yourParticipantId };
 
+  // The team's votes used, summed from the rows already read and BEFORE shaping, so it counts
+  // everyone's votes even while they are secret. Guided boards only. `at: 0` marks a snapshot;
+  // any later vote-tally event or vote response replaces it.
+  const voteTally: VoteTally | null =
+    loadedAny.board.mode === GUIDED_MODE ? { used: sumVoteCounts(votes as unknown as Vote[]), at: 0 } : null;
+
   return NextResponse.json({
-    board,
+    board: { ...board, ...modeFields },
+    ...(voteTally ? { voteTally } : {}),
+    // Guided boards only: shaped for this viewer; an anonymous comment never carries its author.
+    ...(loadedAny.board.mode === GUIDED_MODE
+      ? { comments: shapeComments((commentRows ?? []) as unknown as Comment[], viewer) }
+      : {}),
     columns,
     cards: (cards as unknown as Card[]).map((c) => shapeCard(c, viewBoard, viewer)),
     votes: shapeVotes(votes as unknown as Vote[], viewBoard, viewer),
@@ -164,13 +202,28 @@ export async function PATCH(
   }
 
   let prevSettings: BoardSettings | null = null;
+  let guardedLimitPatch = false;
   if (patchNeedsSettingsGuard(body)) {
     // Settings changes go through the actor so a v2 creator without an account can change them.
     const loaded = await loadBoardActor(request, boardId);
     if (!loaded) return BOARD_NOT_FOUND();
     const denied = guardResponse(checkAction('board.settings', loaded.actor, loaded.state));
     if (denied) return denied;
+    // On a guided board the phase owns these settings; the phase route changes them.
+    if (loaded.board.mode === GUIDED_MODE && settingsPatch !== null && phaseOwnedKeysIn(settingsPatch).length > 0) {
+      return NextResponse.json({ error: 'This setting follows the phase on a guided board' }, { status: 409 });
+    }
     prevSettings = loaded.state.settings;
+    if (settingsPatch !== null) {
+      if (loaded.board.mode !== GUIDED_MODE && 'max_votes_per_card' in settingsPatch) {
+        return NextResponse.json({ error: CARD_LIMIT_OPEN_ERROR }, { status: 409 });
+      }
+      if (loaded.board.mode === GUIDED_MODE && hasLimitKey(settingsPatch)) {
+        const problem = voteLimitProblem(loaded.state.settings, settingsPatch);
+        if (problem) return NextResponse.json({ error: problem }, { status: 400 });
+        guardedLimitPatch = true;
+      }
+    }
   } else {
     // Rename / description only: signed-in facilitator authority (owner, facilitator member,
     // system admin), read from the same one-query context. Facilitators may still rename a
@@ -189,9 +242,66 @@ export async function PATCH(
     return NextResponse.json({ ok: true });
   }
 
+  let guardedRow: Record<string, unknown> | null = null;
+  if (guardedLimitPatch && settingsPatch !== null) {
+    // A vote limit may not drop below what has already been spent. The check and the update are
+    // one statement, run under the same per-board lock a guided vote takes, so a vote cannot
+    // commit between the read and the write. Title and description handling matches the plain
+    // statement below. One transaction batch is one round-trip.
+    const limitPerPerson = settingsPatch.max_votes_per_participant ?? null;
+    const limitPerCard = settingsPatch.max_votes_per_card ?? null;
+    const [, guardedRows] = await sqlTransaction((txn) => [
+      txn`SELECT pg_advisory_xact_lock(hashtext(${voteLockKey(boardId)}))`,
+      txn`
+        WITH spent AS (
+          SELECT COALESCE(MAX(per_voter), 0)::int AS max_spent
+          FROM (SELECT SUM(count) AS per_voter FROM votes WHERE board_id = ${boardId} GROUP BY voter_id) s
+        ), top AS (
+          SELECT COALESCE(MAX(per_group), 0)::int AS max_on_card FROM (
+            SELECT SUM(v.count) AS per_group
+            FROM votes v JOIN cards c ON c.id = v.card_id AND c.board_id = v.board_id
+            WHERE v.board_id = ${boardId}
+            GROUP BY v.voter_id, COALESCE(c.merged_with, c.id)
+          ) g
+        ), updated AS (
+          UPDATE boards SET
+            title = CASE WHEN ${hasTitle}::boolean THEN ${title}::text ELSE title END,
+            description = CASE WHEN ${hasDescription}::boolean THEN ${description}::text ELSE description END,
+            settings = settings || ${JSON.stringify(settingsPatch)}::jsonb
+          WHERE id = ${boardId} AND archived_at IS NULL AND deleted_at IS NULL
+            AND (${limitPerPerson}::int IS NULL OR ${limitPerPerson}::int >= (SELECT max_spent FROM spent))
+            AND (${limitPerCard}::int IS NULL OR ${limitPerCard}::int >= (SELECT max_on_card FROM top))
+            AND COALESCE(${limitPerCard}::int, (settings ->> 'max_votes_per_card')::int, ${OPEN_MAX_VOTES_PER_CARD}::int)
+              <= COALESCE(${limitPerPerson}::int, (settings ->> 'max_votes_per_participant')::int, ${DEFAULT_BOARD_SETTINGS.max_votes_per_participant}::int)
+          RETURNING title, description, settings
+        )
+        SELECT u.title, u.description, u.settings, spent.max_spent, top.max_on_card
+        FROM spent CROSS JOIN top LEFT JOIN updated u ON true
+      `,
+    ]);
+    const result = (guardedRows as unknown as Record<string, unknown>[] | undefined)?.[0];
+    if (!result || result.settings === null || result.settings === undefined) {
+      return NextResponse.json(
+        {
+          error: limitRefusal({
+            perPerson: limitPerPerson,
+            perCard: limitPerCard,
+            maxSpent: Number(result?.max_spent ?? 0),
+            maxOnCard: Number(result?.max_on_card ?? 0),
+          }),
+        },
+        { status: 409 }
+      );
+    }
+    guardedRow = result;
+  }
+
   // One atomic statement. Settings merge key by key (nested values such as `timer` are replaced
   // whole per top-level key), so concurrent changes to different keys cannot undo each other.
-  const [row] = await sql`
+  // A guarded limit change already ran its own statement above.
+  const [row] = guardedRow
+    ? [guardedRow]
+    : await sql`
     UPDATE boards SET
       title = CASE WHEN ${hasTitle}::boolean THEN ${title}::text ELSE title END,
       description = CASE WHEN ${hasDescription}::boolean THEN ${description}::text ELSE description END,
@@ -250,35 +360,65 @@ export async function POST(
     if (denied) return denied;
     const archivedAt = new Date().toISOString();
     // Merge in the database so a settings change committed since the load is not undone.
-    const [done] = await sql`
+    // A guided board also moves to its final phase and takes that phase's settings. Only the
+    // guided statement names `phase`, so an open board's statement is unchanged.
+    const guidedBoard = loaded.board.mode === GUIDED_MODE;
+    const phase: PhaseId | null = guidedBoard ? FINAL_PHASE : null;
+    const [done] = guidedBoard
+      ? await sql`
+      UPDATE boards SET archived_at = ${archivedAt}, phase = ${FINAL_PHASE},
+        settings = settings || ${JSON.stringify(phaseSettings(FINAL_PHASE))}::jsonb,
+        phase_config = phase_config || '{"deadline":null,"topic":null}'::jsonb
+      WHERE id = ${boardId} AND archived_at IS NULL
+      RETURNING settings
+    `
+      : await sql`
       UPDATE boards SET archived_at = ${archivedAt},
         settings = settings || '{"card_visibility":"visible","board_locked":true}'::jsonb
       WHERE id = ${boardId}
       RETURNING settings
     `;
+    // A guided board that finds no row lost a race with another completion.
+    if (!done && guidedBoard) return NextResponse.json({ error: BOARD_COMPLETED_ERROR }, { status: 409 });
     if (!done) return BOARD_NOT_FOUND();
     const settings = { ...DEFAULT_BOARD_SETTINGS, ...(done.settings as Partial<BoardSettings>) };
-    await channel.publish('board-completed', { archivedAt, settings, refetch: true });
+    // Guided boards only. completedAt is the exact archivedAt string written above, never read back.
+    if (guidedBoard) scheduleSummaryEmail({ boardId, completedAt: archivedAt });
+    await channel.publish('board-completed', { archivedAt, settings, phase, refetch: true });
     return NextResponse.json({ ok: true });
   }
 
   if (action === 'reopen') {
+    let boardMode: string | null;
     try {
-      await assertBoardOwner(boardId);
+      ({ boardMode } = await assertBoardOwner(boardId));
     } catch (e) {
       const r = authFail(e);
       if (r) return r;
       throw e;
     }
-    // Clear archived_at and unlock; leave card_visibility as-is (facilitator can re-hide).
-    const [board] = await sql`
+    // Open board: clear archived_at and unlock; leave card_visibility as-is (facilitator can
+    // re-hide). Guided board: back to the reopen phase with that phase's settings.
+    const guidedBoard = boardMode === GUIDED_MODE;
+    const phase: PhaseId | null = guidedBoard ? REOPEN_PHASE : null;
+    const [board] = guidedBoard
+      ? await sql`
+      UPDATE boards SET archived_at = NULL, phase = ${REOPEN_PHASE},
+        settings = settings || ${JSON.stringify(phaseSettings(REOPEN_PHASE))}::jsonb,
+        phase_config = phase_config || '{"deadline":null}'::jsonb
+      WHERE id = ${boardId} AND archived_at IS NOT NULL
+      RETURNING settings
+    `
+      : await sql`
       UPDATE boards SET archived_at = NULL, settings = settings || '{"board_locked":false}'::jsonb
       WHERE id = ${boardId}
       RETURNING settings
     `;
+    // A guided reopen only applies to a completed board; otherwise it would skip the phase rules.
+    if (!board && guidedBoard) return NextResponse.json({ error: 'Board is not completed' }, { status: 409 });
     if (!board) return BOARD_NOT_FOUND();
     const settings = board.settings;
-    await channel.publish('board-reopened', { settings, refetch: true });
+    await channel.publish('board-reopened', { settings, phase, refetch: true });
     return NextResponse.json({ ok: true });
   }
 

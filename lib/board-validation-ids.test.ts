@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { nanoid } from 'nanoid';
-import { validateClientId, validateNewBoard, ID_MAX_LENGTH } from './board-validation';
+import { validateClientId, validateNewBoard, isUuid, ID_MAX_LENGTH } from './board-validation';
 import { isUniqueViolation } from './pg-errors';
 
 describe('validateClientId', () => {
@@ -48,5 +48,15 @@ describe('isUniqueViolation', () => {
     expect(isUniqueViolation(e('23503', 'cards_pkey'), ['cards_pkey'])).toBe(false);
     expect(isUniqueViolation(e('23505'), ['cards_pkey'])).toBe(false);
     expect(isUniqueViolation(null, ['cards_pkey'])).toBe(false);
+  });
+});
+
+describe('isUuid', () => {
+  it('accepts a uuid', () => {
+    expect(isUuid('00000000-0000-4000-8000-000000000001')).toBe(true);
+  });
+  it('rejects text and non-strings', () => {
+    expect(isUuid('x')).toBe(false);
+    expect(isUuid(5)).toBe(false);
   });
 });

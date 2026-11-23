@@ -3,9 +3,13 @@
 import { useMemo } from 'react';
 import { cn } from '@/utils/cn';
 import { isMine } from '@/utils/isMine';
-import { displayCardText } from '@/utils/cardText';
+import { useCardText } from '@/hooks/useCardText';
 import { VotePill } from './VotePill';
+import { GuidedVoteControl } from './GuidedVoteControl';
+import { useBoardStore } from '@/stores/boardStore';
+import { GUIDED_MODE } from '@/lib/constants/phases';
 import { voteTotalsRevealed } from '@/lib/votePillPolicy';
+import { hasVotedOn, leadCardVotes, voteSurface, voteTotalsByCard, votesUsedBy } from '@/lib/votes';
 import type { Column, Card, Vote, Participant } from '@/types';
 
 interface TimelineViewProps {
@@ -40,6 +44,12 @@ export function TimelineView({
   secretVoting,
   participants,
 }: TimelineViewProps) {
+  const cardText = useCardText();
+  // Two primitives read once for the whole view (not per row): an open board answers false and 'pill'.
+  const guided = useBoardStore((s) => s.board?.mode === GUIDED_MODE);
+  const surface = useBoardStore((s) =>
+    s.board ? voteSurface(s.board.mode, s.board.settings, votingEnabled && !isCompleted, false) : 'pill'
+  );
   const columnMap = useMemo(() => {
     const map = new Map<string, Column>();
     for (const col of columns) {
@@ -48,17 +58,11 @@ export function TimelineView({
     return map;
   }, [columns]);
 
-  const voteCountMap = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const vote of votes) {
-      map.set(vote.card_id, (map.get(vote.card_id) || 0) + 1);
-    }
-    return map;
-  }, [votes]);
+  const voteCountMap = useMemo(() => voteTotalsByCard(votes), [votes]);
 
   const voteLimitReached = useMemo(() => {
     if (!currentParticipantId) return false;
-    return votes.filter((v) => v.voter_id === currentParticipantId).length >= maxVotesPerParticipant;
+    return votesUsedBy(votes, currentParticipantId) >= maxVotesPerParticipant;
   }, [votes, currentParticipantId, maxVotesPerParticipant]);
 
   const groups = useMemo((): TimelineGroup[] => {
@@ -111,10 +115,8 @@ export function TimelineView({
               <div className="flex flex-col gap-2">
                 {group.cards.map((card) => {
                   const col = columnMap.get(card.column_id);
-                  const voteCount = voteCountMap.get(card.id) || 0;
-                  const hasVoted = votes.some(
-                    (v) => v.card_id === card.id && v.voter_id === currentParticipantId
-                  );
+                  const voteCount = leadCardVotes(guided, card.id, cards, voteCountMap);
+                  const hasVoted = hasVotedOn(guided, votes, cards, card.id, currentParticipantId);
                   const blurred = (isObscured && !isMine(card, currentParticipantId)) || !!card.text_hidden;
 
                   return (
@@ -145,24 +147,28 @@ export function TimelineView({
                           blurred && 'select-none blur-sm'
                         )}
                       >
-                        {displayCardText(card)}
+                        {cardText(card)}
                       </p>
 
                       {/* Vote count — also shown as totals once voting is off */}
                       {(votingEnabled || (voteCount > 0 && voteTotalsRevealed(secretVoting, isCompleted))) && (
                         <div className="mt-2 flex items-center">
-                          <VotePill
-                            voteCount={voteCount}
-                            voters={votes.filter((v) => v.card_id === card.id)}
-                            participants={participants}
-                            currentParticipantId={currentParticipantId}
-                            votingEnabled={votingEnabled}
-                            isCompleted={isCompleted}
-                            hasVoted={hasVoted}
-                            voteLimitReached={voteLimitReached}
-                            onToggleVote={() => onToggleVote(card.id)}
-                            secretVoting={secretVoting}
-                          />
+                          {surface === 'stepper' ? (
+                            <GuidedVoteControl cardId={card.id} childCard={false} />
+                          ) : (
+                            <VotePill
+                              voteCount={voteCount}
+                              voters={votes.filter((v) => v.card_id === card.id)}
+                              participants={participants}
+                              currentParticipantId={currentParticipantId}
+                              votingEnabled={votingEnabled}
+                              isCompleted={isCompleted}
+                              hasVoted={hasVoted}
+                              voteLimitReached={voteLimitReached}
+                              onToggleVote={() => onToggleVote(card.id)}
+                              secretVoting={secretVoting}
+                            />
+                          )}
                         </div>
                       )}
                     </div>

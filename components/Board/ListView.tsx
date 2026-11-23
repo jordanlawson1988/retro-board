@@ -4,9 +4,13 @@ import { useState, useMemo } from 'react';
 import { ArrowUp, ArrowDown } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { isMine } from '@/utils/isMine';
-import { displayCardText } from '@/utils/cardText';
+import { useCardText } from '@/hooks/useCardText';
 import { VotePill } from './VotePill';
+import { GuidedVoteControl } from './GuidedVoteControl';
+import { useBoardStore } from '@/stores/boardStore';
+import { GUIDED_MODE } from '@/lib/constants/phases';
 import { voteTotalsRevealed } from '@/lib/votePillPolicy';
+import { hasVotedOn, leadCardVotes, voteSortKey, voteSurface, voteTotalsByCard, votesUsedBy } from '@/lib/votes';
 import type { Column, Card, Vote, Participant } from '@/types';
 
 interface ListViewProps {
@@ -39,6 +43,12 @@ export function ListView({
   secretVoting,
   participants,
 }: ListViewProps) {
+  const cardText = useCardText();
+  // Two primitives read once for the whole view (not per row): an open board answers false and 'pill'.
+  const guided = useBoardStore((s) => s.board?.mode === GUIDED_MODE);
+  const surface = useBoardStore((s) =>
+    s.board ? voteSurface(s.board.mode, s.board.settings, votingEnabled && !isCompleted, false) : 'pill'
+  );
   const [sortField, setSortField] = useState<SortField>('column');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
 
@@ -50,17 +60,14 @@ export function ListView({
     return map;
   }, [columns]);
 
-  const voteCountMap = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const vote of votes) {
-      map.set(vote.card_id, (map.get(vote.card_id) || 0) + 1);
-    }
-    return map;
-  }, [votes]);
+  const voteCountMap = useMemo(() => voteTotalsByCard(votes), [votes]);
+
+  // The number a row shows and sorts by: a guided lead's group score, an open card's own total.
+  const voteKey = useMemo(() => voteSortKey(guided, cards, voteCountMap), [guided, cards, voteCountMap]);
 
   const voteLimitReached = useMemo(() => {
     if (!currentParticipantId) return false;
-    return votes.filter((v) => v.voter_id === currentParticipantId).length >= maxVotesPerParticipant;
+    return votesUsedBy(votes, currentParticipantId) >= maxVotesPerParticipant;
   }, [votes, currentParticipantId, maxVotesPerParticipant]);
 
   const sortedCards = useMemo(() => {
@@ -81,8 +88,8 @@ export function ListView({
           cmp = (a.author_name ?? 'Anonymous').localeCompare(b.author_name ?? 'Anonymous');
           break;
         case 'votes': {
-          const va = voteCountMap.get(a.id) || 0;
-          const vb = voteCountMap.get(b.id) || 0;
+          const va = voteKey(a.id);
+          const vb = voteKey(b.id);
           cmp = va - vb;
           break;
         }
@@ -90,7 +97,7 @@ export function ListView({
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return sorted;
-  }, [cards, sortField, sortDir, columnMap, voteCountMap]);
+  }, [cards, sortField, sortDir, columnMap, voteKey]);
 
   // Votes column stays visible after voting is turned off, as long as there
   // are totals to show (secret-board totals reveal only at completion).
@@ -164,10 +171,8 @@ export function ListView({
           <tbody>
             {sortedCards.map((card) => {
               const col = columnMap.get(card.column_id);
-              const voteCount = voteCountMap.get(card.id) || 0;
-              const hasVoted = votes.some(
-                (v) => v.card_id === card.id && v.voter_id === currentParticipantId
-              );
+              const voteCount = leadCardVotes(guided, card.id, cards, voteCountMap);
+              const hasVoted = hasVotedOn(guided, votes, cards, card.id, currentParticipantId);
               const blurred = (isObscured && !isMine(card, currentParticipantId)) || !!card.text_hidden;
 
               return (
@@ -195,7 +200,7 @@ export function ListView({
                         blurred && 'select-none blur-sm'
                       )}
                     >
-                      {displayCardText(card)}
+                      {cardText(card)}
                     </span>
                   </td>
                   <td className="px-4 py-3">
@@ -203,18 +208,22 @@ export function ListView({
                   </td>
                   {showVotesColumn && (
                     <td className="px-4 py-3">
-                      <VotePill
-                        voteCount={voteCount}
-                        voters={votes.filter((v) => v.card_id === card.id)}
-                        participants={participants}
-                        currentParticipantId={currentParticipantId}
-                        votingEnabled={votingEnabled}
-                        isCompleted={isCompleted}
-                        hasVoted={hasVoted}
-                        voteLimitReached={voteLimitReached}
-                        onToggleVote={() => onToggleVote(card.id)}
-                        secretVoting={secretVoting}
-                      />
+                      {surface === 'stepper' ? (
+                        <GuidedVoteControl cardId={card.id} childCard={false} />
+                      ) : (
+                        <VotePill
+                          voteCount={voteCount}
+                          voters={votes.filter((v) => v.card_id === card.id)}
+                          participants={participants}
+                          currentParticipantId={currentParticipantId}
+                          votingEnabled={votingEnabled}
+                          isCompleted={isCompleted}
+                          hasVoted={hasVoted}
+                          voteLimitReached={voteLimitReached}
+                          onToggleVote={() => onToggleVote(card.id)}
+                          secretVoting={secretVoting}
+                        />
+                      )}
                     </td>
                   )}
                 </tr>

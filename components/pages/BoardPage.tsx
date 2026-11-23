@@ -19,19 +19,32 @@ import { Link2, Check } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { AppShell } from '@/components/Layout';
 import { Button, Modal } from '@/components/common';
-import { BoardColumn, FacilitatorToolbar, VoteStatus, ViewToggle, SwimlaneView, ListView, TimelineView, ParticipantPopover, ConnectionStatusBanner, AddColumnButton } from '@/components/Board';
+import { BoardColumn, FacilitatorToolbar, VoteStatus, TeamVotesLeft, VoteLimits, ResetGrouping, ViewToggle, SwimlaneView, ListView, TimelineView, ParticipantPopover, ConnectionStatusBanner, AddColumnButton } from '@/components/Board';
 import { MobileBoardShell } from '@/components/Board/MobileBoardShell';
 import type { BoardView } from '@/types';
 import { useBoardStore } from '@/stores/boardStore';
+import { useGroupVoteStore } from '@/stores/groupVoteStore';
 import { useFeatureFlagStore } from '@/stores/featureFlagStore';
 import { useTimer } from '@/hooks/useTimer';
+import { useStoredTimer } from '@/hooks/useStoredTimer';
+import { usePhaseGates } from '@/hooks/usePhaseGates';
+import { PhaseRail, ReadyButton, PhaseTips, PhaseDeadline } from '@/components/Phase';
 import { usePolling } from '@/hooks/usePolling';
 import { TimerFloating } from '@/components/Timer';
 import { ActionItemsPanel } from '@/components/ActionItems';
 import { exportMarkdown, exportCsv } from '@/utils/export';
-import { displayCardText } from '@/utils/cardText';
+import { useCardText } from '@/hooks/useCardText';
+import { GUIDED_MODE } from '@/lib/constants/phases';
+import { votesUsedBy } from '@/lib/votes';
+import { useDiscussStore } from '@/stores/discussStore';
+import { buildAgenda, discussViewShown, topicHeading, topicLabelOf, topicLabelsByCard } from '@/lib/agenda';
+import { DiscussView } from '@/components/Discuss';
+
+/** A drag distance no pointer reaches: used to switch dragging off. */
+const DRAG_NEVER_PX = 100_000;
 
 export function BoardPage({ boardId }: { boardId: string }) {
+  const cardText = useCardText();
   const router = useRouter();
   const {
     board,
@@ -72,9 +85,23 @@ export function BoardPage({ boardId }: { boardId: string }) {
 
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
 
+  const { guided, addLocked, moveLocked } = usePhaseGates();
+  // A guided board sends add or remove; the store's rejection is already shown by the connection banner.
+  const toggleGuidedVote = useGroupVoteStore((s) => s.toggleGuidedVote);
+  const onToggleVote = useCallback(
+    (cardId: string) => {
+      if (guided) toggleGuidedVote(cardId).catch(() => {});
+      else void toggleVote(cardId);
+    },
+    [guided, toggleGuidedVote, toggleVote]
+  );
+
+  // The sensor list keeps its size (dnd-kit requires it); when moving is locked, a drag can never start.
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: moveLocked ? DRAG_NEVER_PX : 5 } }),
+    useSensor(TouchSensor, {
+      activationConstraint: moveLocked ? { distance: DRAG_NEVER_PX } : { delay: 200, tolerance: 5 },
+    })
   );
 
   // Custom collision detection: prioritize combine drop zones, fall back to sort collision
@@ -113,10 +140,32 @@ export function BoardPage({ boardId }: { boardId: string }) {
 
   const liveEventsEnabled = useFeatureFlagStore((s) => s.isEnabled('live_events'));
 
-  const { timer, start: timerStart, pause: timerPause, resume: timerResume, reset: timerReset } = useTimer({
+  const guidedBoard = useBoardStore((s) => s.board?.mode === GUIDED_MODE);
+
+  // Guided boards only: the board-level action list picks an owner by participant and names each
+  // item's topic. An open board computes nothing here and passes the panel nothing extra.
+  const topicLabels = useMemo(() => {
+    if (!guidedBoard) return null;
+    const agenda = buildAgenda(cards, votes);
+    const texts = cards.map((c) => ({ id: c.id, text: cardText(c) }));
+    const headings = new Map(agenda.map((item) => [item.cardId, topicHeading(item, texts)]));
+    return topicLabelsByCard(agenda, headings);
+  }, [guidedBoard, cards, votes, cardText]);
+  const topicLabelFor = useCallback(
+    (cardId: string) => (topicLabels ? topicLabelOf(topicLabels, cardId) : null),
+    [topicLabels]
+  );
+  const onAssign = useCallback((itemId: string, participantId: string | null) => {
+    // A rejection is already on the connection banner and the store reversed the change.
+    useDiscussStore.getState().assignActionItem(itemId, participantId).catch(() => {});
+  }, []);
+  const openTimer = useTimer({
     boardId: boardId || '',
-    liveSync: liveEventsEnabled && !!currentParticipantId,
+    liveSync: liveEventsEnabled && !!currentParticipantId && !guidedBoard,
   });
+  const storedTimer = useStoredTimer({ enabled: guidedBoard });
+  const { timer, start: timerStart, pause: timerPause, resume: timerResume, reset: timerReset } =
+    guidedBoard ? storedTimer : openTimer;
 
   usePolling(boardId, 10_000, !liveEventsEnabled && !!currentParticipantId);
 
@@ -135,7 +184,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
       const { active, over } = event;
       setActiveDragId(null);
 
-      if (!over || active.id === over.id) return;
+      if (moveLocked || !over || active.id === over.id) return;
 
       const activeIdStr = active.id as string;
       const overIdStr = over.id as string;
@@ -196,7 +245,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
 
       moveCard(cardId, targetColumnId, newPosition);
     },
-    [cards, columns, moveCard, combineCards, uncombineCard, board]
+    [cards, columns, moveCard, combineCards, uncombineCard, board, moveLocked]
   );
 
   const handleAddCard = useCallback(
@@ -268,14 +317,14 @@ export function BoardPage({ boardId }: { boardId: string }) {
           'whitespace-pre-wrap text-[var(--ink)]',
           isChild ? 'text-xs' : 'text-[15px] leading-[1.45]'
         )}>
-          {displayCardText(card)}
+          {cardText(card)}
         </p>
         <span className="mt-1 block text-xs text-[var(--ink-4)]">
           {card.author_name ?? 'Anonymous'}
         </span>
       </div>
     );
-  }, [activeDragId, cards]);
+  }, [activeDragId, cards, cardText]);
 
   // Loading/error/join states are handled by BoardPageWrapper
   // This component only renders when board is loaded and user has joined
@@ -284,6 +333,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
   const isJoined = !!currentParticipantId;
   const isObscured = board.settings.card_visibility === 'hidden';
   const isCompleted = !!board.archived_at;
+  const discussShown = discussViewShown(board);
   const currentParticipant = participants.find((p) => p.id === currentParticipantId);
   // Authenticated board owners (and system admins) always get facilitator
   // controls, even if their participant record isn't flagged as admin —
@@ -292,7 +342,8 @@ export function BoardPage({ boardId }: { boardId: string }) {
   const isAdmin = (currentParticipant?.is_admin ?? false) || youCanFacilitate || (youAre?.isFacilitator ?? false);
 
   const cardCreationDisabled =
-    board.settings.card_creation_disabled || board.settings.board_locked;
+    board.settings.card_creation_disabled || board.settings.board_locked || addLocked;
+  const columnsLocked = board.settings.board_locked || moveLocked;
 
   return (
     <>
@@ -312,11 +363,11 @@ export function BoardPage({ boardId }: { boardId: string }) {
             secretVoting={board.settings.secret_voting}
             cardCreationDisabled={cardCreationDisabled}
             maxVotesPerParticipant={board.settings.max_votes_per_participant}
-            boardLocked={board.settings.board_locked}
+            boardLocked={columnsLocked}
             onAddCard={handleAddCard}
             onUpdateCard={updateCard}
             onDeleteCard={deleteCard}
-            onToggleVote={toggleVote}
+            onToggleVote={onToggleVote}
             onToggleReaction={toggleReaction}
             onCombineCards={combineCards}
             onUncombineCard={uncombineCard}
@@ -355,6 +406,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
             onToggleActionItems={() => setShowActionItems((v) => !v)}
             isCompleted={isCompleted}
             onCompleteRetro={() => setShowCompleteModal(true)}
+            guided={guided}
           />
         ) : undefined
       }
@@ -408,12 +460,23 @@ export function BoardPage({ boardId }: { boardId: string }) {
               </button>
               {isJoined && board.settings.voting_enabled && (
                 <VoteStatus
-                  votesUsed={votes.filter((v) => v.voter_id === currentParticipantId).length}
+                  votesUsed={votesUsedBy(votes, currentParticipantId)}
                   maxVotes={board.settings.max_votes_per_participant}
                 />
               )}
+              <TeamVotesLeft />
             </div>
           </div>
+          {guided && board.phase && (
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
+              <PhaseRail isFacilitator={isAdmin} onCompleteRetro={() => setShowCompleteModal(true)} />
+              {isJoined && <ReadyButton />}
+              <PhaseTips phase={board.phase} />
+              <PhaseDeadline isFacilitator={isAdmin} />
+              {isAdmin && <VoteLimits />}
+              {isAdmin && <ResetGrouping />}
+            </div>
+          )}
         </div>
       </div>
 
@@ -421,7 +484,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
       <ConnectionStatusBanner />
 
       {/* View toggle + column filter */}
-      {isJoined && columns.length > 0 && (
+      {!discussShown && isJoined && columns.length > 0 && (
         <div className="mx-auto max-w-[1400px] px-4 pt-4 sm:px-6">
           <div className="flex flex-wrap items-center gap-3">
             <ViewToggle currentView={currentView} onChangeView={handleChangeView} />
@@ -463,7 +526,9 @@ export function BoardPage({ boardId }: { boardId: string }) {
       )}
 
       {/* Board content */}
-      {isJoined ? (
+      {discussShown && isJoined ? (
+        <DiscussView isFacilitator={isAdmin} />
+      ) : isJoined ? (
         columns.length > 0 ? (
           <>
             {currentView === 'grid' && (
@@ -493,20 +558,18 @@ export function BoardPage({ boardId }: { boardId: string }) {
                           isObscured={isObscured}
                           votingEnabled={board.settings.voting_enabled}
                           secretVoting={board.settings.secret_voting}
-                          cardCreationDisabled={
-                            board.settings.card_creation_disabled || board.settings.board_locked
-                          }
+                          cardCreationDisabled={cardCreationDisabled}
                           maxVotesPerParticipant={board.settings.max_votes_per_participant}
                           onAddCard={handleAddCard}
                           onUpdateCard={updateCard}
                           onDeleteCard={deleteCard}
-                          onToggleVote={toggleVote}
+                          onToggleVote={onToggleVote}
                           onCombineCards={combineCards}
                           onUncombineCard={uncombineCard}
                           onToggleReaction={toggleReaction}
                           isCompleted={isCompleted}
                           isAdmin={isAdmin}
-                          boardLocked={board.settings.board_locked}
+                          boardLocked={columnsLocked}
                           activeDragId={activeDragId}
                           onUpdateColumn={updateColumn}
                           onDeleteColumn={deleteColumn}
@@ -543,7 +606,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
                 maxVotesPerParticipant={board.settings.max_votes_per_participant}
                 onUpdateCard={updateCard}
                 onDeleteCard={deleteCard}
-                onToggleVote={toggleVote}
+                onToggleVote={onToggleVote}
                 onToggleReaction={toggleReaction}
                 participants={participants}
                 isAdmin={isAdmin}
@@ -563,7 +626,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
                 isCompleted={isCompleted}
                 secretVoting={board.settings.secret_voting}
                 participants={participants}
-                onToggleVote={toggleVote}
+                onToggleVote={onToggleVote}
               />
             )}
 
@@ -579,7 +642,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
                 isCompleted={isCompleted}
                 secretVoting={board.settings.secret_voting}
                 participants={participants}
-                onToggleVote={toggleVote}
+                onToggleVote={onToggleVote}
               />
             )}
           </>
@@ -669,6 +732,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
           onExportMarkdown={handleExportMarkdown}
           onExportCsv={handleExportCsv}
           readOnly={isCompleted}
+          {...(guidedBoard ? { assigneeMode: 'participant' as const, onAssign, topicLabelFor } : {})}
         />
       )}
     </>

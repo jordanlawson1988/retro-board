@@ -2,9 +2,13 @@
 
 import { useEffect, useMemo } from 'react';
 import { useAbly, useChannel } from 'ably/react';
-import { createCoalescedRunner } from '@/lib/coalescedRunner';
-import { useBoardStore } from '@/stores/boardStore';
+import { useBoardStore, refetchBoardCoalesced } from '@/stores/boardStore';
+import { applyVoteTallyEvent } from '@/stores/groupVoteStore';
+import { applyCommentUpsertEvent, applyCommentDeletedEvent } from '@/stores/discussStore';
+import { COMMENT_CREATED, COMMENT_UPDATED, COMMENT_DELETED } from '@/lib/constants/comments';
 import { mergeIncomingCard } from '@/lib/mergeIncomingCard';
+import { applyPhaseChanged, phaseConfigAfterClose, refetchRouteFor } from '@/lib/phases';
+import { isPhaseId } from '@/lib/constants/phases';
 import type { Card, Column, Vote, Participant, ActionItem } from '@/types';
 
 export function useBoardChannel(boardId: string) {
@@ -20,10 +24,16 @@ export function useBoardChannel(boardId: string) {
   // Ably does not replay what was published before we attached, so anything between the
   // initial GET and the attach (or during a gap without continuity) is lost. Refetch the
   // server-shaped board then. Coalesced: one in flight, bursts collapse to one trailing run.
-  const refetchBoard = useMemo(
-    () => createCoalescedRunner(() => store.getState().fetchBoard(boardId)),
-    [store, boardId]
-  );
+  // The same per-board runner serves the phase-changed refetch, so two guided refetches never race.
+  const refetchBoard = useMemo(() => () => void refetchBoardCoalesced(boardId), [boardId]);
+
+  // Complete and reopen on a guided board refetch through that same runner, so a GET that started
+  // before the event cannot land last and leave phase and archived_at stale. Open boards keep
+  // the direct refetch.
+  const refetchCompletionEvent = (data: { refetch?: boolean; phase?: unknown } | undefined) => {
+    if (refetchRouteFor(data) === 'coalesced') void refetchBoardCoalesced(boardId);
+    else refetchIfAsked(data);
+  };
 
   const ably = useAbly();
 
@@ -83,6 +93,23 @@ export function useBoardChannel(boardId: string) {
         }));
         break;
 
+      // Guided votes: the team tally, and a grouping reset (refetch carries the phase)
+      case 'vote-tally':
+        applyVoteTallyEvent(boardId, data);
+        break;
+      case 'grouping-reset':
+        refetchCompletionEvent(data);
+        break;
+
+      // Guided Discuss comments: each ignores the event unless the current board is guided
+      case COMMENT_CREATED:
+      case COMMENT_UPDATED:
+        applyCommentUpsertEvent(boardId, data);
+        break;
+      case COMMENT_DELETED:
+        applyCommentDeletedEvent(boardId, data);
+        break;
+
       // Participants
       case 'participant-joined':
         store.setState((state) => {
@@ -120,18 +147,26 @@ export function useBoardChannel(boardId: string) {
       case 'board-reopened':
         store.setState((state) => ({
           board: state.board
-            ? { ...state.board, archived_at: null, settings: data.settings }
+            ? { ...state.board, archived_at: null, settings: data.settings, ...(isPhaseId(data.phase) ? { phase: data.phase, phase_config: phaseConfigAfterClose(state.board.phase_config, data) } : {}) }
             : null,
         }));
-        refetchIfAsked(data);
+        refetchCompletionEvent(data);
         break;
       case 'board-completed':
         store.setState((state) => ({
           board: state.board
-            ? { ...state.board, archived_at: data.archivedAt, settings: data.settings }
+            ? { ...state.board, archived_at: data.archivedAt, settings: data.settings, ...(isPhaseId(data.phase) ? { phase: data.phase, phase_config: phaseConfigAfterClose(state.board.phase_config, data) } : {}) }
             : null,
         }));
-        refetchIfAsked(data);
+        refetchCompletionEvent(data);
+        break;
+
+      // Guided phase: idempotent, the same payload twice leaves the same board
+      case 'phase-changed':
+        store.setState((state) => ({
+          board: state.board ? applyPhaseChanged(state.board, data) : null,
+        }));
+        if (data?.refetch === true) refetchBoard();
         break;
 
       // Action Items

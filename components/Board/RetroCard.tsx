@@ -5,8 +5,14 @@ import { Pencil, Trash2, Check, X, Merge, ChevronDown, ChevronRight, SmilePlus }
 import { cn } from '@/utils/cn';
 import { CardColorPicker } from './CardColorPicker';
 import { VotePill } from './VotePill';
+import { GuidedVoteControl } from './GuidedVoteControl';
+import { GroupTitle } from './GroupTitle';
 import { IconButton } from '@/components/common/IconButton';
 import { Pill } from '@/components/common/Pill';
+import { usePhaseGates } from '@/hooks/usePhaseGates';
+import { useBoardStore } from '@/stores/boardStore';
+import { GUIDED_MODE } from '@/lib/constants/phases';
+import { voteSurface } from '@/lib/votes';
 import { ReactionPill } from './ReactionPill';
 import type { Card, CardReactions, Participant, Vote } from '@/types';
 
@@ -47,6 +53,8 @@ interface RetroCardProps {
   expanded?: boolean;
   onToggleExpand?: () => void;
   participants?: Participant[];
+  /** A card shown inside its group; on a guided board it gets the child vote control. */
+  isChildCard?: boolean;
 }
 
 export function RetroCard({
@@ -80,7 +88,15 @@ export function RetroCard({
   expanded = false,
   onToggleExpand,
   participants = [],
+  isChildCard = false,
 }: RetroCardProps) {
+  const { editLocked, guided } = usePhaseGates();
+  // One string, and 'pill' straight away on an open board (it reads only `board`, never cards, votes or participants).
+  const surface = useBoardStore((s) =>
+    s.board?.mode === GUIDED_MODE
+      ? voteSurface(s.board.mode, s.board.settings, votingEnabled && !isCompleted, isChildCard)
+      : 'pill'
+  );
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(text);
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
@@ -152,6 +168,8 @@ export function RetroCard({
           filter: textHidden || (isObscured && !isAuthor) ? 'blur(6px)' : 'blur(0px)',
         }}
       >
+        {/* Mounted on guided boards only, from a primitive this component already subscribes to. */}
+        {guided && <GroupTitle cardId={id} />}
         {isEditing ? (
           <div className="flex flex-col gap-2">
             <textarea
@@ -216,18 +234,22 @@ export function RetroCard({
               </div>
 
               <div className="flex items-center gap-1">
-                <VotePill
-                  voteCount={voteCount}
-                  voters={(votes ?? []).filter((v) => v.card_id === id)}
-                  participants={participants}
-                  currentParticipantId={currentParticipantId ?? null}
-                  votingEnabled={votingEnabled}
-                  isCompleted={!!isCompleted}
-                  hasVoted={hasVoted}
-                  voteLimitReached={voteLimitReached}
-                  onToggleVote={() => onToggleVote(id)}
-                  secretVoting={secretVoting}
-                />
+                {surface === 'pill' ? (
+                  <VotePill
+                    voteCount={voteCount}
+                    voters={(votes ?? []).filter((v) => v.card_id === id)}
+                    participants={participants}
+                    currentParticipantId={currentParticipantId ?? null}
+                    votingEnabled={votingEnabled}
+                    isCompleted={!!isCompleted}
+                    hasVoted={hasVoted}
+                    voteLimitReached={voteLimitReached}
+                    onToggleVote={() => onToggleVote(id)}
+                    secretVoting={secretVoting}
+                  />
+                ) : (
+                  <GuidedVoteControl cardId={id} childCard={surface === 'child'} />
+                )}
 
                 {/* Author actions (always visible on touch, hover-revealed ≥sm) */}
                 {isAuthor && !isCompleted && !isMergeSource && !isMergeTarget && (
@@ -242,6 +264,8 @@ export function RetroCard({
                         <Merge size={16} className="sm:size-3.5" />
                       </IconButton>
                     )}
+                    {!editLocked && (
+                      <>
                     <CardColorPicker
                       currentColor={color}
                       onSelectColor={(newColor) => onUpdate(id, { color: newColor })}
@@ -266,6 +290,8 @@ export function RetroCard({
                     >
                       <Trash2 size={16} className="sm:size-3.5" />
                     </IconButton>
+                      </>
+                    )}
                   </div>
                 )}
 

@@ -16,6 +16,7 @@ import { currentTallyVersion } from '@/lib/voteTallyVersion';
 import { commentChangesSince, commentSeq } from '@/lib/commentJournal';
 import { parseCommentList, replayComments } from '@/lib/comments';
 import { FINAL_PHASE, GUIDED_MODE, type BoardMode } from '@/lib/constants/phases';
+import { postNewBoard } from '@/lib/create-board-request';
 import type { BoardAccess } from '@/types';
 import type { Board, Column, Card, Vote, ActionItem, Comment, Participant, BoardTemplate, BoardSettings, ConnectionStatus } from '@/types';
 
@@ -189,32 +190,22 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
     const participant = displayName ? { displayName } : undefined;
 
-    const res = await fetch('/api/boards', {
-      method: 'POST',
-      headers: JSON_HEADERS,
-      body: JSON.stringify({
-        id: boardId,
-        title,
-        description,
-        template,
-        settings: {
-          ...DEFAULT_BOARD_SETTINGS,
-          ...(useAppSettingsStore?.getState?.()?.settings?.default_board_settings ?? {}),
-          ...(options?.mode === GUIDED_MODE ? { anonymous_cards: options.anonymous ?? true } : {}),
-        },
-        ...(options?.mode ? { mode: options.mode } : {}),
-        columns,
-        participant,
-      }),
+    // The server generated the creator's participant id (and set the cookie). A stalled or
+    // failed request rejects with a message that is safe to show.
+    const { participantId } = await postNewBoard({
+      id: boardId,
+      title,
+      description,
+      template,
+      settings: {
+        ...DEFAULT_BOARD_SETTINGS,
+        ...(useAppSettingsStore?.getState?.()?.settings?.default_board_settings ?? {}),
+        ...(options?.mode === GUIDED_MODE ? { anonymous_cards: options.anonymous ?? true } : {}),
+      },
+      ...(options?.mode ? { mode: options.mode } : {}),
+      columns,
+      participant,
     });
-
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to create board');
-    }
-
-    // The server generated the creator's participant id (and set the cookie).
-    const { participantId } = (await res.json()) as { participantId: string | null };
 
     // Update local state for auto-joined creator
     if (displayName && participantId) {

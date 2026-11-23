@@ -9,6 +9,7 @@ import { useAppSettingsStore } from '@/stores/appSettingsStore';
 import { ModeChoice } from '@/components/Phase/ModeChoice';
 import { OPEN_MODE, type BoardMode } from '@/lib/constants/phases';
 import { guidedModeEnabled } from '@/lib/phases';
+import { CREATE_BOARD_FAILED } from '@/lib/constants/create-board';
 import { cn } from '@/utils/cn';
 import type { BoardTemplate } from '@/types';
 
@@ -69,7 +70,7 @@ export function CreateBoardModal({ onClose }: Props) {
       router.push(`/board/${boardId}`);
     } catch (err) {
       console.error('Failed to create board:', err);
-      if (showModeChoice) setCreateError(err instanceof Error ? err.message : 'Failed to create board');
+      setCreateError(err instanceof Error ? err.message : CREATE_BOARD_FAILED);
     } finally {
       setCreating(false);
     }
